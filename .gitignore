@@ -1,0 +1,5 @@
+/bin/
+/etc/nitro.conf
+/etc/id_rsa
+/etc/id_rsa.pub
+/version.go
