@@ -1,0 +1,128 @@
+webrpc = v1
+
+name = identity-instrument
+version = v0.1.0
+
+struct Attestation
+  - identityType: IdentityType
+    + go.tag.abi = bytes4
+  - issuerHash: string
+    + go.field.type = common.Hash
+    + go.tag.abi = bytes32
+  - audienceHash: string
+    + go.field.type = common.Hash
+    + go.tag.abi = bytes32
+  - authData: []byte
+    + go.tag.abi = bytes
+  - extraData: []byte
+    + go.tag.abi = bytes
+
+struct InitiateAuthParams
+  - ecosystemId: string
+    + go.field.name = EcosystemID
+  - authKey: AuthKey
+  - identityType: IdentityType
+  - verifier: string
+
+struct InitiateAuthResponse
+  - ecosystemId: string
+    + go.field.name = EcosystemID
+  - authKey: AuthKey
+  - identityType: IdentityType
+  - verifier: string
+  - challenge?: string
+
+struct RegisterAuthParams
+  - ecosystemId: string
+    + go.field.name = EcosystemID
+  - authKey: AuthKey
+  - identityType: IdentityType
+  - verifier: string
+  - answer: string
+
+struct RegisterAuthResponse
+  - signer: string
+  - attestation: string
+
+struct SignParams
+  - ecosystemId: string
+    + go.field.name = EcosystemID
+  - signer: string
+  - digest: string
+  - authKey: AuthKey
+  - signature: string
+
+struct SignResponse
+  - signer: string
+  - digest: string
+  - signature: string
+
+struct Identity
+  - type: IdentityType
+    + go.field.type = IdentityType
+  - issuer: string
+    + go.tag.json = iss,omitempty
+  - subject: string
+    + go.tag.json = sub,omitempty
+  - email: string
+    + go.tag.json = email,omitempty
+
+enum KeyType: string
+  - P256K1
+  - P256R1
+
+enum IdentityType: string
+  - None
+  - Guest
+  - Email
+  - OIDC
+
+struct AuthKey
+  - publicKey: string
+  - keyType: KeyType
+
+struct AuthKeyData
+  - ecoId: string
+    + go.field.name = EcosystemID
+    + json = ecoId
+  - signerAddress: string
+    + json = signerAddress
+  - publicKey: string
+    + json = publicKey
+  - keyType: KeyType
+    + json = keyType
+  - expiry: timestamp
+    + json = expiry
+
+struct SignerData
+  - ecoId: string
+    + go.field.name = EcosystemID
+    + json = ecoId
+  - identity: Identity
+    + json = identity
+  - privateKey: string
+    + json = privateKey
+
+struct AuthCommitmentData
+  - ecoId: string
+    + go.field.name = EcosystemID
+    + json = ecoId
+  - authKey: AuthKey
+    + json = authKey
+  - identityType: IdentityType
+    + json = identityType
+  - verifier: string
+    + json = verifier
+  - challenge: string
+    + json = challenge
+  - answer: string
+    + json = answer
+  - expiry: timestamp
+    + json = expiry
+
+service IdentityInstrument
+  - InitiateAuth(params: InitiateAuthParams) => (res: InitiateAuthResponse)
+  - RegisterAuth(params: RegisterAuthParams) => (res: RegisterAuthResponse)
+
+  - Sign(params: SignParams) => (res: SignResponse)
+
