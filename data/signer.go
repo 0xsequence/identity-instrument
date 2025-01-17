@@ -1,0 +1,118 @@
+package data
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/0xsequence/ethkit/ethwallet"
+	proto "github.com/0xsequence/identity-instrument/proto"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+)
+
+type Signer struct {
+	EcosystemID string   `dynamodbav:"EcosystemID"`
+	Address     string   `dynamodbav:"Address"`
+	Identity    Identity `dynamodbav:"Identity"`
+
+	EncryptedData EncryptedData[*proto.SignerData] `dynamodbav:"EncryptedData"`
+}
+
+func (s *Signer) Key() map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"EcosystemID": &types.AttributeValueMemberS{Value: s.EcosystemID},
+		"Identity":    &types.AttributeValueMemberS{Value: s.Identity.String()},
+	}
+}
+
+func (s *Signer) CorrespondsTo(data *proto.SignerData, wallet *ethwallet.Wallet) bool {
+	if s.EcosystemID != data.EcosystemID {
+		return false
+	}
+	if s.Identity.String() != data.Identity.String() {
+		return false
+	}
+	if s.Address != wallet.Address().String() {
+		return false
+	}
+	return true
+}
+
+type SignerIndices struct {
+	ByAddress string
+}
+
+type SignerTable struct {
+	db       DB
+	tableARN string
+	indices  SignerIndices
+}
+
+func NewSignerTable(db DB, tableARN string, indices SignerIndices) *SignerTable {
+	return &SignerTable{
+		db:       db,
+		tableARN: tableARN,
+		indices:  indices,
+	}
+}
+
+func (t *SignerTable) GetByIdentity(ctx context.Context, ecosystemID string, ident proto.Identity) (*Signer, bool, error) {
+	signer := Signer{EcosystemID: ecosystemID, Identity: Identity(ident)}
+
+	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &t.tableARN,
+		Key:       signer.Key(),
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("GetItem: %w", err)
+	}
+	if len(out.Item) == 0 {
+		return nil, false, nil
+	}
+
+	if err := attributevalue.UnmarshalMap(out.Item, &signer); err != nil {
+		return nil, false, fmt.Errorf("unmarshal result: %w", err)
+	}
+	return &signer, true, nil
+}
+
+func (t *SignerTable) GetByAddress(ctx context.Context, ecosystemID string, address string) (*Signer, bool, error) {
+	var signer Signer
+	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
+		TableName:              &t.tableARN,
+		IndexName:              &t.indices.ByAddress,
+		KeyConditionExpression: aws.String("Address = :address and EcosystemID = :ecosystemID"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":address":     &types.AttributeValueMemberS{Value: address},
+			":ecosystemID": &types.AttributeValueMemberS{Value: ecosystemID},
+		},
+		Limit: aws.Int32(1),
+	})
+	if err != nil {
+		return nil, false, fmt.Errorf("GetItem: %w", err)
+	}
+	if len(out.Items) == 0 || len(out.Items[0]) == 0 {
+		return nil, false, nil
+	}
+	if err := attributevalue.UnmarshalMap(out.Items[0], &signer); err != nil {
+		return nil, false, fmt.Errorf("unmarshal result: %w", err)
+	}
+	return &signer, true, nil
+}
+
+func (t *SignerTable) Put(ctx context.Context, signer *Signer) error {
+	av, err := attributevalue.MarshalMap(signer)
+	if err != nil {
+		return fmt.Errorf("marshal input: %w", err)
+	}
+	input := &dynamodb.PutItemInput{
+		TableName: &t.tableARN,
+		Item:      av,
+	}
+	if _, err := t.db.PutItem(ctx, input); err != nil {
+		return fmt.Errorf("PutItem: %w", err)
+	}
+	return nil
+}
