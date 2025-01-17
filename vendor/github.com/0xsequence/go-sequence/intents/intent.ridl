@@ -1,0 +1,413 @@
+webrpc = v1
+
+name = sequence-waas-intents
+version = v0.1.0
+
+struct Intent
+  - version: string
+  - name: IntentName
+  - expiresAt: uint64
+  - issuedAt: uint64
+  - data: any
+  - signatures: []Signature
+    + go.tag.json = signatures,omitempty
+
+struct Signature
+  - sessionId: string
+     + go.field.name = SessionID
+  - signature: string
+
+enum IntentName: string
+  - initiateAuth
+  - openSession
+  - closeSession
+  - validateSession
+  - finishValidateSession
+  - listSessions
+  - getSession
+  - sessionAuthProof
+  - feeOptions
+  - signMessage
+  - signTypedData
+  - sendTransaction
+  - getTransactionReceipt
+  - federateAccount
+  - removeAccount
+  - listAccounts
+  - getIdToken
+  - adoptChildWallet
+  - getAdopter
+  - confirmIntent
+  - getConfirmationStatus
+
+struct IntentDataInitiateAuth
+  - sessionId: string
+    + go.field.name = SessionID
+  - identityType: IdentityType
+  - verifier: string
+  - metadata?: string
+    + go.tag.json = metadata,omitempty
+
+struct IntentDataOpenSession
+  - sessionId: string
+    + go.field.name = SessionID
+  - identityType: IdentityType
+    + go.field.type = IdentityType
+    + go.tag.json = identityType,omitempty
+  - verifier?: string
+    + go.field.type = string
+    + go.tag.json = verifier,omitempty
+  - answer?: string
+    + go.field.type = string
+    + go.tag.json = answer,omitempty
+  - forceCreateAccount?: bool
+    + go.field.type = bool
+    + go.tag.json = forceCreateAccount,omitempty
+  # Deprecated
+  - email?: string
+    + go.tag.json = email,omitempty
+  # Deprecated
+  - idToken?: string
+    + go.tag.json = idToken,omitempty
+
+struct IntentDataCloseSession
+  - sessionId: string
+    + go.field.name = SessionID
+
+struct IntentDataValidateSession
+  - sessionId: string
+    + go.field.name = SessionID
+  - wallet: string
+  - deviceMetadata: string
+
+struct IntentDataFinishValidateSession
+  - sessionId: string
+    + go.field.name = SessionID
+  - wallet: string
+  - salt: string
+  - challenge: string
+
+struct IntentDataListSessions
+  - wallet: string
+
+struct IntentDataGetSession
+  - sessionId: string
+    + go.field.name = SessionID
+  - wallet: string
+
+struct IntentDataSessionAuthProof
+  - network: string
+  - wallet: string
+  - nonce?: string
+
+struct IntentDataSignMessage
+  - network: string
+  - wallet: string
+  - message: string
+
+struct IntentDataSignTypedData
+  - network: string
+  - wallet: string
+  - typedData: any
+    + go.field.type = *ethcoder.TypedData
+
+struct IntentDataFeeOptions
+  - network: string
+  - wallet: string
+  - identifier: string # is used to generate nonce space
+  - transactions: []any
+    + go.field.type = []json.RawMessage
+
+struct IntentDataSendTransaction
+  - network: string
+  - wallet: string
+  - identifier: string # is used to generate nonce space
+  - transactions: []any
+    + go.field.type = []json.RawMessage
+  - transactionsFeeQuote?: string
+    + go.tag.json = transactionsFeeQuote,omitempty
+
+struct IntentDataGetTransactionReceipt
+  - network: string
+  - wallet: string
+  - metaTxHash: string
+
+struct IntentDataFederateAccount
+  - sessionId: string
+    + go.field.name = SessionID
+  - wallet: string
+  - identityType: IdentityType
+  - verifier?: string
+    + go.field.type = string
+    + go.tag.json = verifier,omitempty
+  - answer?: string
+    + go.field.type = string
+    + go.tag.json = answer,omitempty
+
+struct IntentDataListAccounts
+  - wallet: string
+
+struct IntentDataRemoveAccount
+  - wallet: string
+  - accountId: string
+    + go.field.name = AccountID
+
+struct IntentDataAdoptChildWallet
+  - network: string
+  - wallet: string
+  - adopter: string
+  - adopterProof: AdopterProof
+
+struct AdopterProof
+  - message: string
+  - signature: string
+
+struct IntentDataGetIdToken
+  - sessionId: string
+    + go.field.name = SessionID
+  - wallet: string
+  - nonce?: string
+    + go.field.type = string
+
+struct IntentDataGetAdopter
+  - wallet: string
+
+struct IntentDataConfirmIntent
+  - wallet: string
+  - confirmationID: string
+    + go.field.name = ConfirmationID
+  - challengeAnswer: string
+
+struct IntentDataGetConfirmationStatus
+  - wallet: string
+  - confirmationID: string
+    + go.field.name = ConfirmationID
+
+struct TransactionRaw
+  - type: string
+  - to: string
+  - value?: string
+    + go.field.type = string
+  - data: string
+
+struct AbiData
+  - abi: string
+  - func?: string
+  - args: []any
+
+enum TransactionType: string
+  - transaction
+  - erc20send
+  - erc721send
+  - erc1155send
+  - delayedEncode
+  - contractCall
+
+struct TransactionERC20
+  - type: string
+  - tokenAddress: string
+  - to: string
+  - value: string
+
+struct TransactionERC721
+  - type: string
+  - tokenAddress: string
+  - to: string
+  - id: string
+  - safe?: bool
+  - data?: string
+
+struct TransactionERC1155Value
+  - id: string
+    + go.field.name = ID
+  - amount: string
+
+# Deprecated: TransactionDelayedEncode is not type safe, please use TransactionContractCall instead
+struct TransactionDelayedEncode
+  - type: string
+  - to: string
+  - value: string
+  - data: any
+     + go.field.type = json.RawMessage
+
+struct TransactionContractCall
+  - type: string
+  - to: string
+  - value?: string
+    + go.field.type = string
+  - data: AbiData
+    + go.field.type = AbiData
+
+struct TransactionERC1155
+  - type: string
+  - tokenAddress: string
+  - to: string
+  - vals: []TransactionERC1155Value
+  - data?: string
+
+struct IntentResponse
+  - code: IntentResponseCode
+  - data: any
+
+enum IntentResponseCode: string
+  - authInitiated
+  - sessionOpened
+  - sessionClosed
+  - sessionList
+  - validationRequired
+  - validationStarted
+  - validationFinished
+  - sessionAuthProof
+  - signedMessage
+  - signedTypedData
+  - feeOptions
+  - transactionReceipt
+  - transactionFailed
+  - getSessionResponse
+  - accountList
+  - accountFederated
+  - accountRemoved
+  - idToken
+  - adopter
+  - childWalletAdopted
+  - confirmationRequired
+
+struct IntentResponseAuthInitiated
+  - sessionId: string
+    + go.field.name = SessionID
+  - identityType: IdentityType
+  - expiresIn: int
+  - challenge?: string
+
+struct IntentResponseSessionOpened
+  - sessionId: string
+    + go.field.name = SessionID
+  - wallet: string
+
+struct IntentResponseSessionClosed
+
+struct IntentResponseValidateSession
+
+struct IntentResponseValidationRequired
+  - sessionId: string
+    + go.field.name = SessionID
+
+struct IntentResponseValidationStarted
+  - salt: string
+
+struct IntentResponseValidationFinished
+  - isValid: bool
+
+struct IntentResponseListSessions
+  - sessions: []string
+
+struct IntentResponseGetSession
+  - sessionId: string
+    + go.field.name = SessionID
+  - wallet: string
+  - validated: bool
+
+struct IntentResponseSessionAuthProof
+  - sessionId: string
+    + go.field.name = SessionID
+  - network: string
+  - wallet: string
+  # The message contents: “SessionAuthProof <sessionId> <wallet> <nonce?>” hex encoded
+  - message: string
+  - signature: string
+
+struct IntentResponseSignedMessage
+  - signature: string
+  - message: string
+
+struct IntentResponseSignedTypedData
+  - signature: string
+  - encodedTypedData: string
+
+struct FeeOption
+  - token: FeeToken
+  - to: string
+  - value: string
+  - gasLimit: uint
+
+struct FeeToken
+  - chainId: uint64
+  - name: string
+  - symbol: string
+  - type: FeeTokenType
+  - decimals?: uint32
+  - logoURL: string
+  - contractAddress?: string
+  - tokenID?: string
+
+enum FeeTokenType: uint32
+  - unknown
+  - erc20Token
+  - erc1155Token
+
+struct IntentResponseFeeOptions
+  - feeOptions: []FeeOption
+  - feeQuote?: string
+    + go.tag.json = feeQuote,omitempty
+
+struct IntentResponseTransactionReceipt
+  - request:       any
+  - txHash:        string
+  - metaTxHash:    string
+  - receipt:       any
+  - nativeReceipt: any
+  - simulations:   any
+
+struct IntentResponseTransactionFailed
+  - error: string
+  - request: any
+  - simulations: any
+
+struct IntentResponseAccountList
+  - accounts: []Account
+  - currentAccountId: string
+    + go.field.name = CurrentAccountID
+
+struct IntentResponseAccountFederated
+  - account: Account
+
+struct IntentResponseAccountRemoved
+
+struct IntentResponseIdToken
+  - idToken: string
+  - expiresIn: int
+
+struct IntentResponseChildWalletAdopted
+  - adopterAddress: string
+
+struct IntentResponseAdopter
+  - adopterAddress: string
+
+struct IntentResponseConfirmationRequired
+  - confirmationId: string
+    + go.field.name = ConfirmationID
+  - salt: string
+  - challengeType: ChallengeType
+  - challengeDestination?: string
+  - expiresIn: int
+
+enum IdentityType: string
+  - None
+  - Guest
+  - OIDC
+  - Email
+  - PlayFab
+  - Stytch
+
+struct Account
+  - id: string
+    + go.field.name = ID
+  - type: IdentityType
+    + go.field.type = IdentityType
+  - issuer?: string
+    + go.tag.json = issuer,omitempty
+  - email?: string
+    + go.tag.json = email,omitempty
+
+enum ChallengeType: string
+  - EmailOTP
