@@ -1,0 +1,13 @@
+files:
+  - path: cmd
+    source: /workspace/cmd
+    mode: "0644"
+  - path: env
+    source: /workspace/env
+    mode: "0644"
+  - path: rootfs/app/nitro
+    source: /workspace/nitro
+    mode: "0755"
+  - path: rootfs/etc/nitro.conf
+    source: /workspace/nitro.conf
+    mode: "0644"
