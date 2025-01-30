@@ -46,26 +46,20 @@ func (p *AuthProvider) InitiateAuth(
 	verifier string,
 	authKey *proto.AuthKey,
 	storeFn auth.StoreCommitmentFn,
-) (*proto.InitiateAuthResponse, error) {
+) (string, error) {
 	if commitment != nil {
-		return nil, fmt.Errorf("cannot reuse an old ID token")
+		return "", fmt.Errorf("cannot reuse an old ID token")
 	}
 
 	commitment, err := p.constructCommitment(proto.IdentityType_OIDC, ecosystemID, authKey, verifier)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
 	if err := storeFn(ctx, commitment); err != nil {
-		return nil, err
+		return "", err
 	}
 
-	res := &proto.InitiateAuthResponse{
-		EcosystemID:  commitment.EcosystemID,
-		AuthKey:      commitment.AuthKey,
-		IdentityType: commitment.IdentityType,
-		Verifier:     commitment.Verifier,
-	}
-	return res, nil
+	return commitment.Verifier, nil
 }
 
 func (p *AuthProvider) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (ident proto.Identity, err error) {

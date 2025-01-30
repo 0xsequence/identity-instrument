@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -9,6 +8,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -207,12 +207,16 @@ func (s *RPC) Handler() http.Handler {
 	return r
 }
 
-func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams) (*proto.InitiateAuthResponse, error) {
+func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams) (string, error) {
 	att := attestation.FromContext(ctx)
+
+	if params == nil {
+		return "", fmt.Errorf("params is nil")
+	}
 
 	authProvider, err := s.getAuthProvider(params.IdentityType)
 	if err != nil {
-		return nil, fmt.Errorf("get auth provider: %w", err)
+		return "", fmt.Errorf("get auth provider: %w", err)
 	}
 
 	var commitment *proto.AuthCommitmentData
@@ -223,12 +227,12 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 	}
 	dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 	if err != nil {
-		return nil, fmt.Errorf("getting commitment: %w", err)
+		return "", fmt.Errorf("getting commitment: %w", err)
 	}
 	if found && dbCommitment != nil {
 		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.Config.KMS.EncryptionKeys)
 		if err != nil {
-			return nil, fmt.Errorf("decrypting commitment data: %w", err)
+			return "", fmt.Errorf("decrypting commitment data: %w", err)
 		}
 	}
 
@@ -257,12 +261,12 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 	return authProvider.InitiateAuth(ctx, commitment, params.EcosystemID, params.Verifier, params.AuthKey, storeFn)
 }
 
-func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams) (*proto.RegisterAuthResponse, error) {
+func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams) (string, error) {
 	att := attestation.FromContext(ctx)
 
 	authProvider, err := s.getAuthProvider(params.IdentityType)
 	if err != nil {
-		return nil, fmt.Errorf("get auth provider: %w", err)
+		return "", fmt.Errorf("get auth provider: %w", err)
 	}
 
 	var commitment *proto.AuthCommitmentData
@@ -273,22 +277,22 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 	}
 	dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 	if err != nil {
-		return nil, fmt.Errorf("get commitment: %w", err)
+		return "", fmt.Errorf("get commitment: %w", err)
 	}
 	if found && dbCommitment != nil {
 		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.Config.KMS.EncryptionKeys)
 		if err != nil {
-			return nil, fmt.Errorf("decrypt commitment data: %w", err)
+			return "", fmt.Errorf("decrypt commitment data: %w", err)
 		}
 
 		// TODO: attempts
 
 		if time.Now().After(commitment.Expiry) {
-			return nil, fmt.Errorf("commitment expired")
+			return "", fmt.Errorf("commitment expired")
 		}
 
 		if !dbCommitment.CorrespondsTo(commitment) {
-			return nil, fmt.Errorf("commitment mismatch")
+			return "", fmt.Errorf("commitment mismatch")
 		}
 	}
 
@@ -297,7 +301,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		if commitment != nil {
 			// TODO: increment attempt and store it back
 		}
-		return nil, fmt.Errorf("verify answer: %w", err)
+		return "", fmt.Errorf("verify answer: %w", err)
 	}
 
 	// always use normalized email address
@@ -305,13 +309,13 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 
 	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, params.EcosystemID, ident)
 	if err != nil {
-		return nil, fmt.Errorf("retrieve signer: %w", err)
+		return "", fmt.Errorf("retrieve signer: %w", err)
 	}
 
 	if !signerFound {
 		signerWallet, err := ethwallet.NewWalletFromRandomEntropy()
 		if err != nil {
-			return nil, fmt.Errorf("generate wallet: %w", err)
+			return "", fmt.Errorf("generate wallet: %w", err)
 		}
 		signerData := &proto.SignerData{
 			EcosystemID: params.EcosystemID,
@@ -320,7 +324,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		}
 		encData, err := data.Encrypt(ctx, att, s.Config.KMS.EncryptionKeys[0], signerData)
 		if err != nil {
-			return nil, fmt.Errorf("encrypt signer data: %w", err)
+			return "", fmt.Errorf("encrypt signer data: %w", err)
 		}
 		dbSigner = &data.Signer{
 			EcosystemID:   params.EcosystemID,
@@ -329,7 +333,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 			EncryptedData: encData,
 		}
 		if err := s.Signers.Put(ctx, dbSigner); err != nil {
-			return nil, fmt.Errorf("put signer: %w", err)
+			return "", fmt.Errorf("put signer: %w", err)
 		}
 	}
 
@@ -344,7 +348,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 
 	encData, err := data.Encrypt(ctx, att, s.Config.KMS.EncryptionKeys[0], authKeyData)
 	if err != nil {
-		return nil, fmt.Errorf("encrypt auth key data: %w", err)
+		return "", fmt.Errorf("encrypt auth key data: %w", err)
 	}
 
 	dbAuthKey := &data.AuthKey{
@@ -353,16 +357,13 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		EncryptedData: encData,
 	}
 	if err := s.AuthKeys.Put(ctx, dbAuthKey); err != nil {
-		return nil, fmt.Errorf("put auth key: %w", err)
+		return "", fmt.Errorf("put auth key: %w", err)
 	}
 
-	res := &proto.RegisterAuthResponse{
-		Signer: dbSigner.Address,
-	}
-	return res, nil
+	return dbSigner.Address, nil
 }
 
-func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (*proto.SignResponse, error) {
+func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error) {
 	att := attestation.FromContext(ctx)
 
 	digestBytes := common.FromHex(params.Digest)
@@ -371,19 +372,29 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (*proto.SignRe
 
 	switch params.AuthKey.KeyType {
 	case proto.KeyType_P256K1:
-		// Recover the public key from the signature
-		pubKey, err := crypto.Ecrecover(digestBytes, sigBytes)
-		if err != nil {
-			return nil, fmt.Errorf("failed to recover public key: %w", err)
+		// Add Ethereum prefix to the hash
+		prefixedHash := crypto.Keccak256Hash([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(params.Digest), params.Digest)))
+
+		// handle recovery byte
+		if sigBytes[64] == 27 || sigBytes[64] == 28 {
+			sigBytes[64] -= 27
 		}
-		if !bytes.Equal(pubKey, authKeyBytes) {
-			return nil, fmt.Errorf("invalid signature")
+
+		// Recover the public key from the signature
+		pubKey, err := crypto.Ecrecover(prefixedHash.Bytes(), sigBytes)
+		if err != nil {
+			return "", fmt.Errorf("failed to recover public key: %w", err)
+		}
+		addr := common.BytesToAddress(crypto.Keccak256(pubKey[1:])[12:])
+
+		if strings.ToLower(addr.String()) != strings.ToLower(params.AuthKey.PublicKey) {
+			return "", fmt.Errorf("invalid signature")
 		}
 
 	case proto.KeyType_P256R1:
 		x, y := elliptic.Unmarshal(elliptic.P256(), authKeyBytes)
 		if x == nil || y == nil {
-			return nil, fmt.Errorf("invalid public key")
+			return "", fmt.Errorf("invalid public key")
 		}
 
 		pub := ecdsa.PublicKey{
@@ -395,69 +406,68 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (*proto.SignRe
 		r := new(big.Int).SetBytes(sigBytes[:32])
 		s := new(big.Int).SetBytes(sigBytes[32:64])
 		if !ecdsa.Verify(&pub, digestBytes, r, s) {
-			return nil, fmt.Errorf("invalid signature")
+			return "", fmt.Errorf("invalid signature")
 		}
 
 	default:
-		return nil, fmt.Errorf("unknown key type")
+		return "", fmt.Errorf("unknown key type")
 	}
 
 	dbAuthKey, found, err := s.AuthKeys.Get(ctx, params.EcosystemID, params.AuthKey.String())
 	if err != nil {
-		return nil, fmt.Errorf("get auth key: %w", err)
+		return "", fmt.Errorf("get auth key: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("auth key not found")
+		return "", fmt.Errorf("auth key not found")
 	}
 
 	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, att, s.Config.KMS.EncryptionKeys)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt auth key data: %w", err)
+		return "", fmt.Errorf("decrypt auth key data: %w", err)
 	}
 
 	if !dbAuthKey.CorrespondsTo(authKeyData) {
-		return nil, fmt.Errorf("auth key mismatch")
+		return "", fmt.Errorf("auth key mismatch")
 	}
 
 	if authKeyData.Expiry.Before(time.Now()) {
-		return nil, fmt.Errorf("auth key expired")
+		return "", fmt.Errorf("auth key expired")
 	}
 
 	if authKeyData.SignerAddress != params.Signer {
-		return nil, fmt.Errorf("signer mismatch")
+		return "", fmt.Errorf("signer mismatch")
 	}
 
 	dbSigner, found, err := s.Signers.GetByAddress(ctx, params.EcosystemID, authKeyData.SignerAddress)
 	if err != nil {
-		return nil, fmt.Errorf("get signer: %w", err)
+		return "", fmt.Errorf("get signer: %w", err)
 	}
 	if !found {
-		return nil, fmt.Errorf("signer not found")
+		return "", fmt.Errorf("signer not found")
 	}
 
 	signerData, err := dbSigner.EncryptedData.Decrypt(ctx, att, s.Config.KMS.EncryptionKeys)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt signer data: %w", err)
+		return "", fmt.Errorf("decrypt signer data: %w", err)
 	}
 	signerWallet, err := ethwallet.NewWalletFromPrivateKey(signerData.PrivateKey[2:])
 	if err != nil {
-		return nil, fmt.Errorf("create signer wallet: %w", err)
+		return "", fmt.Errorf("create signer wallet: %w", err)
 	}
 	if !dbSigner.CorrespondsTo(signerData, signerWallet) {
-		return nil, fmt.Errorf("signer mismatch")
+		return "", fmt.Errorf("signer mismatch")
 	}
 
 	sigBytes, err = ethcrypto.Sign(digestBytes, signerWallet.PrivateKey())
 	if err != nil {
-		return nil, fmt.Errorf("sign digest: %w", err)
+		return "", fmt.Errorf("sign digest: %w", err)
 	}
 
-	res := &proto.SignResponse{
-		Signer:    signerWallet.Address().String(),
-		Digest:    hexutil.Encode(digestBytes),
-		Signature: hexutil.Encode(sigBytes),
+	if sigBytes[64] < 27 {
+		sigBytes[64] += 27
 	}
-	return res, nil
+
+	return hexutil.Encode(sigBytes), nil
 }
 
 func (s *RPC) getAuthProvider(identityType proto.IdentityType) (auth.Provider, error) {

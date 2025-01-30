@@ -16,7 +16,7 @@ type Provider interface {
 		verifier string,
 		authKey *proto.AuthKey,
 		storeFn StoreCommitmentFn,
-	) (*proto.InitiateAuthResponse, error)
+	) (string, error)
 
 	Verify(
 		ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string,

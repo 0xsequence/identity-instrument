@@ -76,9 +76,9 @@ func TestAuth(t *testing.T) {
 			Verifier:     strings.Join(verifier, "|"),
 			Answer:       tok,
 		}
-		registerRes, err := c.RegisterAuth(ctx, registerParams)
+		resSigner, err := c.RegisterAuth(ctx, registerParams)
 		require.NoError(t, err)
-		require.NotEmpty(t, registerRes)
+		require.NotEmpty(t, resSigner)
 
 		digest := crypto.Keccak256([]byte("message"))
 		sig, err := ethcrypto.Sign(digest, authKey.PrivateKey())
@@ -90,16 +90,16 @@ func TestAuth(t *testing.T) {
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: authKey.PublicKeyHex(),
 			},
-			Signer:    registerRes.Signer,
+			Signer:    resSigner,
 			Digest:    hexutil.Encode(digest),
 			Signature: hexutil.Encode(sig),
 		}
-		signRes, err := c.Sign(ctx, signParams)
+		resSignature, err := c.Sign(ctx, signParams)
 		require.NoError(t, err)
 
-		pub, err := ethcrypto.Ecrecover(digest, common.FromHex(signRes.Signature))
+		pub, err := ethcrypto.Ecrecover(digest, common.FromHex(resSignature))
 		require.NoError(t, err)
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-		assert.Equal(t, addr.String(), registerRes.Signer)
+		assert.Equal(t, addr.String(), resSigner)
 	})
 }
