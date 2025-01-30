@@ -13,6 +13,9 @@ endef
 run:
 	$(call run,nitro)
 
+run-ingress-proxy:
+	$(call run,ingress-proxy)
+
 up:
 	docker-compose up
 
@@ -32,6 +35,9 @@ build: build-nitro
 
 build-nitro:
 	$(call build,nitro)
+
+build-ingress-proxy:
+	$(call build,ingress-proxy)
 
 generate:
 	go generate -x ./...

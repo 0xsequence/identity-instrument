@@ -1,7 +1,5 @@
-version: "3.9"
-
 services:
-  api:
+  nitro:
     build:
       dockerfile: Dockerfile
       target: dev
@@ -12,6 +10,19 @@ services:
       CONFIG: ./etc/nitro.conf
     ports:
       - "9123:9123"
+
+  ingress:
+    build:
+      dockerfile: Dockerfile
+      target: ingress
+      context: .
+    volumes:
+      - .:/go/src/github.com/0xsequence/seqv3-nitro
+    environment:
+      TARGET_ADDRESS: nitro
+      TARGET_PORT: "9123"
+    ports:
+      - "8080:8080"
 
   localstack:
     image: localstack/localstack:3.4

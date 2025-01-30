@@ -1,9 +1,20 @@
 #
 # Enclave base image
 #
-FROM golang:1.22.8-alpine3.19@sha256:fe5bea2e1ab3ffebe0267393fea88fcb197e2dbbb1e2dbabeec6dd9ccb0e1871 AS base
+FROM golang:1.23.5-alpine3.21@sha256:47d337594bd9e667d35514b241569f95fb6d95727c24b19468813d596d5ae596 AS base
 
 RUN apk add make bash
+
+#
+# Ingress proxy
+#
+FROM base AS ingress
+
+WORKDIR /go/src/github.com/0xsequence/seqv3-nitro
+
+ADD ./ ./
+
+CMD ["make", "run-ingress-proxy"]
 
 #
 # Enclave pre-image

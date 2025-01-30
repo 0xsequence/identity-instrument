@@ -13,6 +13,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.39.2
 	github.com/aws/aws-sdk-go-v2/service/kms v1.35.3
 	github.com/go-chi/chi/v5 v5.1.0
+	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httplog v0.3.2
 	github.com/go-chi/traceid v0.2.0
 	github.com/go-chi/transport v0.5.0
