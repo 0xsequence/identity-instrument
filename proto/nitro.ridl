@@ -24,14 +24,6 @@ struct InitiateAuthParams
   - identityType: IdentityType
   - verifier: string
 
-struct InitiateAuthResponse
-  - ecosystemId: string
-    + go.field.name = EcosystemID
-  - authKey: AuthKey
-  - identityType: IdentityType
-  - verifier: string
-  - challenge?: string
-
 struct RegisterAuthParams
   - ecosystemId: string
     + go.field.name = EcosystemID
@@ -40,21 +32,12 @@ struct RegisterAuthParams
   - verifier: string
   - answer: string
 
-struct RegisterAuthResponse
-  - signer: string
-  - attestation: string
-
 struct SignParams
   - ecosystemId: string
     + go.field.name = EcosystemID
   - signer: string
   - digest: string
   - authKey: AuthKey
-  - signature: string
-
-struct SignResponse
-  - signer: string
-  - digest: string
   - signature: string
 
 struct Identity
@@ -121,8 +104,8 @@ struct AuthCommitmentData
     + json = expiry
 
 service IdentityInstrument
-  - InitiateAuth(params: InitiateAuthParams) => (res: InitiateAuthResponse)
-  - RegisterAuth(params: RegisterAuthParams) => (res: RegisterAuthResponse)
+  - InitiateAuth(params: InitiateAuthParams) => (challenge: string)
+  - RegisterAuth(params: RegisterAuthParams) => (signer: string)
 
-  - Sign(params: SignParams) => (res: SignResponse)
+  - Sign(params: SignParams) => (signature: string)
 
