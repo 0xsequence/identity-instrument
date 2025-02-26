@@ -5,11 +5,11 @@ import (
 )
 
 type SecretProvider interface {
-	GetClientSecret(ctx context.Context, issuer string, audience string) (string, error)
+	GetClientSecret(ctx context.Context, ecosystem string, issuer string, audience string) (string, error)
 }
 
-type SecretProviderFunc func(ctx context.Context, issuer string, audience string) (string, error)
+type SecretProviderFunc func(ctx context.Context, ecosystem string, issuer string, audience string) (string, error)
 
-func (f SecretProviderFunc) GetClientSecret(ctx context.Context, issuer string, audience string) (string, error) {
-	return f(ctx, issuer, audience)
+func (f SecretProviderFunc) GetClientSecret(ctx context.Context, ecosystem string, issuer string, audience string) (string, error) {
+	return f(ctx, ecosystem, issuer, audience)
 }

@@ -13,22 +13,22 @@ import (
 )
 
 type Signer struct {
-	EcosystemID string   `dynamodbav:"EcosystemID"`
-	Address     string   `dynamodbav:"Address"`
-	Identity    Identity `dynamodbav:"Identity"`
+	Ecosystem string   `dynamodbav:"Ecosystem"`
+	Address   string   `dynamodbav:"Address"`
+	Identity  Identity `dynamodbav:"Identity"`
 
 	EncryptedData EncryptedData[*proto.SignerData] `dynamodbav:"EncryptedData"`
 }
 
 func (s *Signer) Key() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"EcosystemID": &types.AttributeValueMemberS{Value: s.EcosystemID},
-		"Identity":    &types.AttributeValueMemberS{Value: s.Identity.String()},
+		"Ecosystem": &types.AttributeValueMemberS{Value: s.Ecosystem},
+		"Identity":  &types.AttributeValueMemberS{Value: s.Identity.String()},
 	}
 }
 
 func (s *Signer) CorrespondsTo(data *proto.SignerData, wallet *ethwallet.Wallet) bool {
-	if s.EcosystemID != data.EcosystemID {
+	if s.Ecosystem != data.Ecosystem {
 		return false
 	}
 	if s.Identity.String() != data.Identity.String() {
@@ -58,8 +58,8 @@ func NewSignerTable(db DB, tableARN string, indices SignerIndices) *SignerTable 
 	}
 }
 
-func (t *SignerTable) GetByIdentity(ctx context.Context, ecosystemID string, ident proto.Identity) (*Signer, bool, error) {
-	signer := Signer{EcosystemID: ecosystemID, Identity: Identity(ident)}
+func (t *SignerTable) GetByIdentity(ctx context.Context, ecosystem string, ident proto.Identity) (*Signer, bool, error) {
+	signer := Signer{Ecosystem: ecosystem, Identity: Identity(ident)}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
@@ -78,15 +78,15 @@ func (t *SignerTable) GetByIdentity(ctx context.Context, ecosystemID string, ide
 	return &signer, true, nil
 }
 
-func (t *SignerTable) GetByAddress(ctx context.Context, ecosystemID string, address string) (*Signer, bool, error) {
+func (t *SignerTable) GetByAddress(ctx context.Context, ecosystem string, address string) (*Signer, bool, error) {
 	var signer Signer
 	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
 		TableName:              &t.tableARN,
 		IndexName:              &t.indices.ByAddress,
-		KeyConditionExpression: aws.String("Address = :address and EcosystemID = :ecosystemID"),
+		KeyConditionExpression: aws.String("Address = :address and Ecosystem = :ecosystem"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":address":     &types.AttributeValueMemberS{Value: address},
-			":ecosystemID": &types.AttributeValueMemberS{Value: ecosystemID},
+			":address":   &types.AttributeValueMemberS{Value: address},
+			":ecosystem": &types.AttributeValueMemberS{Value: ecosystem},
 		},
 		Limit: aws.Int32(1),
 	})

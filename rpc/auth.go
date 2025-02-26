@@ -36,7 +36,7 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 
 	var commitment *proto.AuthCommitmentData
 	authID := proto.AuthID{
-		EcosystemID:  params.EcosystemID,
+		Ecosystem:    params.Ecosystem,
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
 		Verifier:     params.Verifier,
@@ -64,7 +64,7 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 
 		dbCommitment := &data.AuthCommitment{
 			ID: data.AuthID{
-				EcosystemID:  commitment.EcosystemID,
+				Ecosystem:    commitment.Ecosystem,
 				AuthMode:     commitment.AuthMode,
 				IdentityType: commitment.IdentityType,
 				Verifier:     commitment.Verifier,
@@ -95,7 +95,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 
 	var commitment *proto.AuthCommitmentData
 	authID := proto.AuthID{
-		EcosystemID:  params.EcosystemID,
+		Ecosystem:    params.Ecosystem,
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
 		Verifier:     params.Verifier,
@@ -132,7 +132,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 	// always use normalized email address
 	ident.Email = otp.NormalizeEmail(ident.Email)
 
-	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, params.EcosystemID, ident)
+	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, params.Ecosystem, ident)
 	if err != nil {
 		return "", fmt.Errorf("retrieve signer: %w", err)
 	}
@@ -143,16 +143,16 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 			return "", fmt.Errorf("generate wallet: %w", err)
 		}
 		signerData := &proto.SignerData{
-			EcosystemID: params.EcosystemID,
-			Identity:    &ident,
-			PrivateKey:  signerWallet.PrivateKeyHex(),
+			Ecosystem:  params.Ecosystem,
+			Identity:   &ident,
+			PrivateKey: signerWallet.PrivateKeyHex(),
 		}
 		encData, err := data.Encrypt(ctx, att, s.Config.KMS.EncryptionKeys[0], signerData)
 		if err != nil {
 			return "", fmt.Errorf("encrypt signer data: %w", err)
 		}
 		dbSigner = &data.Signer{
-			EcosystemID:   params.EcosystemID,
+			Ecosystem:     params.Ecosystem,
 			Address:       signerWallet.Address().Hex(),
 			Identity:      data.Identity(ident),
 			EncryptedData: encData,
@@ -164,7 +164,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 
 	ttl := 5 * time.Minute
 	authKeyData := &proto.AuthKeyData{
-		EcosystemID:   params.EcosystemID,
+		Ecosystem:     params.Ecosystem,
 		SignerAddress: dbSigner.Address,
 		KeyType:       params.AuthKey.KeyType,
 		PublicKey:     params.AuthKey.PublicKey,
@@ -177,7 +177,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 	}
 
 	dbAuthKey := &data.AuthKey{
-		EcosystemID:   params.EcosystemID,
+		Ecosystem:     params.Ecosystem,
 		KeyID:         params.AuthKey.String(),
 		EncryptedData: encData,
 	}
@@ -203,7 +203,7 @@ func makeAuthHandlers(client HTTPClient, awsCfg aws.Config, cfg *config.Config) 
 		return nil, err
 	}
 
-	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, iss string, aud string) (string, error) {
+	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, ecosystem string, iss string, aud string) (string, error) {
 		// TODO: get secret from secret manager
 		return "SECRET", nil
 	})

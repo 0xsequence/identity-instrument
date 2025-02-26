@@ -11,21 +11,21 @@ import (
 )
 
 type AuthKey struct {
-	EcosystemID string `dynamodbav:"EcosystemID"`
-	KeyID       string `dynamodbav:"KeyID"`
+	Ecosystem string `dynamodbav:"Ecosystem"`
+	KeyID     string `dynamodbav:"KeyID"`
 
 	EncryptedData EncryptedData[*proto.AuthKeyData] `dynamodbav:"EncryptedData"`
 }
 
 func (k *AuthKey) Key() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"EcosystemID": &types.AttributeValueMemberS{Value: k.EcosystemID},
-		"KeyID":       &types.AttributeValueMemberS{Value: k.KeyID},
+		"Ecosystem": &types.AttributeValueMemberS{Value: k.Ecosystem},
+		"KeyID":     &types.AttributeValueMemberS{Value: k.KeyID},
 	}
 }
 
 func (k *AuthKey) CorrespondsTo(data *proto.AuthKeyData) bool {
-	if k.EcosystemID != data.EcosystemID {
+	if k.Ecosystem != data.Ecosystem {
 		return false
 	}
 	expectedKey := &proto.AuthKey{
@@ -54,8 +54,8 @@ func NewAuthKeyTable(db DB, tableARN string, indices AuthKeyIndices) *AuthKeyTab
 	}
 }
 
-func (t *AuthKeyTable) Get(ctx context.Context, ecosystemID string, keyID string) (*AuthKey, bool, error) {
-	authKey := AuthKey{EcosystemID: ecosystemID, KeyID: keyID}
+func (t *AuthKeyTable) Get(ctx context.Context, ecosystem string, keyID string) (*AuthKey, bool, error) {
+	authKey := AuthKey{Ecosystem: ecosystem, KeyID: keyID}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,

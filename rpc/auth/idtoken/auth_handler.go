@@ -159,7 +159,7 @@ func (h *AuthHandler) constructCommitment(
 	}
 
 	commitment := &proto.AuthCommitmentData{
-		EcosystemID:  authID.EcosystemID,
+		Ecosystem:    authID.Ecosystem,
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,

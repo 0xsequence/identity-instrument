@@ -4,8 +4,7 @@ name = identity-instrument
 version = v0.1.0
 
 struct InitiateAuthParams
-  - ecosystemId: string
-    + go.field.name = EcosystemID
+  - ecosystem: string
   - authKey: AuthKey
   - identityType: IdentityType
   - authMode: AuthMode
@@ -14,8 +13,7 @@ struct InitiateAuthParams
     + go.field.type = string
 
 struct RegisterAuthParams
-  - ecosystemId: string
-    + go.field.name = EcosystemID
+  - ecosystem: string
   - authKey: AuthKey
   - identityType: IdentityType
   - authMode: AuthMode
@@ -23,8 +21,7 @@ struct RegisterAuthParams
   - answer: string
 
 struct SignParams
-  - ecosystemId: string
-    + go.field.name = EcosystemID
+  - ecosystem: string
   - signer: string
   - digest: string
   - authKey: AuthKey
@@ -58,8 +55,7 @@ enum AuthMode: string
   - AuthCodePKCE
 
 struct AuthID
-  - ecosystemId: string
-    + go.field.name = EcosystemID
+  - ecosystem: string
   - authMode: AuthMode
   - identityType: IdentityType
   - verifier: string
@@ -69,9 +65,8 @@ struct AuthKey
   - keyType: KeyType
 
 struct AuthKeyData
-  - ecoId: string
-    + go.field.name = EcosystemID
-    + json = ecoId
+  - ecosystem: string
+    + json = ecosystem
   - signerAddress: string
     + json = signerAddress
   - publicKey: string
@@ -82,9 +77,8 @@ struct AuthKeyData
     + json = expiry
 
 struct SignerData
-  - ecoId: string
-    + go.field.name = EcosystemID
-    + json = ecoId
+  - ecosystem: string
+    + json = ecosystem
   - identity: Identity
     + json = identity
   - keyType: KeyType
@@ -93,9 +87,8 @@ struct SignerData
     + json = privateKey
 
 struct AuthCommitmentData
-  - ecoId: string
-    + go.field.name = EcosystemID
-    + json = ecoId
+  - ecosystem: string
+    + json = ecosystem
   - authKey: AuthKey
     + json = authKey
   - authMode: AuthMode

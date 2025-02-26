@@ -49,7 +49,7 @@ func (c *AuthCommitment) CorrespondsTo(data *proto.AuthCommitmentData) bool {
 	if c.ID.Verifier != data.Verifier {
 		return false
 	}
-	if c.ID.EcosystemID != data.EcosystemID {
+	if c.ID.Ecosystem != data.Ecosystem {
 		return false
 	}
 	return true

@@ -67,7 +67,7 @@ func (h *AuthHandler) Commit(
 	codeChallenge := base64.URLEncoding.EncodeToString(codeVerifierHash[:])
 
 	commitment = &proto.AuthCommitmentData{
-		EcosystemID:  authID.EcosystemID,
+		Ecosystem:    authID.Ecosystem,
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
@@ -97,7 +97,7 @@ func (h *AuthHandler) Verify(
 	iss := commitment.Metadata["iss"]
 	aud := commitment.Metadata["aud"]
 
-	clientSecret, err := h.secretProvider.GetClientSecret(ctx, iss, aud)
+	clientSecret, err := h.secretProvider.GetClientSecret(ctx, commitment.Ecosystem, iss, aud)
 	if err != nil {
 		return proto.Identity{}, fmt.Errorf("get client secret: %w", err)
 	}

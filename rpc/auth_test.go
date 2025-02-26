@@ -47,7 +47,7 @@ func TestAuth(t *testing.T) {
 		hashedToken := hexutil.Encode(crypto.Keccak256([]byte(tok)))
 
 		initiateParams := &proto.InitiateAuthParams{
-			EcosystemID: "ECO_ID",
+			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: authKey.Address().Hex(),
@@ -67,7 +67,7 @@ func TestAuth(t *testing.T) {
 		require.Empty(t, challenge)
 
 		registerParams := &proto.RegisterAuthParams{
-			EcosystemID: "ECO_ID",
+			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: authKey.Address().Hex(),
@@ -88,7 +88,7 @@ func TestAuth(t *testing.T) {
 		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			EcosystemID: "ECO_ID",
+			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: authKey.Address().Hex(),
