@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
@@ -25,7 +24,9 @@ type AuthProvider struct {
 	store  cachestore.Store[jwk.Key]
 }
 
-func NewAuthProvider(cacheBackend cachestore.Backend, client HTTPClient) (auth.Provider, error) {
+var _ auth.Provider = (*AuthProvider)(nil)
+
+func NewAuthProvider(cacheBackend cachestore.Backend, client HTTPClient) (*AuthProvider, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -39,49 +40,68 @@ func NewAuthProvider(cacheBackend cachestore.Backend, client HTTPClient) (auth.P
 	}, nil
 }
 
-func (p *AuthProvider) InitiateAuth(
-	ctx context.Context,
-	commitment *proto.AuthCommitmentData,
-	ecosystemID string,
-	verifier string,
-	authKey *proto.AuthKey,
-	storeFn auth.StoreCommitmentFn,
-) (string, error) {
-	if commitment != nil {
-		return "", fmt.Errorf("cannot reuse an old ID token")
-	}
-
-	commitment, err := p.constructCommitment(proto.IdentityType_OIDC, ecosystemID, authKey, verifier)
-	if err != nil {
-		return "", err
-	}
-	if err := storeFn(ctx, commitment); err != nil {
-		return "", err
-	}
-
-	return commitment.Verifier, nil
+func (p *AuthProvider) Supports(identityType proto.IdentityType) bool {
+	return identityType == proto.IdentityType_OIDC
 }
 
-func (p *AuthProvider) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (ident proto.Identity, err error) {
+func (p *AuthProvider) InitiateAuth(
+	ctx context.Context,
+	authID proto.AuthID,
+	commitment *proto.AuthCommitmentData,
+	authKey *proto.AuthKey,
+	metadata map[string]string,
+	storeFn auth.StoreCommitmentFn,
+) (resVerifier string, resChallenge string, err error) {
+	if commitment != nil {
+		return "", "", fmt.Errorf("cannot reuse an old ID token")
+	}
+
+	commitment, err = p.constructCommitment(authID, authKey, metadata)
+	if err != nil {
+		return "", "", err
+	}
+	if err := storeFn(ctx, commitment); err != nil {
+		return "", "", err
+	}
+
+	return commitment.Verifier, commitment.Challenge, nil
+}
+
+func (p *AuthProvider) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (proto.Identity, error) {
 	if commitment == nil {
 		return proto.Identity{}, fmt.Errorf("commitment not found")
 	}
 
-	tok, err := jwt.Parse([]byte(answer), jwt.WithVerify(false), jwt.WithValidate(false))
+	expectedHash := hexutil.Encode(ethcrypto.Keccak256([]byte(answer)))
+	if commitment.Verifier != expectedHash {
+		return proto.Identity{}, fmt.Errorf("invalid token hash")
+	}
+
+	vi, err := p.extractMetadata(commitment.Metadata)
+	if err != nil {
+		return proto.Identity{}, fmt.Errorf("extract metadata: %w", err)
+	}
+
+	return p.VerifyToken(ctx, answer, vi.issuer, vi.audience, p.getVerifyChallengeFunc(commitment))
+}
+
+func (p *AuthProvider) VerifyToken(
+	ctx context.Context,
+	idToken string,
+	expectedIssuer string,
+	expectedAudience string,
+	verifyChallenge func(tok jwt.Token) error,
+) (proto.Identity, error) {
+	tok, err := jwt.Parse([]byte(idToken), jwt.WithVerify(false), jwt.WithValidate(false))
 	if err != nil {
 		return proto.Identity{}, fmt.Errorf("parse JWT: %w", err)
 	}
 
-	issuer := normalizeIssuer(tok.Issuer())
-
-	expectedHash := hexutil.Encode(ethcrypto.Keccak256([]byte(answer)))
-	if commitment.Answer != expectedHash {
-		return proto.Identity{}, fmt.Errorf("invalid token hash")
-	}
-
-	if err := p.verifyChallenge(tok, commitment.Challenge); err != nil {
+	if err := verifyChallenge(tok); err != nil {
 		return proto.Identity{}, fmt.Errorf("verify challenge: %w", err)
 	}
+
+	issuer := normalizeIssuer(tok.Issuer())
 
 	ks := &operationKeySet{
 		ctx:       ctx,
@@ -90,18 +110,13 @@ func (p *AuthProvider) Verify(ctx context.Context, commitment *proto.AuthCommitm
 		getKeySet: p.GetKeySet,
 	}
 
-	if _, err := jws.Verify([]byte(answer), jws.WithKeySet(ks, jws.WithMultipleKeysPerKeyID(false))); err != nil {
+	if _, err := jws.Verify([]byte(idToken), jws.WithKeySet(ks, jws.WithMultipleKeysPerKeyID(false))); err != nil {
 		return proto.Identity{}, fmt.Errorf("signature verification: %w", err)
 	}
 
-	vi, err := p.extractVerifier(commitment.Verifier)
-	if err != nil {
-		return proto.Identity{}, fmt.Errorf("extract verifier: %w", err)
-	}
-
 	validateOptions := []jwt.ValidateOption{
-		jwt.WithValidator(withIssuer(vi.issuer, true)),
-		jwt.WithValidator(withAudience([]string{vi.audience})),
+		jwt.WithValidator(withIssuer(expectedIssuer, true)),
+		jwt.WithValidator(withAudience([]string{expectedAudience})),
 		jwt.WithAcceptableSkew(10 * time.Second),
 	}
 
@@ -132,9 +147,9 @@ func (p *AuthProvider) GetKeySet(ctx context.Context, issuer string) (set jwk.Se
 }
 
 func (p *AuthProvider) constructCommitment(
-	identityType proto.IdentityType, ecosystemID string, authKey *proto.AuthKey, verifier string,
+	authID proto.AuthID, authKey *proto.AuthKey, metadata map[string]string,
 ) (*proto.AuthCommitmentData, error) {
-	vi, err := p.extractVerifier(verifier)
+	vi, err := p.extractMetadata(metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -143,38 +158,28 @@ func (p *AuthProvider) constructCommitment(
 		return nil, fmt.Errorf("token expired")
 	}
 
-	answer := vi.tokHash
-	challenge := fmt.Sprintf("exp=%d", vi.expiresAt.Unix())
-
-	verifCtx := &proto.AuthCommitmentData{
-		EcosystemID:  ecosystemID,
+	commitment := &proto.AuthCommitmentData{
+		EcosystemID:  authID.EcosystemID,
 		AuthKey:      authKey,
-		IdentityType: identityType,
-		Verifier:     verifier,
-		Answer:       answer,
-		Challenge:    challenge,
+		AuthMode:     authID.AuthMode,
+		IdentityType: authID.IdentityType,
+		Verifier:     authID.Verifier,
 		Expiry:       vi.expiresAt,
+		Metadata:     metadata,
 	}
-	return verifCtx, nil
+	return commitment, nil
 }
 
 type verifierInfo struct {
 	issuer    string
 	audience  string
-	tokHash   string
 	expiresAt time.Time
 }
 
-func (p *AuthProvider) extractVerifier(verifier string) (*verifierInfo, error) {
-	parts := strings.SplitN(verifier, "|", 4)
-	if len(parts) != 4 {
-		return nil, fmt.Errorf("invalid verifier format")
-	}
-
-	issuer := parts[0]
-	audience := parts[1]
-	tokHash := parts[2]
-	exp, err := strconv.ParseInt(parts[3], 10, 64)
+func (p *AuthProvider) extractMetadata(metadata map[string]string) (*verifierInfo, error) {
+	issuer := metadata["iss"]
+	audience := metadata["aud"]
+	exp, err := strconv.ParseInt(metadata["exp"], 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("parse exp: %w", err)
 	}
@@ -183,23 +188,22 @@ func (p *AuthProvider) extractVerifier(verifier string) (*verifierInfo, error) {
 	vi := &verifierInfo{
 		issuer:    issuer,
 		audience:  audience,
-		tokHash:   tokHash,
 		expiresAt: expiresAt,
 	}
 	return vi, nil
 }
 
-func (p *AuthProvider) verifyChallenge(tok jwt.Token, challenge string) error {
-	s := strings.TrimPrefix(challenge, "exp=")
-	exp, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return fmt.Errorf("parse exp: %w", err)
-	}
-	expiresAt := time.Unix(exp, 0)
+func (p *AuthProvider) getVerifyChallengeFunc(commitment *proto.AuthCommitmentData) func(tok jwt.Token) error {
+	return func(tok jwt.Token) error {
+		vi, err := p.extractMetadata(commitment.Metadata)
+		if err != nil {
+			return fmt.Errorf("extract metadata: %w", err)
+		}
 
-	if !tok.Expiration().Equal(expiresAt) {
-		return fmt.Errorf("invalid exp claim")
-	}
+		if !tok.Expiration().Equal(vi.expiresAt) {
+			return fmt.Errorf("invalid exp claim")
+		}
 
-	return nil
+		return nil
+	}
 }

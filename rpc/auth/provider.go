@@ -9,14 +9,16 @@ import (
 type StoreCommitmentFn func(context.Context, *proto.AuthCommitmentData) error
 
 type Provider interface {
+	Supports(identityType proto.IdentityType) bool
+
 	InitiateAuth(
 		ctx context.Context,
+		authID proto.AuthID,
 		commitment *proto.AuthCommitmentData,
-		ecosystemID string,
-		verifier string,
 		authKey *proto.AuthKey,
+		metadata map[string]string,
 		storeFn StoreCommitmentFn,
-	) (string, error)
+	) (resVerifier string, challenge string, err error)
 
 	Verify(
 		ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string,

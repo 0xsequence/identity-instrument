@@ -1,0 +1,15 @@
+package oauth
+
+import (
+	"context"
+)
+
+type SecretProvider interface {
+	GetClientSecret(ctx context.Context, issuer string, audience string) (string, error)
+}
+
+type SecretProviderFunc func(ctx context.Context, issuer string, audience string) (string, error)
+
+func (f SecretProviderFunc) GetClientSecret(ctx context.Context, issuer string, audience string) (string, error) {
+	return f(ctx, issuer, audience)
+}
