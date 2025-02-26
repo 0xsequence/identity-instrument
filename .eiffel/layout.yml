@@ -5,9 +5,9 @@ files:
   - path: env
     source: /workspace/env
     mode: "0644"
-  - path: rootfs/app/nitro
-    source: /workspace/nitro
+  - path: rootfs/app/identity
+    source: /workspace/identity
     mode: "0755"
-  - path: rootfs/etc/nitro.conf
-    source: /workspace/nitro.conf
+  - path: rootfs/etc/identity.conf
+    source: /workspace/identity.conf
     mode: "0644"

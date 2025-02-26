@@ -20,7 +20,8 @@ import (
 var (
 	vsockCID      uint32
 	targetPort    uint32
-	targetAddress string
+	targetHost    string
+	listenAddress string
 )
 
 func main() {
@@ -32,7 +33,8 @@ func main() {
 		i, _ := strconv.Atoi(s)
 		targetPort = uint32(i)
 	}
-	targetAddress = os.Getenv("TARGET_ADDRESS")
+	targetHost = os.Getenv("TARGET_HOST")
+	listenAddress = os.Getenv("LISTEN_ADDRESS")
 
 	transport := &http.Transport{
 		DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
@@ -44,7 +46,7 @@ func main() {
 				Timeout:   30 * time.Second,
 				KeepAlive: 30 * time.Second,
 			}
-			return dialer.DialContext(ctx, "tcp", targetAddress+":"+strconv.Itoa(int(targetPort)))
+			return dialer.DialContext(ctx, "tcp", targetHost+":"+strconv.Itoa(int(targetPort)))
 		},
 		MaxIdleConns:          100,
 		IdleConnTimeout:       90 * time.Second,
@@ -52,8 +54,8 @@ func main() {
 	}
 	client := &http.Client{Transport: transport}
 
-	log.Println("Listening on :8080")
-	http.ListenAndServe(":8080", handler(client))
+	log.Println("Listening on " + listenAddress)
+	http.ListenAndServe(listenAddress, handler(client))
 }
 
 func handler(client *http.Client) http.Handler {

@@ -11,7 +11,7 @@ define run
 endef
 
 run:
-	$(call run,nitro)
+	$(call run,identity)
 
 run-ingress-proxy:
 	$(call run,ingress-proxy)
@@ -31,10 +31,10 @@ define build
 		./cmd/$(1)
 endef
 
-build: build-nitro
+build: build-identity build-ingress-proxy
 
-build-nitro:
-	$(call build,nitro)
+build-identity:
+	$(call build,identity)
 
 build-ingress-proxy:
 	$(call build,ingress-proxy)
@@ -59,13 +59,13 @@ test-clean:
 
 eif: clean ensure-version
 	@mkdir -p bin
-	docker build --platform linux/amd64 --build-arg VERSION=$(VERSION) --build-arg ENV_ARG=$(ENV) -t seqv3-nitro-builder .
-	docker run --platform linux/amd64 -v $(TOP)/bin:/out seqv3-nitro-builder nitro.$(VERSION)
+	docker build --platform linux/amd64 --build-arg VERSION=$(VERSION) --build-arg ENV_ARG=$(ENV) -t identity-instrument-builder .
+	docker run --platform linux/amd64 -v $(TOP)/bin:/out identity-instrument-builder identity.$(VERSION)
 
 ensure-version:
 	@test -n "$(VERSION)" || (echo "Oops! you forgot to pass the VERSION env variable, try: make VERSION=vX.X.X eif" && exit 1)
 	@rm -rf version.go
-	@echo "package seqv3nitro" > version.go
+	@echo "package identityinstrument" > version.go
 	@echo "const VERSION = \"$(VERSION)\"" >> version.go
 
 .PHONY: vendor

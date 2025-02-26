@@ -5,22 +5,23 @@ services:
       target: dev
       context: .
     volumes:
-      - .:/go/src/github.com/0xsequence/seqv3-nitro
+      - .:/go/src/github.com/0xsequence/identity-instrument
     environment:
-      CONFIG: ./etc/nitro.conf
+      CONFIG: ./etc/identity.conf
     ports:
       - "9123:9123"
 
   ingress:
     build:
       dockerfile: Dockerfile
-      target: ingress
+      target: ingress-dev
       context: .
     volumes:
-      - .:/go/src/github.com/0xsequence/seqv3-nitro
+      - .:/go/src/github.com/0xsequence/identity-instrument
     environment:
-      TARGET_ADDRESS: nitro
+      TARGET_HOST: nitro
       TARGET_PORT: "9123"
+      LISTEN_ADDRESS: "0.0.0.0:8080"
     ports:
       - "8080:8080"
 

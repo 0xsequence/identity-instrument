@@ -6,22 +6,11 @@ FROM golang:1.23.5-alpine3.21@sha256:47d337594bd9e667d35514b241569f95fb6d95727c2
 RUN apk add make bash
 
 #
-# Ingress proxy
-#
-FROM base AS ingress
-
-WORKDIR /go/src/github.com/0xsequence/seqv3-nitro
-
-ADD ./ ./
-
-CMD ["make", "run-ingress-proxy"]
-
-#
-# Enclave pre-image
+# Enclave & ingress proxy pre-image
 #
 FROM base AS builder
 
-WORKDIR /go/src/github.com/0xsequence/seqv3-nitro
+WORKDIR /go/src/github.com/0xsequence/identity-instrument
 
 ADD ./ ./
 
@@ -30,11 +19,33 @@ ARG VERSION
 RUN make VERSION=${VERSION} build
 
 #
+# Ingress proxy dev image
+#
+FROM base AS ingress-dev
+
+WORKDIR /go/src/github.com/0xsequence/identity-instrument
+
+ADD ./ ./
+
+CMD ["make", "run-ingress-proxy"]
+
+#
+# Ingress proxy prod image
+#
+FROM alpine:3.21 AS ingress
+
+WORKDIR /go/src/github.com/0xsequence/identity-instrument
+
+COPY --from=builder /go/src/github.com/0xsequence/identity-instrument/bin/ingress-proxy /usr/local/bin/ingress-proxy
+
+CMD ["ingress-proxy"]
+
+#
 # Enclave dev image
 #
 FROM base AS dev
 
-WORKDIR /go/src/github.com/0xsequence/seqv3-nitro
+WORKDIR /go/src/github.com/0xsequence/identity-instrument
 
 ENV CONFIG=./etc/nitro.conf
 
@@ -48,7 +59,7 @@ ARG ENV_ARG=dev
 RUN mkdir /workspace
 
 ADD ./.eiffel/ /workspace/
-ADD ./etc/nitro.${ENV_ARG}.conf /workspace/nitro.conf
-COPY --from=builder /go/src/github.com/0xsequence/seqv3-nitro/bin/nitro /workspace/nitro
+ADD ./etc/identity.${ENV_ARG}.conf /workspace/identity.conf
+COPY --from=builder /go/src/github.com/0xsequence/identity-instrument/bin/identity /workspace/identity
 
 CMD ["nitro"]
