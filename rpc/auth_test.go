@@ -2,10 +2,10 @@ package rpc_test
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +13,6 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
-	ethcrypto "github.com/0xsequence/ethkit/go-ethereum/crypto"
 	proto "github.com/0xsequence/identity-instrument/proto/clients"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/stretchr/testify/assert"
@@ -21,7 +20,7 @@ import (
 )
 
 func TestAuth(t *testing.T) {
-	t.Run("OIDC", func(t *testing.T) {
+	t.Run("IdentityType_OIDC", func(t *testing.T) {
 		ctx := context.Background()
 
 		exp := time.Now().Add(120 * time.Second)
@@ -46,34 +45,36 @@ func TestAuth(t *testing.T) {
 		require.NoError(t, err)
 
 		hashedToken := hexutil.Encode(crypto.Keccak256([]byte(tok)))
-		verifier := []string{
-			issuer,
-			"audience",
-			hashedToken,
-			strconv.Itoa(int(exp.Unix())),
-		}
 
 		initiateParams := &proto.InitiateAuthParams{
 			EcosystemID: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
-				PublicKey: authKey.PublicKeyHex(),
+				PublicKey: authKey.Address().Hex(),
 			},
+			AuthMode:     proto.AuthMode_IDToken,
 			IdentityType: proto.IdentityType_OIDC,
-			Verifier:     strings.Join(verifier, "|"),
+			Verifier:     hashedToken,
+			Metadata: map[string]string{
+				"iss": issuer,
+				"aud": "audience",
+				"exp": strconv.Itoa(int(exp.Unix())),
+			},
 		}
-		initiateRes, err := c.InitiateAuth(ctx, initiateParams)
+		resVerifier, challenge, err := c.InitiateAuth(ctx, initiateParams)
 		require.NoError(t, err)
-		require.NotEmpty(t, initiateRes)
+		require.Equal(t, initiateParams.Verifier, resVerifier)
+		require.Empty(t, challenge)
 
 		registerParams := &proto.RegisterAuthParams{
 			EcosystemID: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
-				PublicKey: authKey.PublicKeyHex(),
+				PublicKey: authKey.Address().Hex(),
 			},
+			AuthMode:     proto.AuthMode_IDToken,
 			IdentityType: proto.IdentityType_OIDC,
-			Verifier:     strings.Join(verifier, "|"),
+			Verifier:     resVerifier,
 			Answer:       tok,
 		}
 		resSigner, err := c.RegisterAuth(ctx, registerParams)
@@ -81,23 +82,30 @@ func TestAuth(t *testing.T) {
 		require.NotEmpty(t, resSigner)
 
 		digest := crypto.Keccak256([]byte("message"))
-		sig, err := ethcrypto.Sign(digest, authKey.PrivateKey())
+		digestHex := hexutil.Encode(digest)
+		prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
+		sig, err := crypto.Sign(prefixedHash, authKey.PrivateKey())
 		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
 			EcosystemID: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
-				PublicKey: authKey.PublicKeyHex(),
+				PublicKey: authKey.Address().Hex(),
 			},
 			Signer:    resSigner,
-			Digest:    hexutil.Encode(digest),
+			Digest:    digestHex,
 			Signature: hexutil.Encode(sig),
 		}
 		resSignature, err := c.Sign(ctx, signParams)
 		require.NoError(t, err)
 
-		pub, err := ethcrypto.Ecrecover(digest, common.FromHex(resSignature))
+		sigBytes := common.FromHex(resSignature)
+		if sigBytes[64] == 27 || sigBytes[64] == 28 {
+			sigBytes[64] -= 27
+		}
+
+		pub, err := crypto.Ecrecover(digest, sigBytes)
 		require.NoError(t, err)
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
 		assert.Equal(t, addr.String(), resSigner)
