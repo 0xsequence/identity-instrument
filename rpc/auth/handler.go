@@ -8,10 +8,10 @@ import (
 
 type StoreCommitmentFn func(context.Context, *proto.AuthCommitmentData) error
 
-type Provider interface {
+type Handler interface {
 	Supports(identityType proto.IdentityType) bool
 
-	InitiateAuth(
+	Commit(
 		ctx context.Context,
 		authID proto.AuthID,
 		commitment *proto.AuthCommitmentData,

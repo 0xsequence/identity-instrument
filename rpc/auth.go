@@ -11,9 +11,9 @@ import (
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/attestation"
 	"github.com/0xsequence/identity-instrument/rpc/auth"
-	"github.com/0xsequence/identity-instrument/rpc/auth/email"
-	"github.com/0xsequence/identity-instrument/rpc/auth/oauth"
-	"github.com/0xsequence/identity-instrument/rpc/auth/oidc"
+	"github.com/0xsequence/identity-instrument/rpc/auth/authcode"
+	"github.com/0xsequence/identity-instrument/rpc/auth/idtoken"
+	"github.com/0xsequence/identity-instrument/rpc/auth/otp"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/goware/cachestore/memlru"
 )
@@ -25,12 +25,12 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 		return "", "", fmt.Errorf("params is nil")
 	}
 
-	authProvider, err := s.getAuthProvider(params.AuthMode)
+	authHandler, err := s.getAuthHandler(params.AuthMode)
 	if err != nil {
-		return "", "", fmt.Errorf("get auth provider: %w", err)
+		return "", "", fmt.Errorf("get auth handler: %w", err)
 	}
 
-	if !authProvider.Supports(params.IdentityType) {
+	if !authHandler.Supports(params.IdentityType) {
 		return "", "", fmt.Errorf("unsupported identity type: %v", params.IdentityType)
 	}
 
@@ -82,15 +82,15 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 		return nil
 	}
 
-	return authProvider.InitiateAuth(ctx, authID, commitment, params.AuthKey, params.Metadata, storeFn)
+	return authHandler.Commit(ctx, authID, commitment, params.AuthKey, params.Metadata, storeFn)
 }
 
 func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams) (string, error) {
 	att := attestation.FromContext(ctx)
 
-	authProvider, err := s.getAuthProvider(params.AuthMode)
+	authHandler, err := s.getAuthHandler(params.AuthMode)
 	if err != nil {
-		return "", fmt.Errorf("get auth provider: %w", err)
+		return "", fmt.Errorf("get auth handler: %w", err)
 	}
 
 	var commitment *proto.AuthCommitmentData
@@ -121,7 +121,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		}
 	}
 
-	ident, err := authProvider.Verify(ctx, commitment, params.AuthKey, params.Answer)
+	ident, err := authHandler.Verify(ctx, commitment, params.AuthKey, params.Answer)
 	if err != nil {
 		if commitment != nil {
 			// TODO: increment attempt and store it back
@@ -130,7 +130,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 	}
 
 	// always use normalized email address
-	ident.Email = email.Normalize(ident.Email)
+	ident.Email = otp.NormalizeEmail(ident.Email)
 
 	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, params.EcosystemID, ident)
 	if err != nil {
@@ -188,33 +188,33 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 	return dbSigner.Address, nil
 }
 
-func (s *RPC) getAuthProvider(authMode proto.AuthMode) (auth.Provider, error) {
-	authProvider, ok := s.AuthProviders[authMode]
+func (s *RPC) getAuthHandler(authMode proto.AuthMode) (auth.Handler, error) {
+	authHandler, ok := s.AuthHandlers[authMode]
 	if !ok {
 		return nil, fmt.Errorf("unknown auth mode: %v", authMode)
 	}
-	return authProvider, nil
+	return authHandler, nil
 }
 
-func makeAuthProviders(client HTTPClient, awsCfg aws.Config, cfg *config.Config) (map[proto.AuthMode]auth.Provider, error) {
+func makeAuthHandlers(client HTTPClient, awsCfg aws.Config, cfg *config.Config) (map[proto.AuthMode]auth.Handler, error) {
 	cacheBackend := memlru.Backend(1024)
-	oidcProvider, err := oidc.NewAuthProvider(cacheBackend, client)
+	idTokenHandler, err := idtoken.NewAuthHandler(cacheBackend, client)
 	if err != nil {
 		return nil, err
 	}
 
-	secretProvider := oauth.SecretProviderFunc(func(ctx context.Context, iss string, aud string) (string, error) {
+	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, iss string, aud string) (string, error) {
 		// TODO: get secret from secret manager
 		return "SECRET", nil
 	})
-	oauthProvider, err := oauth.NewAuthProvider(client, oidcProvider, secretProvider)
+	authCodeHandler, err := authcode.NewAuthHandler(client, idTokenHandler, secretProvider)
 	if err != nil {
 		return nil, err
 	}
 
-	providers := map[proto.AuthMode]auth.Provider{
-		proto.AuthMode_IDToken:      oidcProvider, // auth.NewTracedProvider("oidc.AuthProvider", oidcProvider),
-		proto.AuthMode_AuthCodePKCE: oauthProvider,
+	handlers := map[proto.AuthMode]auth.Handler{
+		proto.AuthMode_IDToken:      idTokenHandler, // auth.NewTracedProvider("oidc.AuthProvider", oidcProvider),
+		proto.AuthMode_AuthCodePKCE: authCodeHandler,
 	}
-	return providers, nil
+	return handlers, nil
 }

@@ -1,9 +1,9 @@
-package email
+package otp
 
 import (
 	"strings"
 )
 
-func Normalize(email string) string {
+func NormalizeEmail(email string) string {
 	return strings.ToLower(strings.TrimSpace(email))
 }

@@ -1,4 +1,4 @@
-package oauth
+package authcode
 
 import (
 	"context"
@@ -16,34 +16,36 @@ import (
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/attestation"
 	"github.com/0xsequence/identity-instrument/rpc/auth"
-	"github.com/0xsequence/identity-instrument/rpc/auth/oidc"
+	"github.com/0xsequence/identity-instrument/rpc/auth/idtoken"
 )
 
-type AuthProvider struct {
-	client         oidc.HTTPClient
-	oidcProvider   *oidc.AuthProvider
+type AuthHandler struct {
+	client         idtoken.HTTPClient
+	idTokenHandler *idtoken.AuthHandler
 	secretProvider SecretProvider
 }
 
-func NewAuthProvider(client oidc.HTTPClient, oidcProvider *oidc.AuthProvider, secretProvider SecretProvider) (auth.Provider, error) {
+var _ auth.Handler = (*AuthHandler)(nil)
+
+func NewAuthHandler(client idtoken.HTTPClient, idTokenHandler *idtoken.AuthHandler, secretProvider SecretProvider) (auth.Handler, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	if oidcProvider == nil {
-		return nil, fmt.Errorf("oidc provider is nil")
+	if idTokenHandler == nil {
+		return nil, fmt.Errorf("idtoken handler is nil")
 	}
-	return &AuthProvider{
+	return &AuthHandler{
 		client:         client,
-		oidcProvider:   oidcProvider,
+		idTokenHandler: idTokenHandler,
 		secretProvider: secretProvider,
 	}, nil
 }
 
-func (a *AuthProvider) Supports(identityType proto.IdentityType) bool {
+func (*AuthHandler) Supports(identityType proto.IdentityType) bool {
 	return identityType == proto.IdentityType_OIDC
 }
 
-func (a *AuthProvider) InitiateAuth(
+func (h *AuthHandler) Commit(
 	ctx context.Context,
 	authID proto.AuthID,
 	commitment *proto.AuthCommitmentData,
@@ -82,7 +84,7 @@ func (a *AuthProvider) InitiateAuth(
 	return commitment.Verifier, commitment.Challenge, nil
 }
 
-func (a *AuthProvider) Verify(
+func (h *AuthHandler) Verify(
 	ctx context.Context,
 	commitment *proto.AuthCommitmentData,
 	authKey *proto.AuthKey,
@@ -95,7 +97,7 @@ func (a *AuthProvider) Verify(
 	iss := commitment.Metadata["iss"]
 	aud := commitment.Metadata["aud"]
 
-	clientSecret, err := a.secretProvider.GetClientSecret(ctx, iss, aud)
+	clientSecret, err := h.secretProvider.GetClientSecret(ctx, iss, aud)
 	if err != nil {
 		return proto.Identity{}, fmt.Errorf("get client secret: %w", err)
 	}
@@ -119,7 +121,7 @@ func (a *AuthProvider) Verify(
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := a.client.Do(req)
+	resp, err := h.client.Do(req)
 	if err != nil {
 		return proto.Identity{}, fmt.Errorf("do request: %w", err)
 	}
@@ -140,7 +142,7 @@ func (a *AuthProvider) Verify(
 
 	idToken := body["id_token"].(string)
 
-	return a.oidcProvider.VerifyToken(ctx, idToken, iss, aud, nil)
+	return h.idTokenHandler.VerifyToken(ctx, idToken, iss, aud, nil)
 }
 
 func randomHex(source io.Reader, n int) (string, error) {

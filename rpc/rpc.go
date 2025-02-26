@@ -41,7 +41,7 @@ type RPC struct {
 	AuthKeys        *data.AuthKeyTable
 	AuthCommitments *data.AuthCommitmentTable
 	Signers         *data.SignerTable
-	AuthProviders   map[proto.AuthMode]auth.Provider
+	AuthHandlers    map[proto.AuthMode]auth.Handler
 
 	measurements *enclave.Measurements
 	startTime    time.Time
@@ -100,7 +100,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		return nil, err
 	}
 
-	authProviders, err := makeAuthProviders(wrappedClient, awsCfg, cfg)
+	authHandlers, err := makeAuthHandlers(wrappedClient, awsCfg, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		AuthCommitments: data.NewAuthCommitmentTable(db, cfg.Database.AuthCommitmentsTable, data.AuthCommitmentIndices{}),
 		AuthKeys:        data.NewAuthKeyTable(db, cfg.Database.AuthKeysTable, data.AuthKeyIndices{}),
 		Signers:         data.NewSignerTable(db, cfg.Database.SignersTable, data.SignerIndices{ByAddress: "Address-Index"}),
-		AuthProviders:   authProviders,
+		AuthHandlers:    authHandlers,
 		startTime:       time.Now(),
 		measurements:    m,
 	}

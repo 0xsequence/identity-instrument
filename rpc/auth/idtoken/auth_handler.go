@@ -1,4 +1,4 @@
-package oidc
+package idtoken
 
 import (
 	"context"
@@ -19,14 +19,14 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
-type AuthProvider struct {
+type AuthHandler struct {
 	client HTTPClient
 	store  cachestore.Store[jwk.Key]
 }
 
-var _ auth.Provider = (*AuthProvider)(nil)
+var _ auth.Handler = (*AuthHandler)(nil)
 
-func NewAuthProvider(cacheBackend cachestore.Backend, client HTTPClient) (*AuthProvider, error) {
+func NewAuthHandler(cacheBackend cachestore.Backend, client HTTPClient) (*AuthHandler, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -34,17 +34,17 @@ func NewAuthProvider(cacheBackend cachestore.Backend, client HTTPClient) (*AuthP
 	if err != nil {
 		return nil, err
 	}
-	return &AuthProvider{
+	return &AuthHandler{
 		client: client,
 		store:  store,
 	}, nil
 }
 
-func (p *AuthProvider) Supports(identityType proto.IdentityType) bool {
+func (*AuthHandler) Supports(identityType proto.IdentityType) bool {
 	return identityType == proto.IdentityType_OIDC
 }
 
-func (p *AuthProvider) InitiateAuth(
+func (h *AuthHandler) Commit(
 	ctx context.Context,
 	authID proto.AuthID,
 	commitment *proto.AuthCommitmentData,
@@ -56,7 +56,7 @@ func (p *AuthProvider) InitiateAuth(
 		return "", "", fmt.Errorf("cannot reuse an old ID token")
 	}
 
-	commitment, err = p.constructCommitment(authID, authKey, metadata)
+	commitment, err = h.constructCommitment(authID, authKey, metadata)
 	if err != nil {
 		return "", "", err
 	}
@@ -67,7 +67,7 @@ func (p *AuthProvider) InitiateAuth(
 	return commitment.Verifier, commitment.Challenge, nil
 }
 
-func (p *AuthProvider) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (proto.Identity, error) {
+func (h *AuthHandler) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (proto.Identity, error) {
 	if commitment == nil {
 		return proto.Identity{}, fmt.Errorf("commitment not found")
 	}
@@ -77,15 +77,15 @@ func (p *AuthProvider) Verify(ctx context.Context, commitment *proto.AuthCommitm
 		return proto.Identity{}, fmt.Errorf("invalid token hash")
 	}
 
-	vi, err := p.extractMetadata(commitment.Metadata)
+	vi, err := h.extractMetadata(commitment.Metadata)
 	if err != nil {
 		return proto.Identity{}, fmt.Errorf("extract metadata: %w", err)
 	}
 
-	return p.VerifyToken(ctx, answer, vi.issuer, vi.audience, p.getVerifyChallengeFunc(commitment))
+	return h.VerifyToken(ctx, answer, vi.issuer, vi.audience, h.getVerifyChallengeFunc(commitment))
 }
 
-func (p *AuthProvider) VerifyToken(
+func (h *AuthHandler) VerifyToken(
 	ctx context.Context,
 	idToken string,
 	expectedIssuer string,
@@ -106,8 +106,8 @@ func (p *AuthProvider) VerifyToken(
 	ks := &operationKeySet{
 		ctx:       ctx,
 		iss:       issuer,
-		store:     p.store,
-		getKeySet: p.GetKeySet,
+		store:     h.store,
+		getKeySet: h.GetKeySet,
 	}
 
 	if _, err := jws.Verify([]byte(idToken), jws.WithKeySet(ks, jws.WithMultipleKeysPerKeyID(false))); err != nil {
@@ -133,23 +133,23 @@ func (p *AuthProvider) VerifyToken(
 	return identity, nil
 }
 
-func (p *AuthProvider) GetKeySet(ctx context.Context, issuer string) (set jwk.Set, err error) {
-	jwksURL, err := fetchJWKSURL(ctx, p.client, issuer)
+func (h *AuthHandler) GetKeySet(ctx context.Context, issuer string) (set jwk.Set, err error) {
+	jwksURL, err := fetchJWKSURL(ctx, h.client, issuer)
 	if err != nil {
 		return nil, fmt.Errorf("fetch issuer keys: %w", err)
 	}
 
-	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(tracing.WrapClientWithContext(ctx, p.client)))
+	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(tracing.WrapClientWithContext(ctx, h.client)))
 	if err != nil {
 		return nil, fmt.Errorf("fetch issuer keys: %w", err)
 	}
 	return keySet, nil
 }
 
-func (p *AuthProvider) constructCommitment(
+func (h *AuthHandler) constructCommitment(
 	authID proto.AuthID, authKey *proto.AuthKey, metadata map[string]string,
 ) (*proto.AuthCommitmentData, error) {
-	vi, err := p.extractMetadata(metadata)
+	vi, err := h.extractMetadata(metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +176,7 @@ type verifierInfo struct {
 	expiresAt time.Time
 }
 
-func (p *AuthProvider) extractMetadata(metadata map[string]string) (*verifierInfo, error) {
+func (h *AuthHandler) extractMetadata(metadata map[string]string) (*verifierInfo, error) {
 	issuer := metadata["iss"]
 	audience := metadata["aud"]
 	exp, err := strconv.ParseInt(metadata["exp"], 10, 64)
@@ -193,9 +193,9 @@ func (p *AuthProvider) extractMetadata(metadata map[string]string) (*verifierInf
 	return vi, nil
 }
 
-func (p *AuthProvider) getVerifyChallengeFunc(commitment *proto.AuthCommitmentData) func(tok jwt.Token) error {
+func (h *AuthHandler) getVerifyChallengeFunc(commitment *proto.AuthCommitmentData) func(tok jwt.Token) error {
 	return func(tok jwt.Token) error {
-		vi, err := p.extractMetadata(commitment.Metadata)
+		vi, err := h.extractMetadata(commitment.Metadata)
 		if err != nil {
 			return fmt.Errorf("extract metadata: %w", err)
 		}
