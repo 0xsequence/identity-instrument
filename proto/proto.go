@@ -1,8 +1,8 @@
 // Server
-//go:generate go run github.com/webrpc/webrpc/cmd/webrpc-gen -schema=nitro.ridl -target=golang -pkg=proto -server -client -out=./nitro.gen.go
+//go:generate go run github.com/webrpc/webrpc/cmd/webrpc-gen -schema=identity-instrument.ridl -target=golang -pkg=proto -server -client -out=./identity-instrument.gen.go
 
 // Clients
-//go:generate go run github.com/webrpc/webrpc/cmd/webrpc-gen -schema=nitro.ridl -target=golang -pkg=proto -client -out=./clients/nitro.gen.go
-//go:generate go run github.com/webrpc/webrpc/cmd/webrpc-gen -schema=nitro.ridl -target=typescript -client -out=./clients/nitro.gen.ts
+//go:generate go run github.com/webrpc/webrpc/cmd/webrpc-gen -schema=identity-instrument.ridl -target=golang -pkg=proto -client -out=./clients/identity-instrument.gen.go
+//go:generate go run github.com/webrpc/webrpc/cmd/webrpc-gen -schema=identity-instrument.ridl -target=typescript -client -out=./clients/identity-instrument.gen.ts
 
 package proto

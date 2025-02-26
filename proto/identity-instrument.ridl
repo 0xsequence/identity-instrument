@@ -3,32 +3,22 @@ webrpc = v1
 name = identity-instrument
 version = v0.1.0
 
-struct Attestation
-  - identityType: IdentityType
-    + go.tag.abi = bytes4
-  - issuerHash: string
-    + go.field.type = common.Hash
-    + go.tag.abi = bytes32
-  - audienceHash: string
-    + go.field.type = common.Hash
-    + go.tag.abi = bytes32
-  - authData: []byte
-    + go.tag.abi = bytes
-  - extraData: []byte
-    + go.tag.abi = bytes
-
 struct InitiateAuthParams
   - ecosystemId: string
     + go.field.name = EcosystemID
   - authKey: AuthKey
   - identityType: IdentityType
-  - verifier: string
+  - authMode: AuthMode
+  - metadata: map<string, string>
+  - verifier?: string
+    + go.field.type = string
 
 struct RegisterAuthParams
   - ecosystemId: string
     + go.field.name = EcosystemID
   - authKey: AuthKey
   - identityType: IdentityType
+  - authMode: AuthMode
   - verifier: string
   - answer: string
 
@@ -55,10 +45,24 @@ enum KeyType: string
   - P256R1
 
 enum IdentityType: string
-  - None
   - Guest
   - Email
   - OIDC
+
+enum AuthMode: string
+  - Guest
+  - OTP
+  - IDToken
+  - AccessToken
+  - AuthCode
+  - AuthCodePKCE
+
+struct AuthID
+  - ecosystemId: string
+    + go.field.name = EcosystemID
+  - authMode: AuthMode
+  - identityType: IdentityType
+  - verifier: string
 
 struct AuthKey
   - publicKey: string
@@ -83,6 +87,8 @@ struct SignerData
     + json = ecoId
   - identity: Identity
     + json = identity
+  - keyType: KeyType
+    + json = keyType
   - privateKey: string
     + json = privateKey
 
@@ -92,6 +98,8 @@ struct AuthCommitmentData
     + json = ecoId
   - authKey: AuthKey
     + json = authKey
+  - authMode: AuthMode
+    + json = authMode
   - identityType: IdentityType
     + json = identityType
   - verifier: string
@@ -100,11 +108,13 @@ struct AuthCommitmentData
     + json = challenge
   - answer: string
     + json = answer
+  - metadata: map<string, string>
+    + json = metadata
   - expiry: timestamp
     + json = expiry
 
 service IdentityInstrument
-  - InitiateAuth(params: InitiateAuthParams) => (challenge: string)
+  - InitiateAuth(params: InitiateAuthParams) => (verifier: string, challenge: string)
   - RegisterAuth(params: RegisterAuthParams) => (signer: string)
 
   - Sign(params: SignParams) => (signature: string)
