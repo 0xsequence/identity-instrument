@@ -3,7 +3,6 @@ package data
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	proto "github.com/0xsequence/identity-instrument/proto"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -11,30 +10,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-type AuthID struct {
-	EcosystemID  string
-	IdentityType proto.IdentityType
-	Verifier     string
-}
-
-func (id AuthID) String() string {
-	return strings.Join([]string{id.EcosystemID, string(id.IdentityType), id.Verifier}, "/")
-}
-
-func (id *AuthID) FromString(s string) error {
-	parts := strings.SplitN(s, "/", 3)
-	if len(parts) != 3 {
-		return fmt.Errorf("invalid auth session ID format: %s", s)
-	}
-
-	id.EcosystemID = parts[0]
-	id.IdentityType = proto.IdentityType(parts[1])
-	id.Verifier = parts[2]
-	return nil
-}
+type AuthID proto.AuthID
 
 func (id *AuthID) MarshalDynamoDBAttributeValue() (types.AttributeValue, error) {
-	return &types.AttributeValueMemberS{Value: id.String()}, nil
+	return &types.AttributeValueMemberS{Value: proto.AuthID(*id).String()}, nil
 }
 
 func (id *AuthID) UnmarshalDynamoDBAttributeValue(value types.AttributeValue) error {
@@ -42,7 +21,7 @@ func (id *AuthID) UnmarshalDynamoDBAttributeValue(value types.AttributeValue) er
 	if !ok {
 		return fmt.Errorf("invalid auth session ID of type: %T", value)
 	}
-	return id.FromString(v.Value)
+	return (*proto.AuthID)(id).FromString(v.Value)
 }
 
 type AuthCommitment struct {
@@ -53,11 +32,17 @@ type AuthCommitment struct {
 
 func (c *AuthCommitment) Key() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"ID": &types.AttributeValueMemberS{Value: c.ID.String()},
+		"ID": &types.AttributeValueMemberS{Value: proto.AuthID(c.ID).String()},
 	}
 }
 
 func (c *AuthCommitment) CorrespondsTo(data *proto.AuthCommitmentData) bool {
+	if c == nil || data == nil {
+		return false
+	}
+	if c.ID.AuthMode != data.AuthMode {
+		return false
+	}
 	if c.ID.IdentityType != data.IdentityType {
 		return false
 	}
@@ -86,8 +71,8 @@ func NewAuthCommitmentTable(db DB, tableARN string, indices AuthCommitmentIndice
 	}
 }
 
-func (t *AuthCommitmentTable) Get(ctx context.Context, authID AuthID) (*AuthCommitment, bool, error) {
-	commitment := AuthCommitment{ID: authID}
+func (t *AuthCommitmentTable) Get(ctx context.Context, authID proto.AuthID) (*AuthCommitment, bool, error) {
+	commitment := AuthCommitment{ID: AuthID(authID)}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
