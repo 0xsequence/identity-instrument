@@ -2,22 +2,14 @@ package rpc_test
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/rpc"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
-	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/localstack"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -64,55 +56,6 @@ func initConfig(t *testing.T, awsEndpoint string) *config.Config {
 			Source: "noreply@local.auth.sequence.app",
 		},
 	}
-}
-
-func issueAccessTokenAndRunJwksServer(t *testing.T, optTokenBuilderFn ...func(*jwt.Builder, string)) (iss string, tok string, close func()) {
-	jwtKeyRaw, err := rsa.GenerateKey(rand.Reader, 2048)
-	require.NoError(t, err)
-	jwtKey, err := jwk.FromRaw(jwtKeyRaw)
-	require.NoError(t, err)
-	require.NoError(t, jwtKey.Set(jwk.KeyIDKey, "key-id"))
-	jwtPubKey, err := jwtKey.PublicKey()
-	require.NoError(t, err)
-	jwks := jwk.NewSet()
-	require.NoError(t, jwks.AddKey(jwtPubKey))
-
-	var uri string
-	jwksServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/.well-known/openid-configuration" {
-			openidConfig := map[string]any{"jwks_uri": uri}
-			w.Header().Set("content-type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			require.NoError(t, json.NewEncoder(w).Encode(openidConfig))
-			return
-		}
-
-		m, err := jwtPubKey.AsMap(r.Context())
-		m["alg"] = "RS256"
-		require.NoError(t, err)
-		pkd := map[string]any{"keys": []any{m}}
-
-		w.Header().Set("content-type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		require.NoError(t, json.NewEncoder(w).Encode(pkd))
-	}))
-	uri = jwksServer.URL
-
-	tokBuilder := jwt.NewBuilder().
-		Issuer(jwksServer.URL).
-		Audience([]string{"audience"}).
-		Subject("subject")
-
-	if len(optTokenBuilderFn) > 0 && optTokenBuilderFn[0] != nil {
-		optTokenBuilderFn[0](tokBuilder, jwksServer.URL)
-	}
-
-	tokRaw, err := tokBuilder.Build()
-	require.NoError(t, err)
-	tokBytes, err := jwt.Sign(tokRaw, jwt.WithKey(jwa.RS256, jwtKey))
-	require.NoError(t, err)
-
-	return jwksServer.URL, string(tokBytes), jwksServer.Close
 }
 
 func initLocalstack() (string, func()) {
