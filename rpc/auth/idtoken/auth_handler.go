@@ -20,8 +20,9 @@ import (
 )
 
 type AuthHandler struct {
-	client HTTPClient
-	store  cachestore.Store[jwk.Key]
+	client            HTTPClient
+	jwkStore          cachestore.Store[jwk.Key]
+	openidConfigStore cachestore.Store[OpenIDConfig]
 }
 
 var _ auth.Handler = (*AuthHandler)(nil)
@@ -30,13 +31,18 @@ func NewAuthHandler(cacheBackend cachestore.Backend, client HTTPClient) (*AuthHa
 	if client == nil {
 		client = http.DefaultClient
 	}
-	store, err := cachestorectl.Open[jwk.Key](cacheBackend)
+	jwkStore, err := cachestorectl.Open[jwk.Key](cacheBackend)
+	if err != nil {
+		return nil, err
+	}
+	openidConfigStore, err := cachestorectl.Open[OpenIDConfig](cacheBackend)
 	if err != nil {
 		return nil, err
 	}
 	return &AuthHandler{
-		client: client,
-		store:  store,
+		client:            client,
+		jwkStore:          jwkStore,
+		openidConfigStore: openidConfigStore,
 	}, nil
 }
 
@@ -97,8 +103,10 @@ func (h *AuthHandler) VerifyToken(
 		return proto.Identity{}, fmt.Errorf("parse JWT: %w", err)
 	}
 
-	if err := verifyChallenge(tok); err != nil {
-		return proto.Identity{}, fmt.Errorf("verify challenge: %w", err)
+	if verifyChallenge != nil {
+		if err := verifyChallenge(tok); err != nil {
+			return proto.Identity{}, fmt.Errorf("verify challenge: %w", err)
+		}
 	}
 
 	issuer := normalizeIssuer(tok.Issuer())
@@ -106,7 +114,7 @@ func (h *AuthHandler) VerifyToken(
 	ks := &operationKeySet{
 		ctx:       ctx,
 		iss:       issuer,
-		store:     h.store,
+		store:     h.jwkStore,
 		getKeySet: h.GetKeySet,
 	}
 
@@ -134,9 +142,14 @@ func (h *AuthHandler) VerifyToken(
 }
 
 func (h *AuthHandler) GetKeySet(ctx context.Context, issuer string) (set jwk.Set, err error) {
-	jwksURL, err := fetchJWKSURL(ctx, h.client, issuer)
+	openidConfig, err := h.GetOpenIDConfig(ctx, issuer)
 	if err != nil {
 		return nil, fmt.Errorf("fetch issuer keys: %w", err)
+	}
+
+	jwksURL := openidConfig.JWKSURL
+	if jwksURL == "" {
+		return nil, fmt.Errorf("jwks_uri not found in openid configuration")
 	}
 
 	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(tracing.WrapClientWithContext(ctx, h.client)))
