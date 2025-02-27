@@ -50,11 +50,7 @@ dario.cat/mergo
 # github.com/0xsequence/ethkit v1.30.6
 ## explicit; go 1.21
 github.com/0xsequence/ethkit
-github.com/0xsequence/ethkit/ethartifact
 github.com/0xsequence/ethkit/ethcoder
-github.com/0xsequence/ethkit/ethcontract
-github.com/0xsequence/ethkit/ethmonitor
-github.com/0xsequence/ethkit/ethreceipts
 github.com/0xsequence/ethkit/ethrpc
 github.com/0xsequence/ethkit/ethrpc/jsonrpc
 github.com/0xsequence/ethkit/ethtxn
@@ -83,38 +79,6 @@ github.com/0xsequence/ethkit/go-ethereum/params/forks
 github.com/0xsequence/ethkit/go-ethereum/rlp
 github.com/0xsequence/ethkit/go-ethereum/rlp/internal/rlpstruct
 github.com/0xsequence/ethkit/go-ethereum/rpc
-github.com/0xsequence/ethkit/util
-# github.com/0xsequence/go-ethauth v0.14.0
-## explicit; go 1.22
-github.com/0xsequence/go-ethauth
-# github.com/0xsequence/go-sequence v0.44.2
-## explicit; go 1.22.0
-github.com/0xsequence/go-sequence
-github.com/0xsequence/go-sequence/contracts
-github.com/0xsequence/go-sequence/contracts/gen/gasestimator
-github.com/0xsequence/go-sequence/contracts/gen/ierc1271
-github.com/0xsequence/go-sequence/contracts/gen/niftyswap
-github.com/0xsequence/go-sequence/contracts/gen/tokens
-github.com/0xsequence/go-sequence/contracts/gen/v2/walletfactory
-github.com/0xsequence/go-sequence/contracts/gen/v2/walletgasestimator
-github.com/0xsequence/go-sequence/contracts/gen/v2/walletguest
-github.com/0xsequence/go-sequence/contracts/gen/v2/walletmain
-github.com/0xsequence/go-sequence/contracts/gen/v2/walletupgradable
-github.com/0xsequence/go-sequence/contracts/gen/v2/walletutils
-github.com/0xsequence/go-sequence/contracts/gen/walletfactory
-github.com/0xsequence/go-sequence/contracts/gen/walletgasestimator
-github.com/0xsequence/go-sequence/contracts/gen/walletguest
-github.com/0xsequence/go-sequence/contracts/gen/walletmain
-github.com/0xsequence/go-sequence/contracts/gen/walletupgradable
-github.com/0xsequence/go-sequence/contracts/gen/walletutils
-github.com/0xsequence/go-sequence/core
-github.com/0xsequence/go-sequence/core/v1
-github.com/0xsequence/go-sequence/core/v2
-github.com/0xsequence/go-sequence/eip6492
-github.com/0xsequence/go-sequence/intents
-github.com/0xsequence/go-sequence/lib/prototyp
-github.com/0xsequence/go-sequence/relayer/proto
-github.com/0xsequence/go-sequence/sessions/proto
 # github.com/0xsequence/nitrocontrol v0.3.0
 ## explicit; go 1.21
 github.com/0xsequence/nitrocontrol/aescbc
@@ -126,9 +90,6 @@ github.com/0xsequence/nsm
 github.com/0xsequence/nsm/ioc
 github.com/0xsequence/nsm/request
 github.com/0xsequence/nsm/response
-# github.com/0xsequence/waas-authenticator v1.6.0
-## explicit; go 1.22.7
-github.com/0xsequence/waas-authenticator/rpc/tracing
 # github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161
 ## explicit; go 1.16
 github.com/Azure/go-ansiterm
@@ -523,9 +484,6 @@ github.com/fsnotify/fsnotify
 # github.com/fxamacker/cbor/v2 v2.5.0
 ## explicit; go 1.12
 github.com/fxamacker/cbor/v2
-# github.com/gibson042/canonicaljson-go v1.0.3
-## explicit
-github.com/gibson042/canonicaljson-go
 # github.com/go-chi/chi/v5 v5.1.0
 ## explicit; go 1.14
 github.com/go-chi/chi/v5
@@ -693,12 +651,6 @@ github.com/goware/cachestore/gcstorage
 github.com/goware/cachestore/memlru
 github.com/goware/cachestore/nostore
 github.com/goware/cachestore/redis
-# github.com/goware/calc v0.2.0
-## explicit; go 1.18
-github.com/goware/calc
-# github.com/goware/channel v0.4.1
-## explicit; go 1.21
-github.com/goware/channel
 # github.com/goware/logger v0.3.0
 ## explicit; go 1.18
 github.com/goware/logger
@@ -902,9 +854,6 @@ github.com/redis/go-redis/v9/internal/pool
 github.com/redis/go-redis/v9/internal/proto
 github.com/redis/go-redis/v9/internal/rand
 github.com/redis/go-redis/v9/internal/util
-# github.com/riandyrn/otelchi v0.8.0
-## explicit; go 1.19
-github.com/riandyrn/otelchi
 # github.com/rs/zerolog v1.33.0
 ## explicit; go 1.15
 github.com/rs/zerolog
@@ -1059,12 +1008,8 @@ go.opentelemetry.io/otel/internal/attribute
 go.opentelemetry.io/otel/internal/baggage
 go.opentelemetry.io/otel/internal/global
 go.opentelemetry.io/otel/propagation
-go.opentelemetry.io/otel/semconv/internal/v2
-go.opentelemetry.io/otel/semconv/internal/v4
 go.opentelemetry.io/otel/semconv/v1.17.0
-go.opentelemetry.io/otel/semconv/v1.17.0/httpconv
 go.opentelemetry.io/otel/semconv/v1.20.0
-go.opentelemetry.io/otel/semconv/v1.20.0/httpconv
 go.opentelemetry.io/otel/semconv/v1.24.0
 go.opentelemetry.io/otel/semconv/v1.26.0
 # go.opentelemetry.io/otel/metric v1.29.0
@@ -1076,10 +1021,8 @@ go.opentelemetry.io/otel/metric/noop
 ## explicit; go 1.21
 go.opentelemetry.io/otel/sdk
 go.opentelemetry.io/otel/sdk/instrumentation
-go.opentelemetry.io/otel/sdk/internal/env
 go.opentelemetry.io/otel/sdk/internal/x
 go.opentelemetry.io/otel/sdk/resource
-go.opentelemetry.io/otel/sdk/trace
 # go.opentelemetry.io/otel/sdk/metric v1.29.0
 ## explicit; go 1.21
 go.opentelemetry.io/otel/sdk/metric
@@ -1092,7 +1035,6 @@ go.opentelemetry.io/otel/sdk/metric/metricdata
 ## explicit; go 1.21
 go.opentelemetry.io/otel/trace
 go.opentelemetry.io/otel/trace/embedded
-go.opentelemetry.io/otel/trace/noop
 # golang.org/x/crypto v0.33.0
 ## explicit; go 1.20
 golang.org/x/crypto/argon2
@@ -1119,7 +1061,6 @@ golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 golang.org/x/crypto/ssh/knownhosts
 # golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c
 ## explicit; go 1.22.0
-golang.org/x/exp/constraints
 # golang.org/x/mod v0.23.0
 ## explicit; go 1.22.0
 golang.org/x/mod/internal/lazyregexp
