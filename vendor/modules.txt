@@ -267,6 +267,11 @@ github.com/aws/aws-sdk-go-v2/service/internal/presigned-url
 github.com/aws/aws-sdk-go-v2/service/kms
 github.com/aws/aws-sdk-go-v2/service/kms/internal/endpoints
 github.com/aws/aws-sdk-go-v2/service/kms/types
+# github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.32.3
+## explicit; go 1.20
+github.com/aws/aws-sdk-go-v2/service/secretsmanager
+github.com/aws/aws-sdk-go-v2/service/secretsmanager/internal/endpoints
+github.com/aws/aws-sdk-go-v2/service/secretsmanager/types
 # github.com/aws/aws-sdk-go-v2/service/sso v1.22.3
 ## explicit; go 1.20
 github.com/aws/aws-sdk-go-v2/service/sso
