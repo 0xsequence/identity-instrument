@@ -13,10 +13,10 @@ import (
 	"time"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
+	"github.com/0xsequence/identity-instrument/attestation"
+	"github.com/0xsequence/identity-instrument/auth"
+	"github.com/0xsequence/identity-instrument/auth/idtoken"
 	"github.com/0xsequence/identity-instrument/proto"
-	"github.com/0xsequence/identity-instrument/rpc/attestation"
-	"github.com/0xsequence/identity-instrument/rpc/auth"
-	"github.com/0xsequence/identity-instrument/rpc/auth/idtoken"
 	"github.com/goware/cachestore"
 	"github.com/goware/cachestore/cachestorectl"
 )

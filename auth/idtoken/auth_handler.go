@@ -9,9 +9,8 @@ import (
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	ethcrypto "github.com/0xsequence/ethkit/go-ethereum/crypto"
+	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/proto"
-	"github.com/0xsequence/identity-instrument/rpc/auth"
-	"github.com/0xsequence/waas-authenticator/rpc/tracing"
 	"github.com/goware/cachestore"
 	"github.com/goware/cachestore/cachestorectl"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -152,7 +151,7 @@ func (h *AuthHandler) GetKeySet(ctx context.Context, issuer string) (set jwk.Set
 		return nil, fmt.Errorf("jwks_uri not found in openid configuration")
 	}
 
-	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(tracing.WrapClientWithContext(ctx, h.client)))
+	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(h.client))
 	if err != nil {
 		return nil, fmt.Errorf("fetch issuer keys: %w", err)
 	}

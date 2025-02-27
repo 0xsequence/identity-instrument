@@ -9,11 +9,11 @@ import (
 	"time"
 
 	identityInstrument "github.com/0xsequence/identity-instrument"
+	"github.com/0xsequence/identity-instrument/attestation"
+	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/proto"
-	"github.com/0xsequence/identity-instrument/rpc/attestation"
-	"github.com/0xsequence/identity-instrument/rpc/auth"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
 	"github.com/0xsequence/nitrocontrol/enclave"
 	"github.com/aws/aws-sdk-go-v2/aws"
