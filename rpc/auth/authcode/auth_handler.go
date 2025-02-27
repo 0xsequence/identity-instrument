@@ -17,26 +17,39 @@ import (
 	"github.com/0xsequence/identity-instrument/rpc/attestation"
 	"github.com/0xsequence/identity-instrument/rpc/auth"
 	"github.com/0xsequence/identity-instrument/rpc/auth/idtoken"
+	"github.com/goware/cachestore"
+	"github.com/goware/cachestore/cachestorectl"
 )
 
 type AuthHandler struct {
 	client         idtoken.HTTPClient
 	idTokenHandler *idtoken.AuthHandler
+	secretStore    cachestore.Store[string]
 	secretProvider SecretProvider
 }
 
 var _ auth.Handler = (*AuthHandler)(nil)
 
-func NewAuthHandler(client idtoken.HTTPClient, idTokenHandler *idtoken.AuthHandler, secretProvider SecretProvider) (auth.Handler, error) {
+func NewAuthHandler(
+	cacheBackend cachestore.Backend,
+	client idtoken.HTTPClient,
+	idTokenHandler *idtoken.AuthHandler,
+	secretProvider SecretProvider,
+) (auth.Handler, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	if idTokenHandler == nil {
 		return nil, fmt.Errorf("idtoken handler is nil")
 	}
+	secretStore, err := cachestorectl.Open[string](cacheBackend)
+	if err != nil {
+		return nil, fmt.Errorf("open secret store: %w", err)
+	}
 	return &AuthHandler{
 		client:         client,
 		idTokenHandler: idTokenHandler,
+		secretStore:    secretStore,
 		secretProvider: secretProvider,
 	}, nil
 }
@@ -64,7 +77,7 @@ func (h *AuthHandler) Commit(
 		return "", "", fmt.Errorf("generate code verifier: %w", err)
 	}
 	codeVerifierHash := sha256.Sum256([]byte(codeVerifier))
-	codeChallenge := base64.URLEncoding.EncodeToString(codeVerifierHash[:])
+	codeChallenge := base64.RawURLEncoding.EncodeToString(codeVerifierHash[:])
 
 	commitment = &proto.AuthCommitmentData{
 		Ecosystem:    authID.Ecosystem,
@@ -97,15 +110,21 @@ func (h *AuthHandler) Verify(
 	iss := commitment.Metadata["iss"]
 	aud := commitment.Metadata["aud"]
 
-	clientSecret, err := h.secretProvider.GetClientSecret(ctx, commitment.Ecosystem, iss, aud)
+	clientSecret, err := h.GetClientSecret(ctx, commitment.Ecosystem, iss, aud)
 	if err != nil {
 		return proto.Identity{}, fmt.Errorf("get client secret: %w", err)
 	}
 
-	// TODO: get these from the oidc configuration:
-	// - token endpoint
-	// - whether to use basic auth or client_id/client_secret
-	tokenEndpoint := "https://oauth2.googleapis.com/token"
+	openidConfig, err := h.idTokenHandler.GetOpenIDConfig(ctx, iss)
+	if err != nil {
+		return proto.Identity{}, fmt.Errorf("get openid config: %w", err)
+	}
+
+	tokenEndpoint := openidConfig.TokenEndpoint
+	if tokenEndpoint == "" {
+		return proto.Identity{}, fmt.Errorf("token endpoint not found in openid configuration")
+	}
+
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", answer)
@@ -143,6 +162,20 @@ func (h *AuthHandler) Verify(
 	idToken := body["id_token"].(string)
 
 	return h.idTokenHandler.VerifyToken(ctx, idToken, iss, aud, nil)
+}
+
+func (h *AuthHandler) GetClientSecret(ctx context.Context, ecosystem string, iss string, aud string) (string, error) {
+	ttl := 1 * time.Hour
+	getter := func(ctx context.Context, _ string) (string, error) {
+		return h.secretProvider.GetClientSecret(ctx, ecosystem, iss, aud)
+	}
+
+	secretName := ecosystem + "|" + iss + "|" + aud
+	secret, err := h.secretStore.GetOrSetWithLockEx(ctx, secretName, getter, ttl)
+	if err != nil {
+		return "", fmt.Errorf("get secret: %w", err)
+	}
+	return secret, nil
 }
 
 func randomHex(source io.Reader, n int) (string, error) {
