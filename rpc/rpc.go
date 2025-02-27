@@ -20,6 +20,7 @@ import (
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httplog"
@@ -42,6 +43,7 @@ type RPC struct {
 	AuthCommitments *data.AuthCommitmentTable
 	Signers         *data.SignerTable
 	AuthHandlers    map[proto.AuthMode]auth.Handler
+	Secrets         *secretsmanager.Client
 
 	measurements *enclave.Measurements
 	startTime    time.Time
@@ -100,11 +102,6 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		return nil, err
 	}
 
-	authHandlers, err := makeAuthHandlers(wrappedClient, awsCfg, cfg)
-	if err != nil {
-		return nil, err
-	}
-
 	db := dynamodb.NewFromConfig(awsCfg)
 	s := &RPC{
 		Log: httplog.NewLogger("identity-instrument", httplog.Options{
@@ -117,10 +114,16 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		AuthCommitments: data.NewAuthCommitmentTable(db, cfg.Database.AuthCommitmentsTable, data.AuthCommitmentIndices{}),
 		AuthKeys:        data.NewAuthKeyTable(db, cfg.Database.AuthKeysTable, data.AuthKeyIndices{}),
 		Signers:         data.NewSignerTable(db, cfg.Database.SignersTable, data.SignerIndices{ByAddress: "Address-Index"}),
-		AuthHandlers:    authHandlers,
+		Secrets:         secretsmanager.NewFromConfig(awsCfg),
 		startTime:       time.Now(),
 		measurements:    m,
 	}
+
+	s.AuthHandlers, err = s.makeAuthHandlers()
+	if err != nil {
+		return nil, err
+	}
+
 	return s, nil
 }
 

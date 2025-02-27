@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/0xsequence/ethkit/ethwallet"
-	"github.com/0xsequence/identity-instrument/config"
+	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
+	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/attestation"
@@ -15,6 +16,7 @@ import (
 	"github.com/0xsequence/identity-instrument/rpc/auth/idtoken"
 	"github.com/0xsequence/identity-instrument/rpc/auth/otp"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/goware/cachestore/memlru"
 )
 
@@ -196,18 +198,28 @@ func (s *RPC) getAuthHandler(authMode proto.AuthMode) (auth.Handler, error) {
 	return authHandler, nil
 }
 
-func makeAuthHandlers(client HTTPClient, awsCfg aws.Config, cfg *config.Config) (map[proto.AuthMode]auth.Handler, error) {
+func (s *RPC) makeAuthHandlers() (map[proto.AuthMode]auth.Handler, error) {
 	cacheBackend := memlru.Backend(1024)
-	idTokenHandler, err := idtoken.NewAuthHandler(cacheBackend, client)
+	idTokenHandler, err := idtoken.NewAuthHandler(cacheBackend, s.HTTPClient)
 	if err != nil {
 		return nil, err
 	}
 
 	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, ecosystem string, iss string, aud string) (string, error) {
-		// TODO: get secret from secret manager
-		return "SECRET", nil
+		secretName := ecosystem + "/" + hexutil.Encode(crypto.Keccak256([]byte(fmt.Sprintf("%s#%s", iss, aud))))
+
+		secret, err := s.Secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
+			SecretId: aws.String(secretName),
+		})
+		if err != nil {
+			return "", fmt.Errorf("get secret: %w", err)
+		}
+		if secret.SecretString == nil {
+			return "", fmt.Errorf("secret is nil")
+		}
+		return *secret.SecretString, nil
 	})
-	authCodeHandler, err := authcode.NewAuthHandler(client, idTokenHandler, secretProvider)
+	authCodeHandler, err := authcode.NewAuthHandler(cacheBackend, s.HTTPClient, idTokenHandler, secretProvider)
 	if err != nil {
 		return nil, err
 	}
