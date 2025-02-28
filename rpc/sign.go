@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0xsequence/ethkit/ethwallet"
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
@@ -104,15 +103,15 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 	if err != nil {
 		return "", fmt.Errorf("decrypt signer data: %w", err)
 	}
-	signerWallet, err := ethwallet.NewWalletFromPrivateKey(signerData.PrivateKey[2:])
+	signer, err := crypto.HexToECDSA(signerData.PrivateKey[2:])
 	if err != nil {
-		return "", fmt.Errorf("create signer wallet: %w", err)
+		return "", fmt.Errorf("create signer: %w", err)
 	}
-	if !dbSigner.CorrespondsTo(signerData, signerWallet) {
+	if !dbSigner.CorrespondsTo(signerData, signer) {
 		return "", fmt.Errorf("signer mismatch")
 	}
 
-	sigBytes, err = crypto.Sign(digestBytes, signerWallet.PrivateKey())
+	sigBytes, err = crypto.Sign(digestBytes, signer)
 	if err != nil {
 		return "", fmt.Errorf("sign digest: %w", err)
 	}

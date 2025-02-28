@@ -2,9 +2,10 @@ package data
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"fmt"
 
-	"github.com/0xsequence/ethkit/ethwallet"
+	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	proto "github.com/0xsequence/identity-instrument/proto"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -27,14 +28,14 @@ func (s *Signer) Key() map[string]types.AttributeValue {
 	}
 }
 
-func (s *Signer) CorrespondsTo(data *proto.SignerData, wallet *ethwallet.Wallet) bool {
+func (s *Signer) CorrespondsTo(data *proto.SignerData, key *ecdsa.PrivateKey) bool {
 	if s.Ecosystem != data.Ecosystem {
 		return false
 	}
 	if s.Identity.String() != data.Identity.String() {
 		return false
 	}
-	if s.Address != wallet.Address().String() {
+	if s.Address != crypto.PubkeyToAddress(key.PublicKey).Hex() {
 		return false
 	}
 	return true

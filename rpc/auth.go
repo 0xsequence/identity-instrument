@@ -2,10 +2,10 @@ package rpc
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"fmt"
 	"time"
 
-	"github.com/0xsequence/ethkit/ethwallet"
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/attestation"
@@ -17,6 +17,7 @@ import (
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/goware/cachestore/memlru"
 )
 
@@ -140,14 +141,15 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 	}
 
 	if !signerFound {
-		signerWallet, err := ethwallet.NewWalletFromRandomEntropy()
+		signer, err := ecdsa.GenerateKey(secp256k1.S256(), att)
 		if err != nil {
-			return "", fmt.Errorf("generate wallet: %w", err)
+			return "", fmt.Errorf("generate signer: %w", err)
 		}
+
 		signerData := &proto.SignerData{
 			Ecosystem:  params.Ecosystem,
 			Identity:   &ident,
-			PrivateKey: signerWallet.PrivateKeyHex(),
+			PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
 		}
 		encData, err := data.Encrypt(ctx, att, s.Config.KMS.EncryptionKeys[0], signerData)
 		if err != nil {
@@ -155,7 +157,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		}
 		dbSigner = &data.Signer{
 			Ecosystem:     params.Ecosystem,
-			Address:       signerWallet.Address().Hex(),
+			Address:       crypto.PubkeyToAddress(signer.PublicKey).Hex(),
 			Identity:      data.Identity(ident),
 			EncryptedData: encData,
 		}
