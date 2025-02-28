@@ -18,7 +18,7 @@ import (
 	"github.com/0xsequence/identity-instrument/auth/idtoken"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/goware/cachestore"
-	"github.com/goware/cachestore/cachestorectl"
+	"github.com/goware/cachestore/memlru"
 )
 
 type AuthHandler struct {
@@ -42,7 +42,7 @@ func NewAuthHandler(
 	if idTokenHandler == nil {
 		return nil, fmt.Errorf("idtoken handler is nil")
 	}
-	secretStore, err := cachestorectl.Open[string](cacheBackend)
+	secretStore, err := memlru.NewWithBackend[string](cacheBackend)
 	if err != nil {
 		return nil, fmt.Errorf("open secret store: %w", err)
 	}

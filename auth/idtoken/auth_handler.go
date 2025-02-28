@@ -12,7 +12,7 @@ import (
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/goware/cachestore"
-	"github.com/goware/cachestore/cachestorectl"
+	"github.com/goware/cachestore/memlru"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -30,11 +30,11 @@ func NewAuthHandler(cacheBackend cachestore.Backend, client HTTPClient) (*AuthHa
 	if client == nil {
 		client = http.DefaultClient
 	}
-	jwkStore, err := cachestorectl.Open[jwk.Key](cacheBackend)
+	jwkStore, err := memlru.NewWithBackend[jwk.Key](cacheBackend)
 	if err != nil {
 		return nil, err
 	}
-	openidConfigStore, err := cachestorectl.Open[OpenIDConfig](cacheBackend)
+	openidConfigStore, err := memlru.NewWithBackend[OpenIDConfig](cacheBackend)
 	if err != nil {
 		return nil, err
 	}
