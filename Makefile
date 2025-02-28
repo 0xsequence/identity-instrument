@@ -53,6 +53,7 @@ clean:
 
 test: test-clean
 	GOGC=off go test $(TEST_FLAGS) -run=$(TEST) ./...
+	GOGC=off cd tests && go test $(TEST_FLAGS) -run=$(TEST) ./...
 
 test-clean:
 	GOGC=off go clean -testcache

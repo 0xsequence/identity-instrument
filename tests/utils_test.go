@@ -1,4 +1,4 @@
-package rpc_test
+package tests
 
 import (
 	"context"

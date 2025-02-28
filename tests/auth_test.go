@@ -1,7 +1,8 @@
-package rpc_test
+package tests
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -14,7 +15,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/0xsequence/ethkit/ethwallet"
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
@@ -22,6 +22,7 @@ import (
 	"github.com/0xsequence/identity-instrument/rpc"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -48,7 +49,7 @@ func TestAuth(t *testing.T) {
 			issuer := authServer.URL()
 			tok := authServer.issueIDToken("audience")
 
-			authKey, err := ethwallet.NewWalletFromRandomEntropy()
+			authKey, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
 			require.NoError(t, err)
 
 			srv := httptest.NewServer(svc.Handler())
@@ -65,7 +66,7 @@ func TestAuth(t *testing.T) {
 				Ecosystem: "ECO_ID",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
-					PublicKey: authKey.Address().Hex(),
+					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 				},
 				AuthMode:     proto.AuthMode_IDToken,
 				IdentityType: proto.IdentityType_OIDC,
@@ -85,7 +86,7 @@ func TestAuth(t *testing.T) {
 				Ecosystem: "ECO_ID",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
-					PublicKey: authKey.Address().Hex(),
+					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 				},
 				AuthMode:     proto.AuthMode_IDToken,
 				IdentityType: proto.IdentityType_OIDC,
@@ -99,14 +100,14 @@ func TestAuth(t *testing.T) {
 			digest := crypto.Keccak256([]byte("message"))
 			digestHex := hexutil.Encode(digest)
 			prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
-			sig, err := crypto.Sign(prefixedHash, authKey.PrivateKey())
+			sig, err := crypto.Sign(prefixedHash, authKey)
 			require.NoError(t, err)
 
 			signParams := &proto.SignParams{
 				Ecosystem: "ECO_ID",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
-					PublicKey: authKey.Address().Hex(),
+					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 				},
 				Signer:    resSigner,
 				Digest:    digestHex,
@@ -142,7 +143,7 @@ func TestAuth(t *testing.T) {
 
 			issuer := authServer.URL()
 
-			authKey, err := ethwallet.NewWalletFromRandomEntropy()
+			authKey, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
 			require.NoError(t, err)
 
 			srv := httptest.NewServer(svc.Handler())
@@ -157,7 +158,7 @@ func TestAuth(t *testing.T) {
 				Ecosystem: "ECO_ID",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
-					PublicKey: authKey.Address().Hex(),
+					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 				},
 				AuthMode:     proto.AuthMode_AuthCodePKCE,
 				IdentityType: proto.IdentityType_OIDC,
@@ -183,7 +184,7 @@ func TestAuth(t *testing.T) {
 				Ecosystem: "ECO_ID",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
-					PublicKey: authKey.Address().Hex(),
+					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 				},
 				AuthMode:     proto.AuthMode_AuthCodePKCE,
 				IdentityType: proto.IdentityType_OIDC,
@@ -197,14 +198,14 @@ func TestAuth(t *testing.T) {
 			digest := crypto.Keccak256([]byte("message"))
 			digestHex := hexutil.Encode(digest)
 			prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
-			sig, err := crypto.Sign(prefixedHash, authKey.PrivateKey())
+			sig, err := crypto.Sign(prefixedHash, authKey)
 			require.NoError(t, err)
 
 			signParams := &proto.SignParams{
 				Ecosystem: "ECO_ID",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
-					PublicKey: authKey.Address().Hex(),
+					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 				},
 				Signer:    resSigner,
 				Digest:    digestHex,
