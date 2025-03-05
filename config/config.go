@@ -8,13 +8,14 @@ import (
 )
 
 type Config struct {
-	Mode      Mode            `toml:"-"`
-	Region    string          `toml:"region"`
-	Service   ServiceConfig   `toml:"service"`
-	KMS       KMSConfig       `toml:"kms"`
-	Endpoints EndpointsConfig `toml:"endpoints"`
-	SES       SESConfig       `toml:"ses"`
-	Database  DatabaseConfig  `toml:"database"`
+	Mode       Mode               `toml:"-"`
+	Region     string             `toml:"region"`
+	Service    ServiceConfig      `toml:"service"`
+	KMS        KMSConfig          `toml:"kms"`
+	Endpoints  EndpointsConfig    `toml:"endpoints"`
+	SES        SESConfig          `toml:"ses"`
+	Database   DatabaseConfig     `toml:"database"`
+	Encryption []EncryptionConfig `toml:"encryption"`
 }
 
 type ServiceConfig struct {
@@ -43,9 +44,16 @@ type SESConfig struct {
 }
 
 type DatabaseConfig struct {
-	AuthCommitmentsTable string `toml:"auth_commitments_table"`
-	AuthKeysTable        string `toml:"auth_keys_table"`
-	SignersTable         string `toml:"signers_table"`
+	AuthCommitmentsTable    string `toml:"auth_commitments_table"`
+	AuthKeysTable           string `toml:"auth_keys_table"`
+	SignersTable            string `toml:"signers_table"`
+	EncryptionPoolKeysTable string `toml:"encryption_pool_keys_table"`
+}
+
+type EncryptionConfig struct {
+	PoolSize  int      `toml:"pool_size"`
+	Threshold int      `toml:"threshold"`
+	KMSKeys   []string `toml:"kms_keys"`
 }
 
 func New() (*Config, error) {
