@@ -42,18 +42,26 @@ func initConfig(t *testing.T, awsEndpoint string) *config.Config {
 	return &config.Config{
 		Region: "us-east-1",
 		Database: config.DatabaseConfig{
-			AuthCommitmentsTable: "AuthCommitmentsTable",
-			AuthKeysTable:        "AuthKeysTable",
-			SignersTable:         "SignersTable",
-		},
-		KMS: config.KMSConfig{
-			EncryptionKeys: []string{"arn:aws:kms:us-east-1:000000000000:key/27ebbde0-49d2-4cb6-ad78-4f2c24fe7b79"},
+			AuthCommitmentsTable:    "AuthCommitmentsTable",
+			AuthKeysTable:           "AuthKeysTable",
+			SignersTable:            "SignersTable",
+			EncryptionPoolKeysTable: "EncryptionPoolKeysTable",
 		},
 		Endpoints: config.EndpointsConfig{
 			AWSEndpoint: awsEndpoint,
 		},
 		SES: config.SESConfig{
 			Source: "noreply@local.auth.sequence.app",
+		},
+		Encryption: []config.EncryptionConfig{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				KMSKeys: []string{
+					"arn:aws:kms:us-east-1:000000000000:key/27ebbde0-49d2-4cb6-ad78-4f2c24fe7b79",
+					"arn:aws:kms:us-east-1:000000000000:key/aeb99e0f-9e89-44de-a084-e1817af47778",
+				},
+			},
 		},
 	}
 }
