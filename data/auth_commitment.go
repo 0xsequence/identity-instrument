@@ -27,7 +27,7 @@ func (id *AuthID) UnmarshalDynamoDBAttributeValue(value types.AttributeValue) er
 type AuthCommitment struct {
 	ID AuthID `dynamodbav:"ID"`
 
-	EncryptedData EncryptedData[*proto.AuthCommitmentData] `dynamodbav:"EncryptedData"`
+	EncryptedData[*proto.AuthCommitmentData]
 }
 
 func (c *AuthCommitment) Key() map[string]types.AttributeValue {

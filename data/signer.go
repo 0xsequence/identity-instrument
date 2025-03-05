@@ -18,7 +18,7 @@ type Signer struct {
 	Address   string   `dynamodbav:"Address"`
 	Identity  Identity `dynamodbav:"Identity"`
 
-	EncryptedData EncryptedData[*proto.SignerData] `dynamodbav:"EncryptedData"`
+	EncryptedData[*proto.SignerData]
 }
 
 func (s *Signer) Key() map[string]types.AttributeValue {

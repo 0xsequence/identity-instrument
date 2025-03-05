@@ -14,7 +14,7 @@ type AuthKey struct {
 	Ecosystem string `dynamodbav:"Ecosystem"`
 	KeyID     string `dynamodbav:"KeyID"`
 
-	EncryptedData EncryptedData[*proto.AuthKeyData] `dynamodbav:"EncryptedData"`
+	EncryptedData[*proto.AuthKeyData]
 }
 
 func (k *AuthKey) Key() map[string]types.AttributeValue {
