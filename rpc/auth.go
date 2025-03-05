@@ -22,8 +22,6 @@ import (
 )
 
 func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams) (string, string, error) {
-	att := attestation.FromContext(ctx)
-
 	if params == nil {
 		return "", "", fmt.Errorf("params is nil")
 	}
@@ -50,7 +48,7 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 			return "", "", fmt.Errorf("getting commitment: %w", err)
 		}
 		if found && dbCommitment != nil {
-			commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.Config.KMS.EncryptionKeys)
+			commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, s.EncryptionPool)
 			if err != nil {
 				return "", "", fmt.Errorf("decrypting commitment data: %w", err)
 			}
@@ -58,9 +56,7 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 	}
 
 	storeFn := func(ctx context.Context, commitment *proto.AuthCommitmentData) error {
-		att := attestation.FromContext(ctx)
-
-		encryptedData, err := data.Encrypt(ctx, att, s.Config.KMS.EncryptionKeys[0], commitment)
+		encryptedData, err := data.Encrypt(ctx, s.EncryptionPool, commitment)
 		if err != nil {
 			return fmt.Errorf("encrypting commitment: %w", err)
 		}
@@ -108,7 +104,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		return "", fmt.Errorf("get commitment: %w", err)
 	}
 	if found && dbCommitment != nil {
-		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.Config.KMS.EncryptionKeys)
+		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, s.EncryptionPool)
 		if err != nil {
 			return "", fmt.Errorf("decrypt commitment data: %w", err)
 		}
@@ -151,7 +147,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 			Identity:   &ident,
 			PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
 		}
-		encData, err := data.Encrypt(ctx, att, s.Config.KMS.EncryptionKeys[0], signerData)
+		encData, err := data.Encrypt(ctx, s.EncryptionPool, signerData)
 		if err != nil {
 			return "", fmt.Errorf("encrypt signer data: %w", err)
 		}
@@ -175,7 +171,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		Expiry:        time.Now().Add(ttl),
 	}
 
-	encData, err := data.Encrypt(ctx, att, s.Config.KMS.EncryptionKeys[0], authKeyData)
+	encData, err := data.Encrypt(ctx, s.EncryptionPool, authKeyData)
 	if err != nil {
 		return "", fmt.Errorf("encrypt auth key data: %w", err)
 	}

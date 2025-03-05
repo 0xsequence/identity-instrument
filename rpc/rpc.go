@@ -13,6 +13,7 @@ import (
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/data"
+	"github.com/0xsequence/identity-instrument/encryption"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
 	"github.com/0xsequence/nitrocontrol/enclave"
@@ -44,6 +45,7 @@ type RPC struct {
 	Signers         *data.SignerTable
 	AuthHandlers    map[proto.AuthMode]auth.Handler
 	Secrets         *secretsmanager.Client
+	EncryptionPool  *encryption.Pool
 
 	measurements *enclave.Measurements
 	startTime    time.Time
@@ -97,12 +99,25 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		return nil, err
 	}
 
+	db := dynamodb.NewFromConfig(awsCfg)
+	encPoolKeyTable := data.NewEncryptionPoolKeyTable(db, cfg.Database.EncryptionPoolKeysTable, data.EncryptionPoolKeyIndices{
+		KeyIDIndex: "KeyID-Index",
+	})
+	encPoolConfigs := make([]*encryption.Config, len(cfg.Encryption))
+	for i, encCfg := range cfg.Encryption {
+		cryptors := make([]encryption.Cryptor, len(encCfg.KMSKeys))
+		for j, kmsKey := range encCfg.KMSKeys {
+			cryptors[j] = encryption.NewKMSKey(kmsKey)
+		}
+		encPoolConfigs[i] = encryption.NewConfig(encCfg.PoolSize, encCfg.Threshold, cryptors)
+	}
+	encPool := encryption.NewPool(encPoolConfigs, encPoolKeyTable)
+
 	m, err := enc.GetMeasurements(context.Background())
 	if err != nil {
 		return nil, err
 	}
 
-	db := dynamodb.NewFromConfig(awsCfg)
 	s := &RPC{
 		Log: httplog.NewLogger("identity-instrument", httplog.Options{
 			LogLevel: zerolog.LevelDebugValue,
@@ -115,6 +130,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		AuthKeys:        data.NewAuthKeyTable(db, cfg.Database.AuthKeysTable, data.AuthKeyIndices{}),
 		Signers:         data.NewSignerTable(db, cfg.Database.SignersTable, data.SignerIndices{ByAddress: "Address-Index"}),
 		Secrets:         secretsmanager.NewFromConfig(awsCfg),
+		EncryptionPool:  encPool,
 		startTime:       time.Now(),
 		measurements:    m,
 	}
