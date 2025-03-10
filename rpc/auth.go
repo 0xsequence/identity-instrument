@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
@@ -204,7 +205,7 @@ func (s *RPC) makeAuthHandlers() (map[proto.AuthMode]auth.Handler, error) {
 	}
 
 	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, ecosystem string, iss string, aud string) (string, error) {
-		secretName := ecosystem + "/" + hexutil.Encode(crypto.Keccak256([]byte(fmt.Sprintf("%s#%s", iss, aud))))
+		secretName := "oauth/" + ecosystem + "/" + encodeValueForSecretName(iss) + "/" + encodeValueForSecretName(aud)
 
 		secret, err := s.Secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 			SecretId: aws.String(secretName),
@@ -227,4 +228,21 @@ func (s *RPC) makeAuthHandlers() (map[proto.AuthMode]auth.Handler, error) {
 		proto.AuthMode_AuthCodePKCE: authCodeHandler,
 	}
 	return handlers, nil
+}
+
+func encodeValueForSecretName(value string) string {
+	if strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
+		value = strings.TrimPrefix(value, "https://")
+		value = strings.TrimPrefix(value, "http://")
+	}
+
+	var result strings.Builder
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '.' {
+			result.WriteRune(char)
+		} else {
+			result.WriteRune('-')
+		}
+	}
+	return result.String()
 }

@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -269,7 +270,7 @@ func newMockOAuth2Server(t *testing.T, svc *rpc.RPC) *mockOAuth2Server {
 
 	s.server = httptest.NewServer(mux)
 
-	secretName := "ECO_ID/" + hexutil.Encode(crypto.Keccak256([]byte(fmt.Sprintf("%s#%s", s.URL(), "audience"))))
+	secretName := "oauth/ECO_ID/" + encodeValueForSecretName(s.URL()) + "/audience"
 	_, err = svc.Secrets.CreateSecret(context.Background(), &secretsmanager.CreateSecretInput{
 		Name:         aws.String(secretName),
 		SecretString: aws.String(clientSecret),
@@ -391,4 +392,21 @@ func (s *mockOAuth2Server) issueIDToken(clientID string) string {
 	tokBytes, err := jwt.Sign(tokRaw, jwt.WithKey(jwa.RS256, s.jwtKey))
 	require.NoError(s.t, err)
 	return string(tokBytes)
+}
+
+func encodeValueForSecretName(value string) string {
+	if strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
+		value = strings.TrimPrefix(value, "https://")
+		value = strings.TrimPrefix(value, "http://")
+	}
+
+	var result strings.Builder
+	for _, char := range value {
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '.' {
+			result.WriteRune(char)
+		} else {
+			result.WriteRune('-')
+		}
+	}
+	return result.String()
 }
