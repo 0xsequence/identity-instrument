@@ -12,6 +12,7 @@ type Config struct {
 	Region     string             `toml:"region"`
 	Service    ServiceConfig      `toml:"service"`
 	Endpoints  EndpointsConfig    `toml:"endpoints"`
+	Builder    BuilderConfig      `toml:"builder"`
 	SES        SESConfig          `toml:"ses"`
 	Database   DatabaseConfig     `toml:"database"`
 	Encryption []EncryptionConfig `toml:"encryption"`
@@ -29,6 +30,11 @@ type ServiceConfig struct {
 type EndpointsConfig struct {
 	AWSEndpoint    string `toml:"aws_endpoint"`
 	MetadataServer string `toml:"metadata_server"`
+}
+
+type BuilderConfig struct {
+	BaseURL  string `toml:"base_url"`
+	SecretID string `toml:"secret_id"`
 }
 
 type SESConfig struct {
