@@ -14,8 +14,11 @@ import (
 	"github.com/0xsequence/identity-instrument/auth/authcode"
 	"github.com/0xsequence/identity-instrument/auth/idtoken"
 	"github.com/0xsequence/identity-instrument/auth/otp"
+	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/proto"
+	"github.com/0xsequence/identity-instrument/proto/builder"
+	"github.com/0xsequence/identity-instrument/rpc/email"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -130,7 +133,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 	}
 
 	// always use normalized email address
-	ident.Email = otp.NormalizeEmail(ident.Email)
+	ident.Email = email.Normalize(ident.Email)
 
 	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, params.Ecosystem, ident)
 	if err != nil {
@@ -197,7 +200,7 @@ func (s *RPC) getAuthHandler(authMode proto.AuthMode) (auth.Handler, error) {
 	return authHandler, nil
 }
 
-func (s *RPC) makeAuthHandlers() (map[proto.AuthMode]auth.Handler, error) {
+func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.AuthMode]auth.Handler, error) {
 	cacheBackend := memlru.Backend(1024)
 	idTokenHandler, err := idtoken.NewAuthHandler(cacheBackend, s.HTTPClient)
 	if err != nil {
@@ -223,9 +226,18 @@ func (s *RPC) makeAuthHandlers() (map[proto.AuthMode]auth.Handler, error) {
 		return nil, err
 	}
 
+	builderClient := builder.NewBuilderClient(
+		cfg.Builder.BaseURL,
+		builder.NewAuthenticatedClient(s.HTTPClient, s.Secrets, cfg.Builder.SecretID),
+	)
+	otpHandler := otp.NewAuthHandler(map[proto.IdentityType]otp.Sender{
+		proto.IdentityType_Email: email.NewSender(builderClient, awsCfg, cfg.SES),
+	})
+
 	handlers := map[proto.AuthMode]auth.Handler{
 		proto.AuthMode_IDToken:      idTokenHandler, // auth.NewTracedProvider("oidc.AuthProvider", oidcProvider),
 		proto.AuthMode_AuthCodePKCE: authCodeHandler,
+		proto.AuthMode_OTP:          otpHandler,
 	}
 	return handlers, nil
 }

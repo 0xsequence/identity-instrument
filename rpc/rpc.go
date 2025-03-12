@@ -135,7 +135,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		measurements:    m,
 	}
 
-	s.AuthHandlers, err = s.makeAuthHandlers()
+	s.AuthHandlers, err = s.makeAuthHandlers(awsCfg, *cfg)
 	if err != nil {
 		return nil, err
 	}
