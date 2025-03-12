@@ -6,10 +6,20 @@ if [ ! "$(type -t awslocal)" = "alias" ] && [ ! -x "$(command -v awslocal)" ]; t
   alias awslocal="AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_DEFAULT_REGION=${DEFAULT_REGION:-$AWS_DEFAULT_REGION} aws --endpoint-url=${LOCALSTACK_ENDPOINT:-http://${LOCALSTACK_HOST:-localhost}:4566}"
 fi
 
+
+if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
+  awslocal secretsmanager create-secret --name "oauth/1/accounts.google.com/$GOOGLE_CLIENT_ID" --secret-string "$GOOGLE_CLIENT_SECRET"
+fi
+
 awslocal kms create-key --region us-east-1 --tags '[{"TagKey":"_custom_id_","TagValue":"27ebbde0-49d2-4cb6-ad78-4f2c24fe7b79"}]'
 awslocal kms create-key --region us-east-1 --tags '[{"TagKey":"_custom_id_","TagValue":"aeb99e0f-9e89-44de-a084-e1817af47778"}]'
 
 awslocal ses verify-email-identity --email-address noreply@local.auth.sequence.app
+
+awslocal secretsmanager create-secret \
+  --region us-east-1 \
+  --name BuilderJWT \
+  --secret-string 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzZXJ2aWNlIjoiV2FhUyJ9.-FAkEOb0jtHhoHv6r4O7U8PGOw_b60M9MnSYN9Bm_7A'
 
 awslocal dynamodb create-table \
   --region us-east-1 \
