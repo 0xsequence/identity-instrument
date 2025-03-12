@@ -11,7 +11,6 @@ type Config struct {
 	Mode       Mode               `toml:"-"`
 	Region     string             `toml:"region"`
 	Service    ServiceConfig      `toml:"service"`
-	KMS        KMSConfig          `toml:"kms"`
 	Endpoints  EndpointsConfig    `toml:"endpoints"`
 	SES        SESConfig          `toml:"ses"`
 	Database   DatabaseConfig     `toml:"database"`
@@ -25,10 +24,6 @@ type ServiceConfig struct {
 	EnclavePort   uint32 `toml:"enclave_port"`
 	ProxyPort     uint32 `toml:"proxy_port"`
 	DebugProfiler bool   `toml:"debug_profiler"`
-}
-
-type KMSConfig struct {
-	EncryptionKeys []string `toml:"encryption_keys"`
 }
 
 type EndpointsConfig struct {

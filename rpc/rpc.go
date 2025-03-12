@@ -235,7 +235,7 @@ func (s *RPC) statusHandler(w http.ResponseWriter, r *http.Request) {
 func (s *RPC) healthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	att := attestation.FromContext(ctx)
-	if _, err := att.GenerateDataKey(ctx, s.Config.KMS.EncryptionKeys[0]); err != nil {
+	if _, err := att.GenerateDataKey(ctx, s.Config.Encryption[0].KMSKeys[0]); err != nil {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
