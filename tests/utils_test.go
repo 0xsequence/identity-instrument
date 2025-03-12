@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/rpc"
+	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/localstack"
 	"github.com/testcontainers/testcontainers-go/wait"
@@ -52,6 +54,9 @@ func initConfig(t *testing.T, awsEndpoint string) *config.Config {
 		},
 		SES: config.SESConfig{
 			Source: "noreply@local.auth.sequence.app",
+		},
+		Builder: config.BuilderConfig{
+			SecretID: "BuilderJWT",
 		},
 		Encryption: []config.EncryptionConfig{
 			{
@@ -114,4 +119,34 @@ func initLocalstack() (string, func()) {
 
 	endpoint := fmt.Sprintf("http://%s:%d", host, mappedPort.Int())
 	return endpoint, terminate
+}
+
+func getSentEmailMessage(t *testing.T, recipient string) (string, string, bool) {
+	res, err := http.Get(fmt.Sprintf("%s/_aws/ses?email=noreply@local.auth.sequence.app", awsEndpoint))
+	require.NoError(t, err)
+	defer res.Body.Close()
+
+	var result struct {
+		Messages []struct {
+			Destination struct {
+				ToAddresses []string
+			}
+			Subject string
+			Body    struct {
+				HTML string `json:"html_part"`
+			}
+		}
+	}
+
+	require.NoError(t, json.NewDecoder(res.Body).Decode(&result))
+
+	for _, msg := range result.Messages {
+		for _, toAddress := range msg.Destination.ToAddresses {
+			if toAddress == recipient {
+				return msg.Subject, msg.Body.HTML, true
+			}
+		}
+	}
+
+	return "", "", false
 }
