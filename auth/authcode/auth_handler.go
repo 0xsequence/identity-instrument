@@ -146,17 +146,17 @@ func (h *AuthHandler) Verify(
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusOK {
-		return proto.Identity{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
 	var body map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return proto.Identity{}, fmt.Errorf("decode response: %w", err)
 	}
 
 	if err, ok := body["error"]; ok {
-		return proto.Identity{}, fmt.Errorf("oauth error: %s", err)
+		return proto.Identity{}, fmt.Errorf("oauth error: %s: %s", err, body["error_description"])
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return proto.Identity{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
 	idToken := body["id_token"].(string)
