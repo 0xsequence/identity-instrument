@@ -47,10 +47,10 @@ awslocal dynamodb create-table \
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name EncryptionPoolKeysTable \
-  --attribute-definitions AttributeName=KeyID,AttributeType=S AttributeName=ConfigVersion,AttributeType=N AttributeName=KeyIndex,AttributeType=N \
-  --key-schema AttributeName=ConfigVersion,KeyType=HASH AttributeName=KeyIndex,KeyType=SORT \
+  --attribute-definitions AttributeName=KeyRef,AttributeType=S AttributeName=Generation,AttributeType=N AttributeName=KeyIndex,AttributeType=N \
+  --key-schema AttributeName=Generation,KeyType=HASH AttributeName=KeyIndex,KeyType=SORT \
   --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 \
   --global-secondary-indexes \
-  "IndexName=KeyID-Index,KeySchema=[{AttributeName=KeyID,KeyType=HASH},{AttributeName=ConfigVersion,KeyType=SORT}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}"
+  "IndexName=KeyRef-Index,KeySchema=[{AttributeName=KeyRef,KeyType=HASH},{AttributeName=Generation,KeyType=SORT}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}"
 
 echo "Finished bootstrapping localstack resources!"

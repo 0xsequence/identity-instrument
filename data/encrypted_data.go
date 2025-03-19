@@ -15,8 +15,8 @@ type Decryptor interface {
 }
 
 type EncryptedData[T any] struct {
-	EncryptionKeyID string `dynamodbav:"EncryptionKeyID"`
-	Ciphertext      string `dynamodbav:"Ciphertext"`
+	EncryptionKeyRef string `dynamodbav:"EncryptionKeyRef"`
+	Ciphertext       string `dynamodbav:"Ciphertext"`
 }
 
 func Encrypt[T any](ctx context.Context, encryptor Encryptor, data T) (EncryptedData[T], error) {
@@ -31,8 +31,8 @@ func Encrypt[T any](ctx context.Context, encryptor Encryptor, data T) (Encrypted
 	}
 
 	ed := EncryptedData[T]{
-		EncryptionKeyID: keyID,
-		Ciphertext:      ciphertext,
+		EncryptionKeyRef: keyID,
+		Ciphertext:       ciphertext,
 	}
 	return ed, nil
 }
@@ -40,7 +40,7 @@ func Encrypt[T any](ctx context.Context, encryptor Encryptor, data T) (Encrypted
 func (ed *EncryptedData[T]) Decrypt(ctx context.Context, decryptor Decryptor) (T, error) {
 	var zero T
 
-	plaintext, err := decryptor.Decrypt(ctx, ed.EncryptionKeyID, ed.Ciphertext)
+	plaintext, err := decryptor.Decrypt(ctx, ed.EncryptionKeyRef, ed.Ciphertext)
 	if err != nil {
 		return zero, err
 	}

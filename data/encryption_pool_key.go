@@ -13,12 +13,12 @@ import (
 )
 
 type EncryptionPoolKey struct {
-	// ConfigVersion is a sequence number of the encryption config used to encrypt the shares of this key.
-	ConfigVersion int `dynamodbav:"ConfigVersion"`
+	// Generation is a sequence number of the encryption config used to encrypt the shares of this key.
+	Generation int `dynamodbav:"Generation"`
 	// KeyIndex is the index of the key within the config version.
 	KeyIndex int `dynamodbav:"KeyIndex"`
-	// KeyID uniquely identifies the private key material.
-	KeyID string `dynamodbav:"KeyID"`
+	// KeyRef uniquely identifies the private key material.
+	KeyRef string `dynamodbav:"KeyRef"`
 
 	EncryptedShares map[string]string `dynamodbav:"EncryptedShares"`
 
@@ -27,13 +27,13 @@ type EncryptionPoolKey struct {
 
 func (k *EncryptionPoolKey) Key() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"ConfigVersion": &types.AttributeValueMemberN{Value: strconv.Itoa(k.ConfigVersion)},
-		"KeyIndex":      &types.AttributeValueMemberN{Value: strconv.Itoa(k.KeyIndex)},
+		"Generation": &types.AttributeValueMemberN{Value: strconv.Itoa(k.Generation)},
+		"KeyIndex":   &types.AttributeValueMemberN{Value: strconv.Itoa(k.KeyIndex)},
 	}
 }
 
 type EncryptionPoolKeyIndices struct {
-	KeyIDIndex string
+	KeyRefIndex string
 }
 
 type EncryptionPoolKeyTable struct {
@@ -50,8 +50,8 @@ func NewEncryptionPoolKeyTable(db DB, tableARN string, indices EncryptionPoolKey
 	}
 }
 
-func (t *EncryptionPoolKeyTable) Get(ctx context.Context, configVersion int, keyIndex int, consistentRead bool) (*EncryptionPoolKey, bool, error) {
-	key := EncryptionPoolKey{ConfigVersion: configVersion, KeyIndex: keyIndex}
+func (t *EncryptionPoolKeyTable) Get(ctx context.Context, generation int, keyIndex int, consistentRead bool) (*EncryptionPoolKey, bool, error) {
+	key := EncryptionPoolKey{Generation: generation, KeyIndex: keyIndex}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      &t.tableARN,
@@ -71,16 +71,16 @@ func (t *EncryptionPoolKeyTable) Get(ctx context.Context, configVersion int, key
 	return &key, true, nil
 }
 
-func (t *EncryptionPoolKeyTable) GetLatestByID(ctx context.Context, keyID string, consistentRead bool) (*EncryptionPoolKey, bool, error) {
+func (t *EncryptionPoolKeyTable) GetLatestByKeyRef(ctx context.Context, keyRef string, consistentRead bool) (*EncryptionPoolKey, bool, error) {
 	var key EncryptionPoolKey
 	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
 		TableName:              &t.tableARN,
-		IndexName:              &t.indices.KeyIDIndex,
-		KeyConditionExpression: aws.String("KeyID = :keyID"),
+		IndexName:              &t.indices.KeyRefIndex,
+		KeyConditionExpression: aws.String("KeyRef = :keyRef"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":keyID": &types.AttributeValueMemberS{Value: keyID},
+			":keyRef": &types.AttributeValueMemberS{Value: keyRef},
 		},
-		ScanIndexForward: aws.Bool(false), // return the key with highest ConfigVersion
+		ScanIndexForward: aws.Bool(false), // return the key with highest Generation
 		Limit:            aws.Int32(1),
 		ConsistentRead:   &consistentRead,
 	})
@@ -104,7 +104,7 @@ func (t *EncryptionPoolKeyTable) Create(ctx context.Context, key *EncryptionPool
 	_, err = t.db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName:           &t.tableARN,
 		Item:                av,
-		ConditionExpression: aws.String("attribute_not_exists(ConfigVersion) AND attribute_not_exists(KeyIndex)"),
+		ConditionExpression: aws.String("attribute_not_exists(Generation) AND attribute_not_exists(KeyIndex)"),
 	})
 	if err != nil {
 		var ccf *types.ConditionalCheckFailedException

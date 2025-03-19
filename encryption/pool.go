@@ -64,10 +64,10 @@ func (p *Pool) Encrypt(ctx context.Context, plaintext []byte) (string, string, e
 		base64.RawURLEncoding.EncodeToString(encrypted),
 	}
 
-	return key.KeyID, strings.Join(ciphertextParts, "."), nil
+	return key.KeyRef, strings.Join(ciphertextParts, "."), nil
 }
 
-func (p *Pool) Decrypt(ctx context.Context, keyID string, ciphertext string) ([]byte, error) {
+func (p *Pool) Decrypt(ctx context.Context, keyRef string, ciphertext string) ([]byte, error) {
 	parts := strings.Split(ciphertext, ".")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid ciphertext")
@@ -81,7 +81,7 @@ func (p *Pool) Decrypt(ctx context.Context, keyID string, ciphertext string) ([]
 		return nil, fmt.Errorf("decode encrypted data: %w", err)
 	}
 
-	key, found, err := p.keysTable.GetLatestByID(ctx, keyID, false)
+	key, found, err := p.keysTable.GetLatestByKeyRef(ctx, keyRef, false)
 	if err != nil {
 		return nil, fmt.Errorf("get latest key: %w", err)
 	}
@@ -91,7 +91,7 @@ func (p *Pool) Decrypt(ctx context.Context, keyID string, ciphertext string) ([]
 
 	// TODO: verify attestation
 
-	config, err := p.getConfig(key.ConfigVersion)
+	config, err := p.getConfig(key.Generation)
 	if err != nil {
 		return nil, fmt.Errorf("get config: %w", err)
 	}
@@ -137,12 +137,12 @@ func (p *Pool) generateKey(ctx context.Context, keyIndex int) (*data.EncryptionP
 		return nil, nil, fmt.Errorf("generate private key: %w", err)
 	}
 
-	idBytes := make([]byte, 16)
-	_, err = io.ReadFull(att, idBytes)
+	refBytes := make([]byte, 16)
+	_, err = io.ReadFull(att, refBytes)
 	if err != nil {
-		return nil, nil, fmt.Errorf("generate id: %w", err)
+		return nil, nil, fmt.Errorf("generate key ref: %w", err)
 	}
-	keyID := base64.RawURLEncoding.EncodeToString(idBytes)
+	keyRef := base64.RawURLEncoding.EncodeToString(refBytes)
 
 	shares, err := shamir.Split(privateKey, len(config.Cryptors), config.Threshold)
 	if err != nil {
@@ -161,9 +161,9 @@ func (p *Pool) generateKey(ctx context.Context, keyIndex int) (*data.EncryptionP
 	}
 
 	key := &data.EncryptionPoolKey{
-		ConfigVersion:   configVersion,
+		Generation:      configVersion,
 		KeyIndex:        keyIndex,
-		KeyID:           keyID,
+		KeyRef:          keyRef,
 		EncryptedShares: encryptedShares,
 	}
 
@@ -174,7 +174,7 @@ func (p *Pool) generateKey(ctx context.Context, keyIndex int) (*data.EncryptionP
 	if alreadyExists {
 		// The key was created by another instance. We need to get the latest key from the database.
 		// This time, use a strongly consistent read.
-		key, found, err := p.keysTable.GetLatestByID(ctx, keyID, true)
+		key, found, err := p.keysTable.GetLatestByKeyRef(ctx, keyRef, true)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get latest key: %w", err)
 		}
