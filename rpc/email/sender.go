@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/0xsequence/identity-instrument/config"
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto/builder"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
@@ -34,7 +35,13 @@ func (s *Sender) NormalizeRecipient(recipient string) (string, error) {
 	return Normalize(recipient), nil
 }
 
-func (s *Sender) SendOTP(ctx context.Context, ecosystem string, recipient string, code string) error {
+func (s *Sender) SendOTP(ctx context.Context, ecosystem string, recipient string, code string) (err error) {
+	ctx, span := o11y.Trace(ctx, "email.Sender.SendOTP")
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	// Retrieve the email template from the Builder.
 	ecoID, err := strconv.ParseUint(ecosystem, 10, 64)
 	if err != nil {
