@@ -5,11 +5,13 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	"github.com/0xsequence/identity-instrument/attestation"
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/encryption/shamir"
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/nitrocontrol/aescbc"
 )
 
@@ -25,18 +27,26 @@ func NewPool(configs []*Config, keysTable *data.EncryptionPoolKeyTable) *Pool {
 	}
 }
 
-func (p *Pool) Encrypt(ctx context.Context, plaintext []byte) (string, string, error) {
-	configVersion, config := p.currentConfig()
+func (p *Pool) Encrypt(ctx context.Context, plaintext []byte) (_ string, _ string, err error) {
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.Encrypt")
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
+	generation, config := p.currentConfig()
+	span.SetAnnotation("generation", strconv.Itoa(generation))
 
 	att := attestation.FromContext(ctx)
 	keyIndex, err := config.randomKeyIndex(att)
 	if err != nil {
 		return "", "", fmt.Errorf("random key index: %w", err)
 	}
+	span.SetAnnotation("key_index", strconv.Itoa(keyIndex))
 
 	var privateKey []byte
 
-	key, found, err := p.keysTable.Get(ctx, configVersion, keyIndex, false)
+	key, found, err := p.keysTable.Get(ctx, generation, keyIndex, false)
 	if err != nil {
 		return "", "", fmt.Errorf("get key: %w", err)
 	}
@@ -46,6 +56,7 @@ func (p *Pool) Encrypt(ctx context.Context, plaintext []byte) (string, string, e
 			return "", "", fmt.Errorf("generate key: %w", err)
 		}
 	}
+	span.SetAnnotation("key_ref", key.KeyRef)
 
 	if privateKey == nil {
 		privateKey, err = p.combineShares(ctx, config, key.EncryptedShares)
@@ -67,7 +78,13 @@ func (p *Pool) Encrypt(ctx context.Context, plaintext []byte) (string, string, e
 	return key.KeyRef, strings.Join(ciphertextParts, "."), nil
 }
 
-func (p *Pool) Decrypt(ctx context.Context, keyRef string, ciphertext string) ([]byte, error) {
+func (p *Pool) Decrypt(ctx context.Context, keyRef string, ciphertext string) (_ []byte, err error) {
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.Decrypt", o11y.WithAnnotation("key_ref", keyRef))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	parts := strings.Split(ciphertext, ".")
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid ciphertext")
@@ -88,6 +105,9 @@ func (p *Pool) Decrypt(ctx context.Context, keyRef string, ciphertext string) ([
 	if !found {
 		return nil, fmt.Errorf("key not found")
 	}
+
+	span.SetAnnotation("generation", strconv.Itoa(key.Generation))
+	span.SetAnnotation("key_index", strconv.Itoa(key.KeyIndex))
 
 	// TODO: verify attestation
 
@@ -126,13 +146,20 @@ func (p *Pool) getConfig(configVersion int) (*Config, error) {
 	return p.configs[configVersion], nil
 }
 
-func (p *Pool) generateKey(ctx context.Context, keyIndex int) (*data.EncryptionPoolKey, []byte, error) {
+func (p *Pool) generateKey(ctx context.Context, keyIndex int) (_ *data.EncryptionPoolKey, _ []byte, err error) {
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.generateKey", o11y.WithAnnotation("key_index", strconv.Itoa(keyIndex)))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	att := attestation.FromContext(ctx)
-	configVersion, config := p.currentConfig()
+	generation, config := p.currentConfig()
+	span.SetAnnotation("generation", strconv.Itoa(generation))
 
 	// Generate a random AES-256 key (32 bytes) using the attestation as a source of randomness
 	privateKey := make([]byte, 32) // AES-256 requires a 32-byte key
-	_, err := io.ReadFull(att, privateKey)
+	_, err = io.ReadFull(att, privateKey)
 	if err != nil {
 		return nil, nil, fmt.Errorf("generate private key: %w", err)
 	}
@@ -161,7 +188,7 @@ func (p *Pool) generateKey(ctx context.Context, keyIndex int) (*data.EncryptionP
 	}
 
 	key := &data.EncryptionPoolKey{
-		Generation:      configVersion,
+		Generation:      generation,
 		KeyIndex:        keyIndex,
 		KeyRef:          keyRef,
 		EncryptedShares: encryptedShares,
@@ -187,7 +214,13 @@ func (p *Pool) generateKey(ctx context.Context, keyIndex int) (*data.EncryptionP
 	return key, privateKey, nil
 }
 
-func (p *Pool) combineShares(ctx context.Context, config *Config, shares map[string]string) ([]byte, error) {
+func (p *Pool) combineShares(ctx context.Context, config *Config, shares map[string]string) (_ []byte, err error) {
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.combineShares")
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
 	decryptedShares := make([][]byte, 0, len(shares))
 	for cryptorID, encryptedShare := range shares {
 		cryptor, ok := config.Cryptors[cryptorID]
