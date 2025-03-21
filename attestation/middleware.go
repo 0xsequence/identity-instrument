@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/nitrocontrol/enclave"
 )
@@ -19,6 +20,12 @@ import (
 // the final attestation document.
 func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 	runMiddleware := func(w http.ResponseWriter, r *http.Request) (ctx context.Context, cancelFunc func() error, err error) {
+		ctx, span := o11y.Trace(r.Context(), "attestation.Middleware")
+		defer func() {
+			span.RecordError(err)
+			span.End()
+		}()
+
 		var nonce []byte
 		if nonceVal := r.Header.Get("X-Attestation-Nonce"); nonceVal != "" {
 			nonceVal = strings.TrimSpace(nonceVal)
