@@ -14,6 +14,7 @@ import (
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/encryption"
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
 	"github.com/0xsequence/nitrocontrol/enclave"
@@ -57,7 +58,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		Timeout:   30 * time.Second,
 		Transport: transport,
 	}
-	wrappedClient := client // tracing.WrapClient(client)
+	wrappedClient := o11y.WrapClient(client)
 
 	options := []func(options *awsconfig.LoadOptions) error{
 		awsconfig.WithRegion(cfg.Region),
@@ -205,6 +206,9 @@ func (s *RPC) Handler() http.Handler {
 
 	// Timeout any request after 28 seconds as Cloudflare has a 30 second limit anyways.
 	r.Use(middleware.Timeout(28 * time.Second))
+
+	// Observability middleware
+	r.Use(o11y.Middleware())
 
 	// Generate attestation document
 	r.Use(attestation.Middleware(s.Enclave))

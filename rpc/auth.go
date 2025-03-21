@@ -16,6 +16,7 @@ import (
 	"github.com/0xsequence/identity-instrument/auth/otp"
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/data"
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/proto/builder"
 	"github.com/0xsequence/identity-instrument/rpc/email"
@@ -235,9 +236,9 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 	})
 
 	handlers := map[proto.AuthMode]auth.Handler{
-		proto.AuthMode_IDToken:      idTokenHandler, // auth.NewTracedProvider("oidc.AuthProvider", oidcProvider),
-		proto.AuthMode_AuthCodePKCE: authCodeHandler,
-		proto.AuthMode_OTP:          otpHandler,
+		proto.AuthMode_IDToken:      o11y.NewTracedAuthHandler("idtoken.AuthProvider", idTokenHandler),
+		proto.AuthMode_AuthCodePKCE: o11y.NewTracedAuthHandler("authcode.AuthProvider", authCodeHandler),
+		proto.AuthMode_OTP:          o11y.NewTracedAuthHandler("otp.AuthProvider", otpHandler),
 	}
 	return handlers, nil
 }
