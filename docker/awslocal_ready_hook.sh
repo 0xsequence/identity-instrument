@@ -9,6 +9,7 @@ fi
 
 if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
   awslocal secretsmanager create-secret --name "oauth/1/accounts.google.com/$GOOGLE_CLIENT_ID" --secret-string "$GOOGLE_CLIENT_SECRET"
+  awslocal secretsmanager create-secret --name "oauth/694/accounts.google.com/$GOOGLE_CLIENT_ID" --secret-string "$GOOGLE_CLIENT_SECRET"
 fi
 
 awslocal kms create-key --region us-east-1 --tags '[{"TagKey":"_custom_id_","TagValue":"27ebbde0-49d2-4cb6-ad78-4f2c24fe7b79"}]'
