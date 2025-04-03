@@ -3,7 +3,7 @@ webrpc = v1
 name = identity-instrument
 version = v0.1.0
 
-struct InitiateAuthParams
+struct CommitVerifierParams
   - ecosystem: string
   - authKey: AuthKey
   - identityType: IdentityType
@@ -11,8 +11,10 @@ struct InitiateAuthParams
   - metadata: map<string, string>
   - verifier?: string
     + go.field.type = string
+  - signer?: string
+    + go.field.type = string
 
-struct RegisterAuthParams
+struct CompleteAuthParams
   - ecosystem: string
   - authKey: AuthKey
   - identityType: IdentityType
@@ -97,6 +99,8 @@ struct AuthCommitmentData
     + json = identityType
   - verifier: string
     + json = verifier
+  - signer: string
+    + go.tag.json = signer,omitempty
   - challenge: string
     + json = challenge
   - answer: string
@@ -107,8 +111,8 @@ struct AuthCommitmentData
     + json = expiry
 
 service IdentityInstrument
-  - InitiateAuth(params: InitiateAuthParams) => (verifier: string, challenge: string)
-  - RegisterAuth(params: RegisterAuthParams) => (signer: string)
+  - CommitVerifier(params: CommitVerifierParams) => (verifier: string, loginHint: string, challenge: string)
+  - CompleteAuth(params: CompleteAuthParams) => (signer: string)
 
   - Sign(params: SignParams) => (signature: string)
 
