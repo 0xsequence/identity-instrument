@@ -39,36 +39,43 @@ func (h *AuthHandler) Commit(
 	ctx context.Context,
 	authID proto.AuthID,
 	_commitment *proto.AuthCommitmentData,
+	signer *proto.SignerData,
 	authKey *proto.AuthKey,
 	_metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
-) (resVerifier string, resChallenge string, err error) {
+) (resVerifier string, loginHint string, resChallenge string, err error) {
 	att := attestation.FromContext(ctx)
 
 	sender, ok := h.senders[authID.IdentityType]
 	if !ok {
-		return "", "", fmt.Errorf("unsupported identity type: %v", authID.IdentityType)
+		return "", "", "", fmt.Errorf("unsupported identity type: %v", authID.IdentityType)
 	}
 
-	recipient, err := sender.NormalizeRecipient(authID.Verifier)
-	if err != nil {
-		return "", "", fmt.Errorf("invalid recipient: %w", err)
+	var recipient string
+	if signer != nil {
+		recipient = signer.Identity.Subject
+	} else {
+		recipient, err = sender.NormalizeRecipient(authID.Verifier)
+		if err != nil {
+			return "", "", "", fmt.Errorf("invalid recipient: %w", err)
+		}
+		loginHint = recipient
 	}
 
 	// generate the secret verification code to be sent to the user
 	secretCode, err := randomDigits(att, 6)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to generate secret code: %w", err)
+		return "", "", "", fmt.Errorf("failed to generate secret code: %w", err)
 	}
 	// client salt is sent back to the client in the intent response
 	clientSalt, err := randomHex(att, 12)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to generate client salt: %w", err)
+		return "", "", "", fmt.Errorf("failed to generate client salt: %w", err)
 	}
 	// server salt is sent to the WaaS API and stored in the auth session
 	serverSalt, err := randomHex(att, 12)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to generate server salt: %w", err)
+		return "", "", "", fmt.Errorf("failed to generate server salt: %w", err)
 	}
 
 	// clientAnswer is the value that we expect the client to produce
@@ -83,25 +90,34 @@ func (h *AuthHandler) Commit(
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
-		Verifier:     recipient,
+		Handle:       recipient,
 		Challenge:    serverSalt,   // the SERVER salt is a challenge in server's context
 		Answer:       serverAnswer, // the final answer, after hashing clientAnswer with serverSalt
 		Expiry:       expiresAt,
 		Metadata:     nil, // uses no metadata
 	}
+
+	if signer != nil {
+		loginHint = signer.Identity.Subject
+		commitment.Signer, err = signer.Address()
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to get signer address: %w", err)
+		}
+	}
+
 	if err := storeFn(ctx, commitment); err != nil {
-		return "", "", fmt.Errorf("failed to store commitment: %w", err)
+		return "", "", "", fmt.Errorf("failed to store commitment: %w", err)
 	}
 
 	if err := sender.SendOTP(ctx, authID.Ecosystem, recipient, secretCode); err != nil {
-		return "", "", fmt.Errorf("failed to send OTP: %w", err)
+		return "", "", "", fmt.Errorf("failed to send OTP: %w", err)
 	}
 
 	// Client should combine the challenge from the response with the code from the email address and hash it.
 	// The resulting value is the clientAnswer that is then send with the RegisterAuth RPC and passed to Verify.
-	resVerifier = commitment.Verifier
 	resChallenge = clientSalt // the CLIENT salt is a challenge in client's context
-	return resVerifier, resChallenge, nil
+	resVerifier = commitment.Verifier()
+	return resVerifier, loginHint, resChallenge, nil
 }
 
 // Verify requires the auth commitment to exist as it contains the challenge and final answer. The challenge (server salt)
@@ -124,7 +140,7 @@ func (h *AuthHandler) Verify(
 	}
 	identity := proto.Identity{
 		Type:    commitment.IdentityType,
-		Subject: commitment.Verifier,
+		Subject: commitment.Handle,
 	}
 	return identity, nil
 }
