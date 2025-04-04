@@ -17,13 +17,21 @@ func NewTracedAuthHandler(name string, handler auth.Handler) auth.Handler {
 }
 
 // Commit implements auth.Handler.
-func (t *tracedAuthHandler) Commit(ctx context.Context, authID proto.AuthID, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, metadata map[string]string, storeFn auth.StoreCommitmentFn) (_ string, _ string, err error) {
+func (t *tracedAuthHandler) Commit(
+	ctx context.Context,
+	authID proto.AuthID,
+	commitment *proto.AuthCommitmentData,
+	signer *proto.SignerData,
+	authKey *proto.AuthKey,
+	metadata map[string]string,
+	storeFn auth.StoreCommitmentFn,
+) (_ string, _ string, _ string, err error) {
 	ctx, span := Trace(ctx, t.name+".Commit")
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
-	return t.Handler.Commit(ctx, authID, commitment, authKey, metadata, storeFn)
+	return t.Handler.Commit(ctx, authID, commitment, signer, authKey, metadata, storeFn)
 }
 
 // Verify implements auth.Handler.

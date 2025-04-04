@@ -16,22 +16,22 @@ func NewTracedRPC(svc proto.IdentityInstrument) *tracedRPC {
 	return &tracedRPC{svc: svc}
 }
 
-func (t *tracedRPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams) (_ string, _ string, err error) {
-	ctx, span := Trace(ctx, "InitiateAuth")
+func (t *tracedRPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams) (_ string, _ string, _ string, err error) {
+	ctx, span := Trace(ctx, "CommitVerifier")
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
-	return t.svc.InitiateAuth(ctx, params)
+	return t.svc.CommitVerifier(ctx, params)
 }
 
-func (t *tracedRPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams) (_ string, err error) {
-	ctx, span := Trace(ctx, "RegisterAuth")
+func (t *tracedRPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (_ string, err error) {
+	ctx, span := Trace(ctx, "CompleteAuth")
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
-	return t.svc.RegisterAuth(ctx, params)
+	return t.svc.CompleteAuth(ctx, params)
 }
 
 func (t *tracedRPC) Sign(ctx context.Context, params *proto.SignParams) (_ string, err error) {
