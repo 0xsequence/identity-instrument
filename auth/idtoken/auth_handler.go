@@ -53,23 +53,24 @@ func (h *AuthHandler) Commit(
 	ctx context.Context,
 	authID proto.AuthID,
 	commitment *proto.AuthCommitmentData,
+	signer *proto.SignerData,
 	authKey *proto.AuthKey,
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
-) (resVerifier string, resChallenge string, err error) {
+) (resVerifier string, loginHint string, resChallenge string, err error) {
 	if commitment != nil {
-		return "", "", fmt.Errorf("cannot reuse an old ID token")
+		return "", "", "", fmt.Errorf("cannot reuse an old ID token")
 	}
 
 	commitment, err = h.constructCommitment(authID, authKey, metadata)
 	if err != nil {
-		return "", "", err
+		return "", "", "", fmt.Errorf("construct commitment: %w", err)
 	}
 	if err := storeFn(ctx, commitment); err != nil {
-		return "", "", err
+		return "", "", "", fmt.Errorf("store commitment: %w", err)
 	}
 
-	return commitment.Verifier, commitment.Challenge, nil
+	return commitment.Handle, "", commitment.Challenge, nil
 }
 
 func (h *AuthHandler) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (proto.Identity, error) {
@@ -78,7 +79,7 @@ func (h *AuthHandler) Verify(ctx context.Context, commitment *proto.AuthCommitme
 	}
 
 	expectedHash := hexutil.Encode(ethcrypto.Keccak256([]byte(answer)))
-	if commitment.Verifier != expectedHash {
+	if commitment.Handle != expectedHash {
 		return proto.Identity{}, fmt.Errorf("invalid token hash")
 	}
 
@@ -175,7 +176,7 @@ func (h *AuthHandler) constructCommitment(
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
-		Verifier:     authID.Verifier,
+		Handle:       authID.Verifier,
 		Expiry:       vi.expiresAt,
 		Metadata:     metadata,
 	}
