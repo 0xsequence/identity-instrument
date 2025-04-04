@@ -4,7 +4,6 @@ name = identity-instrument
 version = v0.1.0
 
 struct CommitVerifierParams
-  - ecosystem: string
   - authKey: AuthKey
   - identityType: IdentityType
   - authMode: AuthMode
@@ -15,7 +14,6 @@ struct CommitVerifierParams
     + go.field.type = string
 
 struct CompleteAuthParams
-  - ecosystem: string
   - authKey: AuthKey
   - identityType: IdentityType
   - authMode: AuthMode
@@ -23,7 +21,6 @@ struct CompleteAuthParams
   - answer: string
 
 struct SignParams
-  - ecosystem: string
   - signer: string
   - digest: string
   - authKey: AuthKey
