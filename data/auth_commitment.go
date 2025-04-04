@@ -46,7 +46,7 @@ func (c *AuthCommitment) CorrespondsTo(data *proto.AuthCommitmentData) bool {
 	if c.ID.IdentityType != data.IdentityType {
 		return false
 	}
-	if c.ID.Verifier != data.Verifier {
+	if c.ID.Verifier != data.Handle && c.ID.Verifier != data.Signer {
 		return false
 	}
 	if c.ID.Ecosystem != data.Ecosystem {
