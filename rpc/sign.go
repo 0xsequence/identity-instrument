@@ -12,10 +12,13 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
+	"github.com/0xsequence/identity-instrument/attestation"
 	"github.com/0xsequence/identity-instrument/proto"
 )
 
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error) {
+	att := attestation.FromContext(ctx)
+
 	digestBytes := common.FromHex(params.Digest)
 	sigBytes := common.FromHex(params.Signature)
 	authKeyBytes := common.FromHex(params.AuthKey.PublicKey)
@@ -71,7 +74,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", fmt.Errorf("auth key not found")
 	}
 
-	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, s.EncryptionPool)
+	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 	if err != nil {
 		return "", fmt.Errorf("decrypt auth key data: %w", err)
 	}
@@ -96,7 +99,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", fmt.Errorf("signer not found")
 	}
 
-	signerData, err := dbSigner.EncryptedData.Decrypt(ctx, s.EncryptionPool)
+	signerData, err := dbSigner.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 	if err != nil {
 		return "", fmt.Errorf("decrypt signer data: %w", err)
 	}
