@@ -171,6 +171,7 @@ func TestEmail(t *testing.T) {
 
 			c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
 			header := make(http.Header)
+			header.Set("X-Sequence-Ecosystem", "123")
 			ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
 			require.NoError(t, err)
 
@@ -185,7 +186,6 @@ func TestEmail(t *testing.T) {
 			}
 
 			commitParams := &proto.CommitVerifierParams{
-				Ecosystem: "123",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
 					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
@@ -212,7 +212,6 @@ func TestEmail(t *testing.T) {
 				answer := hexutil.Encode(crypto.Keccak256([]byte(p.challenge + code)))
 
 				completeParams := &proto.CompleteAuthParams{
-					Ecosystem: "123",
 					AuthKey: &proto.AuthKey{
 						KeyType:   proto.KeyType_P256K1,
 						PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
@@ -238,7 +237,6 @@ func TestEmail(t *testing.T) {
 			require.NoError(t, err)
 
 			signParams := &proto.SignParams{
-				Ecosystem: "123",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
 					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),

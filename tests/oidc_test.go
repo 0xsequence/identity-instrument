@@ -57,13 +57,13 @@ func TestOIDC(t *testing.T) {
 
 		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
 		header := make(http.Header)
+		header.Set("X-Sequence-Ecosystem", "123")
 		ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
 		require.NoError(t, err)
 
 		hashedToken := hexutil.Encode(crypto.Keccak256([]byte(tok)))
 
 		initiateParams := &proto.CommitVerifierParams{
-			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
@@ -84,7 +84,6 @@ func TestOIDC(t *testing.T) {
 		require.Empty(t, challenge)
 
 		registerParams := &proto.CompleteAuthParams{
-			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
@@ -105,7 +104,6 @@ func TestOIDC(t *testing.T) {
 		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
@@ -152,11 +150,11 @@ func TestOIDC(t *testing.T) {
 
 		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
 		header := make(http.Header)
+		header.Set("X-Sequence-Ecosystem", "123")
 		ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
 		require.NoError(t, err)
 
 		initiateParams := &proto.CommitVerifierParams{
-			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
@@ -183,7 +181,6 @@ func TestOIDC(t *testing.T) {
 		require.NotEmpty(t, code)
 
 		registerParams := &proto.CompleteAuthParams{
-			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
@@ -204,7 +201,6 @@ func TestOIDC(t *testing.T) {
 		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
 				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
@@ -270,7 +266,7 @@ func newMockOAuth2Server(t *testing.T, svc *rpc.RPC) *mockOAuth2Server {
 
 	s.server = httptest.NewServer(mux)
 
-	secretName := "oauth/ECO_ID/" + encodeValueForSecretName(s.URL()) + "/audience"
+	secretName := "oauth/123/" + encodeValueForSecretName(s.URL()) + "/audience"
 	_, err = svc.Secrets.CreateSecret(context.Background(), &secretsmanager.CreateSecretInput{
 		Name:         aws.String(secretName),
 		SecretString: aws.String(clientSecret),
