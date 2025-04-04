@@ -9,7 +9,7 @@ struct CommitVerifierParams
   - identityType: IdentityType
   - authMode: AuthMode
   - metadata: map<string, string>
-  - verifier?: string
+  - handle?: string
     + go.field.type = string
   - signer?: string
     + go.field.type = string
@@ -97,8 +97,8 @@ struct AuthCommitmentData
     + json = authMode
   - identityType: IdentityType
     + json = identityType
-  - verifier: string
-    + json = verifier
+  - handle: string
+    + json = handle
   - signer: string
     + go.tag.json = signer,omitempty
   - challenge: string
