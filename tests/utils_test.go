@@ -2,6 +2,8 @@ package tests
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,7 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
+	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/config"
+	"github.com/0xsequence/identity-instrument/data"
+	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
@@ -149,4 +155,44 @@ func getSentEmailMessage(t *testing.T, recipient string) (string, string, bool) 
 	}
 
 	return "", "", false
+}
+
+func deriveKey(t *testing.T, source string) *ecdsa.PrivateKey {
+	key := sha256.Sum256([]byte(source))
+	signer, err := crypto.ToECDSA(key[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	return signer
+}
+
+func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string, source string) string {
+	ctx := context.Background()
+	att, err := svc.Enclave.GetAttestation(ctx, nil)
+	require.NoError(t, err)
+
+	signer := deriveKey(t, source)
+
+	var ident proto.Identity
+	require.NoError(t, ident.FromString(identity))
+
+	signerData := &proto.SignerData{
+		Ecosystem:  ecosystem,
+		Identity:   &ident,
+		PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
+	}
+	encData, err := data.Encrypt(ctx, att, svc.EncryptionPool, signerData)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbSigner := &data.Signer{
+		Ecosystem:     ecosystem,
+		Address:       crypto.PubkeyToAddress(signer.PublicKey).Hex(),
+		Identity:      data.Identity(ident),
+		EncryptedData: encData,
+	}
+	if err := svc.Signers.Put(ctx, dbSigner); err != nil {
+		t.Fatal(err)
+	}
+	return crypto.PubkeyToAddress(signer.PublicKey).Hex()
 }

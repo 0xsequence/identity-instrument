@@ -62,7 +62,7 @@ func TestOIDC(t *testing.T) {
 
 		hashedToken := hexutil.Encode(crypto.Keccak256([]byte(tok)))
 
-		initiateParams := &proto.InitiateAuthParams{
+		initiateParams := &proto.CommitVerifierParams{
 			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
@@ -70,19 +70,20 @@ func TestOIDC(t *testing.T) {
 			},
 			AuthMode:     proto.AuthMode_IDToken,
 			IdentityType: proto.IdentityType_OIDC,
-			Verifier:     hashedToken,
+			Handle:       hashedToken,
 			Metadata: map[string]string{
 				"iss": issuer,
 				"aud": "audience",
 				"exp": strconv.Itoa(int(exp.Unix())),
 			},
 		}
-		resVerifier, challenge, err := c.InitiateAuth(ctx, initiateParams)
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams)
 		require.NoError(t, err)
-		require.Equal(t, initiateParams.Verifier, resVerifier)
+		require.Equal(t, initiateParams.Handle, resVerifier)
+		require.Empty(t, loginHint)
 		require.Empty(t, challenge)
 
-		registerParams := &proto.RegisterAuthParams{
+		registerParams := &proto.CompleteAuthParams{
 			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
@@ -93,7 +94,7 @@ func TestOIDC(t *testing.T) {
 			Verifier:     resVerifier,
 			Answer:       tok,
 		}
-		resSigner, err := c.RegisterAuth(ctx, registerParams)
+		resSigner, err := c.CompleteAuth(ctx, registerParams)
 		require.NoError(t, err)
 		require.NotEmpty(t, resSigner)
 
@@ -154,7 +155,7 @@ func TestOIDC(t *testing.T) {
 		ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
 		require.NoError(t, err)
 
-		initiateParams := &proto.InitiateAuthParams{
+		initiateParams := &proto.CommitVerifierParams{
 			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
@@ -167,10 +168,11 @@ func TestOIDC(t *testing.T) {
 				"aud": "audience",
 			},
 		}
-		resVerifier, challenge, err := c.InitiateAuth(ctx, initiateParams)
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams)
 		require.NoError(t, err)
 		require.NotEmpty(t, resVerifier)
 		require.NotEmpty(t, challenge)
+		require.Empty(t, loginHint)
 
 		code := authServer.authorize(map[string]string{
 			"client_id":             "audience",
@@ -180,7 +182,7 @@ func TestOIDC(t *testing.T) {
 		})
 		require.NotEmpty(t, code)
 
-		registerParams := &proto.RegisterAuthParams{
+		registerParams := &proto.CompleteAuthParams{
 			Ecosystem: "ECO_ID",
 			AuthKey: &proto.AuthKey{
 				KeyType:   proto.KeyType_P256K1,
@@ -191,7 +193,7 @@ func TestOIDC(t *testing.T) {
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
-		resSigner, err := c.RegisterAuth(ctx, registerParams)
+		resSigner, err := c.CompleteAuth(ctx, registerParams)
 		require.NoError(t, err)
 		require.NotEmpty(t, resSigner)
 

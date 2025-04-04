@@ -16,6 +16,7 @@ import (
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/proto/builder"
 	proto "github.com/0xsequence/identity-instrument/proto/clients"
+	"github.com/0xsequence/identity-instrument/rpc"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -24,22 +25,25 @@ import (
 
 func TestEmail(t *testing.T) {
 	type assertionParams struct {
+		svc       *rpc.RPC
 		email     string
 		attempt   int
 		verifier  string
 		challenge string
 		signer    string
+		loginHint string
 	}
 
 	testCases := map[string]struct {
-		retryAttempts      int
-		emailBuilder       func(t *testing.T, p assertionParams, unique string) string
-		assertInitiateAuth func(t *testing.T, p assertionParams, err error) bool
-		extractAnswer      func(t *testing.T, p assertionParams) string
-		assertRegisterAuth func(t *testing.T, p assertionParams, err error) bool
+		retryAttempts        int
+		emailBuilder         func(t *testing.T, p assertionParams, unique string) string
+		prepareCommitParams  func(t *testing.T, p assertionParams, cp *proto.CommitVerifierParams)
+		assertCommitVerifier func(t *testing.T, p assertionParams, err error) bool
+		extractAnswer        func(t *testing.T, p assertionParams) string
+		assertCompleteAuth   func(t *testing.T, p assertionParams, err error) bool
 	}{
 		"Success": {
-			assertInitiateAuth: func(t *testing.T, p assertionParams, err error) bool {
+			assertCommitVerifier: func(t *testing.T, p assertionParams, err error) bool {
 				require.NoError(t, err)
 				require.NotEmpty(t, p.verifier)
 				require.NotEmpty(t, p.challenge)
@@ -52,27 +56,27 @@ func TestEmail(t *testing.T) {
 				assert.Contains(t, message, "Your login code: ")
 				return strings.TrimPrefix(message, "Your login code: ")
 			},
-			assertRegisterAuth: func(t *testing.T, p assertionParams, err error) bool {
+			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
 				require.NoError(t, err)
 				require.NotEmpty(t, p.signer)
 				return true
 			},
 		},
 		"IncorrectCode": {
-			assertInitiateAuth: func(t *testing.T, p assertionParams, err error) bool {
+			assertCommitVerifier: func(t *testing.T, p assertionParams, err error) bool {
 				return true
 			},
 			extractAnswer: func(t *testing.T, p assertionParams) string {
 				return "Wrong"
 			},
-			assertRegisterAuth: func(t *testing.T, p assertionParams, err error) bool {
+			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
 				require.ErrorContains(t, err, "incorrect answer")
 				return false
 			},
 		},
 		"MultipleAttempts": {
 			retryAttempts: 2,
-			assertInitiateAuth: func(t *testing.T, p assertionParams, err error) bool {
+			assertCommitVerifier: func(t *testing.T, p assertionParams, err error) bool {
 				return true
 			},
 			extractAnswer: func(t *testing.T, p assertionParams) string {
@@ -83,7 +87,7 @@ func TestEmail(t *testing.T) {
 				require.True(t, found)
 				return strings.TrimPrefix(message, "Your login code: ")
 			},
-			assertRegisterAuth: func(t *testing.T, p assertionParams, err error) bool {
+			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
 				if p.attempt < 2 {
 					require.ErrorContains(t, err, "incorrect answer")
 					return false
@@ -117,6 +121,35 @@ func TestEmail(t *testing.T) {
 				},
 			},
 		*/
+		"UsingSigner": {
+			prepareCommitParams: func(t *testing.T, p assertionParams, cp *proto.CommitVerifierParams) {
+				cp.Handle = ""
+				cp.Signer = insertSigner(t, p.svc, "123", "Email:"+p.email, p.email)
+			},
+			assertCommitVerifier: func(t *testing.T, p assertionParams, err error) bool {
+				signer := deriveKey(t, p.email)
+				require.NoError(t, err)
+				require.NotEmpty(t, p.verifier)
+				require.NotEmpty(t, p.challenge)
+				assert.Equal(t, p.email, p.loginHint)
+				assert.Equal(t, crypto.PubkeyToAddress(signer.PublicKey).Hex(), p.verifier)
+				return true
+			},
+			extractAnswer: func(t *testing.T, p assertionParams) string {
+				subject, message, found := getSentEmailMessage(t, p.email)
+				require.True(t, found)
+				assert.Contains(t, "Login code for 123", subject)
+				assert.Contains(t, message, "Your login code: ")
+				return strings.TrimPrefix(message, "Your login code: ")
+			},
+			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
+				signer := deriveKey(t, p.email)
+				require.NoError(t, err)
+				require.NotEmpty(t, p.signer)
+				assert.Equal(t, crypto.PubkeyToAddress(signer.PublicKey).Hex(), p.signer)
+				return true
+			},
+		},
 	}
 
 	for name, testCase := range testCases {
@@ -142,6 +175,8 @@ func TestEmail(t *testing.T) {
 			require.NoError(t, err)
 
 			var p assertionParams
+			p.svc = svc
+
 			unique := uuid.New().String()
 			if testCase.emailBuilder != nil {
 				p.email = testCase.emailBuilder(t, p, unique)
@@ -149,7 +184,7 @@ func TestEmail(t *testing.T) {
 				p.email = fmt.Sprintf("user+%s@example.com", unique)
 			}
 
-			initiateParams := &proto.InitiateAuthParams{
+			commitParams := &proto.CommitVerifierParams{
 				Ecosystem: "123",
 				AuthKey: &proto.AuthKey{
 					KeyType:   proto.KeyType_P256K1,
@@ -157,11 +192,14 @@ func TestEmail(t *testing.T) {
 				},
 				AuthMode:     proto.AuthMode_OTP,
 				IdentityType: proto.IdentityType_Email,
-				Verifier:     p.email,
+				Handle:       p.email,
 			}
-			p.verifier, p.challenge, err = c.InitiateAuth(ctx, initiateParams)
-			if testCase.assertInitiateAuth != nil {
-				if proceed := testCase.assertInitiateAuth(t, p, err); !proceed {
+			if testCase.prepareCommitParams != nil {
+				testCase.prepareCommitParams(t, p, commitParams)
+			}
+			p.verifier, p.loginHint, p.challenge, err = c.CommitVerifier(ctx, commitParams)
+			if testCase.assertCommitVerifier != nil {
+				if proceed := testCase.assertCommitVerifier(t, p, err); !proceed {
 					return
 				}
 			}
@@ -173,7 +211,7 @@ func TestEmail(t *testing.T) {
 				code := testCase.extractAnswer(t, p)
 				answer := hexutil.Encode(crypto.Keccak256([]byte(p.challenge + code)))
 
-				registerParams := &proto.RegisterAuthParams{
+				completeParams := &proto.CompleteAuthParams{
 					Ecosystem: "123",
 					AuthKey: &proto.AuthKey{
 						KeyType:   proto.KeyType_P256K1,
@@ -184,9 +222,9 @@ func TestEmail(t *testing.T) {
 					Verifier:     p.verifier,
 					Answer:       answer,
 				}
-				p.signer, err = c.RegisterAuth(ctx, registerParams)
-				if testCase.assertRegisterAuth != nil {
-					proceed = testCase.assertRegisterAuth(t, p, err)
+				p.signer, err = c.CompleteAuth(ctx, completeParams)
+				if testCase.assertCompleteAuth != nil {
+					proceed = testCase.assertCompleteAuth(t, p, err)
 				}
 			}
 			if !proceed {
