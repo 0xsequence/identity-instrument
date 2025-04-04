@@ -26,18 +26,20 @@ import (
 	"github.com/goware/cachestore/memlru"
 )
 
-func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams) (string, string, error) {
+func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams) (string, string, string, error) {
+	att := attestation.FromContext(ctx)
+
 	if params == nil {
-		return "", "", fmt.Errorf("params is nil")
+		return "", "", "", fmt.Errorf("params is nil")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
 	if err != nil {
-		return "", "", fmt.Errorf("get auth handler: %w", err)
+		return "", "", "", fmt.Errorf("get auth handler: %w", err)
 	}
 
 	if !authHandler.Supports(params.IdentityType) {
-		return "", "", fmt.Errorf("unsupported identity type: %v", params.IdentityType)
+		return "", "", "", fmt.Errorf("unsupported identity type: %v", params.IdentityType)
 	}
 
 	var commitment *proto.AuthCommitmentData
@@ -45,23 +47,43 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 		Ecosystem:    params.Ecosystem,
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
-		Verifier:     params.Verifier,
+		Verifier:     params.Handle,
 	}
+
+	var signer *proto.SignerData
+	if params.Signer != "" {
+		authID.Verifier = params.Signer
+		dbSigner, found, err := s.Signers.GetByAddress(ctx, params.Ecosystem, params.Signer)
+		if err != nil {
+			return "", "", "", fmt.Errorf("get signer: %w", err)
+		}
+		if !found {
+			return "", "", "", fmt.Errorf("signer not found")
+		}
+		signer, err = dbSigner.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+		if err != nil {
+			return "", "", "", fmt.Errorf("decrypt signer data: %w", err)
+		}
+		if signer.Identity.Type != params.IdentityType {
+			return "", "", "", fmt.Errorf("signer identity type mismatch")
+		}
+	}
+
 	if authID.Verifier != "" {
 		dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 		if err != nil {
-			return "", "", fmt.Errorf("getting commitment: %w", err)
+			return "", "", "", fmt.Errorf("getting commitment: %w", err)
 		}
 		if found && dbCommitment != nil {
-			commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, s.EncryptionPool)
+			commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 			if err != nil {
-				return "", "", fmt.Errorf("decrypting commitment data: %w", err)
+				return "", "", "", fmt.Errorf("decrypting commitment data: %w", err)
 			}
 		}
 	}
 
 	storeFn := func(ctx context.Context, commitment *proto.AuthCommitmentData) error {
-		encryptedData, err := data.Encrypt(ctx, s.EncryptionPool, commitment)
+		encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
 		if err != nil {
 			return fmt.Errorf("encrypting commitment: %w", err)
 		}
@@ -71,7 +93,7 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 				Ecosystem:    commitment.Ecosystem,
 				AuthMode:     commitment.AuthMode,
 				IdentityType: commitment.IdentityType,
-				Verifier:     commitment.Verifier,
+				Verifier:     commitment.Verifier(),
 			},
 			EncryptedData: encryptedData,
 		}
@@ -86,10 +108,10 @@ func (s *RPC) InitiateAuth(ctx context.Context, params *proto.InitiateAuthParams
 		return nil
 	}
 
-	return authHandler.Commit(ctx, authID, commitment, params.AuthKey, params.Metadata, storeFn)
+	return authHandler.Commit(ctx, authID, commitment, signer, params.AuthKey, params.Metadata, storeFn)
 }
 
-func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams) (string, error) {
+func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (string, error) {
 	att := attestation.FromContext(ctx)
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
@@ -109,7 +131,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		return "", fmt.Errorf("get commitment: %w", err)
 	}
 	if found && dbCommitment != nil {
-		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, s.EncryptionPool)
+		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
 			return "", fmt.Errorf("decrypt commitment data: %w", err)
 		}
@@ -141,7 +163,15 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		return "", fmt.Errorf("retrieve signer: %w", err)
 	}
 
+	if dbSigner != nil && commitment.Signer != "" && dbSigner.Address != commitment.Signer {
+		return "", fmt.Errorf("signer address mismatch")
+	}
+
 	if !signerFound {
+		if commitment.Signer != "" {
+			return "", fmt.Errorf("signer not found")
+		}
+
 		signer, err := ecdsa.GenerateKey(secp256k1.S256(), att)
 		if err != nil {
 			return "", fmt.Errorf("generate signer: %w", err)
@@ -152,7 +182,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 			Identity:   &ident,
 			PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
 		}
-		encData, err := data.Encrypt(ctx, s.EncryptionPool, signerData)
+		encData, err := data.Encrypt(ctx, att, s.EncryptionPool, signerData)
 		if err != nil {
 			return "", fmt.Errorf("encrypt signer data: %w", err)
 		}
@@ -176,7 +206,7 @@ func (s *RPC) RegisterAuth(ctx context.Context, params *proto.RegisterAuthParams
 		Expiry:        time.Now().Add(ttl),
 	}
 
-	encData, err := data.Encrypt(ctx, s.EncryptionPool, authKeyData)
+	encData, err := data.Encrypt(ctx, att, s.EncryptionPool, authKeyData)
 	if err != nil {
 		return "", fmt.Errorf("encrypt auth key data: %w", err)
 	}
