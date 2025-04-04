@@ -15,10 +15,11 @@ type Handler interface {
 		ctx context.Context,
 		authID proto.AuthID,
 		commitment *proto.AuthCommitmentData,
+		signer *proto.SignerData,
 		authKey *proto.AuthKey,
 		metadata map[string]string,
 		storeFn StoreCommitmentFn,
-	) (resVerifier string, challenge string, err error)
+	) (resVerifier string, loginHint string, challenge string, err error)
 
 	Verify(
 		ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string,
