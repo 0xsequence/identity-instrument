@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -215,26 +216,24 @@ func (s *RPC) Handler() http.Handler {
 
 	// Healthcheck
 	r.Use(middleware.PageRoute("/health", http.HandlerFunc(s.healthHandler)))
+	r.Use(middleware.PageRoute("/status", http.HandlerFunc(s.statusHandler)))
 
 	r.Handle("/rpc/IdentityInstrument/*", proto.NewIdentityInstrumentServer(s))
 
 	return r
 }
 
-/*
 func (s *RPC) statusHandler(w http.ResponseWriter, r *http.Request) {
-	status := &proto.RuntimeStatus{
-		HealthOK:  true,
-		StartTime: s.startTime,
-		Uptime:    uint64(time.Now().UTC().Sub(s.startTime).Seconds()),
-		Ver:       waasauthenticator.VERSION,
-		PCR0:      s.measurements.PCR0,
+	status := map[string]interface{}{
+		"startTime": s.startTime,
+		"uptime":    uint64(time.Now().UTC().Sub(s.startTime).Seconds()),
+		"ver":       identityInstrument.VERSION,
+		"pcr0":      s.measurements.PCR0,
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	_ = json.NewEncoder(w).Encode(status)
 }
-*/
 
 func (s *RPC) healthHandler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
