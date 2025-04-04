@@ -14,6 +14,7 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/attestation"
 	"github.com/0xsequence/identity-instrument/proto"
+	"github.com/0xsequence/identity-instrument/rpc/ecosystem"
 )
 
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error) {
@@ -66,7 +67,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", fmt.Errorf("unknown key type")
 	}
 
-	dbAuthKey, found, err := s.AuthKeys.Get(ctx, params.Ecosystem, params.AuthKey.String())
+	dbAuthKey, found, err := s.AuthKeys.Get(ctx, ecosystem.FromContext(ctx), params.AuthKey.String())
 	if err != nil {
 		return "", fmt.Errorf("get auth key: %w", err)
 	}
@@ -91,7 +92,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", fmt.Errorf("signer mismatch")
 	}
 
-	dbSigner, found, err := s.Signers.GetByAddress(ctx, params.Ecosystem, authKeyData.SignerAddress)
+	dbSigner, found, err := s.Signers.GetByAddress(ctx, ecosystem.FromContext(ctx), authKeyData.SignerAddress)
 	if err != nil {
 		return "", fmt.Errorf("get signer: %w", err)
 	}

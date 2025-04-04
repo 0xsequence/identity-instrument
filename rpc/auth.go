@@ -19,6 +19,7 @@ import (
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/proto/builder"
+	"github.com/0xsequence/identity-instrument/rpc/ecosystem"
 	"github.com/0xsequence/identity-instrument/rpc/email"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -44,7 +45,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 
 	var commitment *proto.AuthCommitmentData
 	authID := proto.AuthID{
-		Ecosystem:    params.Ecosystem,
+		Ecosystem:    ecosystem.FromContext(ctx),
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
 		Verifier:     params.Handle,
@@ -53,7 +54,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	var signer *proto.SignerData
 	if params.Signer != "" {
 		authID.Verifier = params.Signer
-		dbSigner, found, err := s.Signers.GetByAddress(ctx, params.Ecosystem, params.Signer)
+		dbSigner, found, err := s.Signers.GetByAddress(ctx, ecosystem.FromContext(ctx), params.Signer)
 		if err != nil {
 			return "", "", "", fmt.Errorf("get signer: %w", err)
 		}
@@ -121,7 +122,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	var commitment *proto.AuthCommitmentData
 	authID := proto.AuthID{
-		Ecosystem:    params.Ecosystem,
+		Ecosystem:    ecosystem.FromContext(ctx),
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
 		Verifier:     params.Verifier,
@@ -158,7 +159,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	// always use normalized email address
 	ident.Email = email.Normalize(ident.Email)
 
-	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, params.Ecosystem, ident)
+	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, ecosystem.FromContext(ctx), ident)
 	if err != nil {
 		return "", fmt.Errorf("retrieve signer: %w", err)
 	}
@@ -178,7 +179,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 
 		signerData := &proto.SignerData{
-			Ecosystem:  params.Ecosystem,
+			Ecosystem:  ecosystem.FromContext(ctx),
 			Identity:   &ident,
 			PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
 		}
@@ -187,7 +188,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			return "", fmt.Errorf("encrypt signer data: %w", err)
 		}
 		dbSigner = &data.Signer{
-			Ecosystem:     params.Ecosystem,
+			Ecosystem:     ecosystem.FromContext(ctx),
 			Address:       crypto.PubkeyToAddress(signer.PublicKey).Hex(),
 			Identity:      data.Identity(ident),
 			EncryptedData: encData,
@@ -199,7 +200,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	ttl := 5 * time.Minute
 	authKeyData := &proto.AuthKeyData{
-		Ecosystem:     params.Ecosystem,
+		Ecosystem:     ecosystem.FromContext(ctx),
 		SignerAddress: dbSigner.Address,
 		KeyType:       params.AuthKey.KeyType,
 		PublicKey:     params.AuthKey.PublicKey,
@@ -212,7 +213,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	}
 
 	dbAuthKey := &data.AuthKey{
-		Ecosystem:     params.Ecosystem,
+		Ecosystem:     ecosystem.FromContext(ctx),
 		KeyID:         params.AuthKey.String(),
 		EncryptedData: encData,
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
+	"github.com/0xsequence/identity-instrument/rpc/ecosystem"
 	"github.com/0xsequence/nitrocontrol/enclave"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -208,17 +209,30 @@ func (s *RPC) Handler() http.Handler {
 	// Timeout any request after 28 seconds as Cloudflare has a 30 second limit anyways.
 	r.Use(middleware.Timeout(28 * time.Second))
 
-	// Observability middleware
-	r.Use(o11y.Middleware())
+	r.Group(func(r chi.Router) {
+		// Observability middleware
+		r.Use(o11y.Middleware())
 
-	// Generate attestation document
-	r.Use(attestation.Middleware(s.Enclave))
+		// Generate attestation document
+		r.Use(attestation.Middleware(s.Enclave))
 
-	// Healthcheck
-	r.Use(middleware.PageRoute("/health", http.HandlerFunc(s.healthHandler)))
-	r.Use(middleware.PageRoute("/status", http.HandlerFunc(s.statusHandler)))
+		// Healthcheck
+		r.Use(middleware.PageRoute("/health", http.HandlerFunc(s.healthHandler)))
+		r.Use(middleware.PageRoute("/status", http.HandlerFunc(s.statusHandler)))
+	})
 
-	r.Handle("/rpc/IdentityInstrument/*", proto.NewIdentityInstrumentServer(s))
+	r.Group(func(r chi.Router) {
+		// Ecosystem middleware
+		r.Use(ecosystem.Middleware())
+
+		// Observability middleware
+		r.Use(o11y.Middleware())
+
+		// Generate attestation document
+		r.Use(attestation.Middleware(s.Enclave))
+
+		r.Handle("/rpc/IdentityInstrument/*", proto.NewIdentityInstrumentServer(s))
+	})
 
 	return r
 }
