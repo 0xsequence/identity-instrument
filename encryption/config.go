@@ -3,12 +3,14 @@ package encryption
 import (
 	"context"
 	"io"
+
+	"github.com/0xsequence/nitrocontrol/enclave"
 )
 
 type Cryptor interface {
 	CryptorID() string
-	Encrypt(ctx context.Context, plaintext []byte) (string, error)
-	Decrypt(ctx context.Context, ciphertext string) ([]byte, error)
+	Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (string, error)
+	Decrypt(ctx context.Context, att *enclave.Attestation, ciphertext string) ([]byte, error)
 }
 
 type Config struct {
