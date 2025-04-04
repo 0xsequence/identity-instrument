@@ -10,20 +10,24 @@ import (
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	ethcrypto "github.com/0xsequence/ethkit/go-ethereum/crypto"
-	"github.com/0xsequence/identity-instrument/attestation"
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/proto"
 )
 
 type AuthHandler struct {
-	senders map[proto.IdentityType]Sender
+	senders        map[proto.IdentityType]Sender
+	randomProvider func(ctx context.Context) io.Reader
 }
 
 var _ auth.Handler = (*AuthHandler)(nil)
 
-func NewAuthHandler(senders map[proto.IdentityType]Sender) *AuthHandler {
+func NewAuthHandler(
+	randomProvider func(ctx context.Context) io.Reader,
+	senders map[proto.IdentityType]Sender,
+) *AuthHandler {
 	return &AuthHandler{
-		senders: senders,
+		senders:        senders,
+		randomProvider: randomProvider,
 	}
 }
 
@@ -44,8 +48,6 @@ func (h *AuthHandler) Commit(
 	_metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, resChallenge string, err error) {
-	att := attestation.FromContext(ctx)
-
 	sender, ok := h.senders[authID.IdentityType]
 	if !ok {
 		return "", "", "", fmt.Errorf("unsupported identity type: %v", authID.IdentityType)
@@ -62,18 +64,20 @@ func (h *AuthHandler) Commit(
 		loginHint = recipient
 	}
 
+	randomSource := h.randomProvider(ctx)
+
 	// generate the secret verification code to be sent to the user
-	secretCode, err := randomDigits(att, 6)
+	secretCode, err := randomDigits(randomSource, 6)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to generate secret code: %w", err)
 	}
 	// client salt is sent back to the client in the intent response
-	clientSalt, err := randomHex(att, 12)
+	clientSalt, err := randomHex(randomSource, 12)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to generate client salt: %w", err)
 	}
 	// server salt is sent to the WaaS API and stored in the auth session
-	serverSalt, err := randomHex(att, 12)
+	serverSalt, err := randomHex(randomSource, 12)
 	if err != nil {
 		return "", "", "", fmt.Errorf("failed to generate server salt: %w", err)
 	}

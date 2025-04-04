@@ -10,7 +10,6 @@ import (
 	"time"
 
 	identityInstrument "github.com/0xsequence/identity-instrument"
-	"github.com/0xsequence/identity-instrument/attestation"
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/data"
@@ -18,7 +17,8 @@ import (
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
-	"github.com/0xsequence/identity-instrument/rpc/ecosystem"
+	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
+	"github.com/0xsequence/identity-instrument/rpc/internal/ecosystem"
 	"github.com/0xsequence/nitrocontrol/enclave"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"

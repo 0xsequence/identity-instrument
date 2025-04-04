@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
-	"github.com/0xsequence/identity-instrument/attestation"
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/auth/idtoken"
 	"github.com/0xsequence/identity-instrument/proto"
@@ -26,6 +25,7 @@ type AuthHandler struct {
 	idTokenHandler *idtoken.AuthHandler
 	secretStore    cachestore.Store[string]
 	secretProvider SecretProvider
+	randomProvider func(ctx context.Context) io.Reader
 }
 
 var _ auth.Handler = (*AuthHandler)(nil)
@@ -35,6 +35,7 @@ func NewAuthHandler(
 	client idtoken.HTTPClient,
 	idTokenHandler *idtoken.AuthHandler,
 	secretProvider SecretProvider,
+	randomProvider func(ctx context.Context) io.Reader,
 ) (auth.Handler, error) {
 	if client == nil {
 		client = http.DefaultClient
@@ -51,6 +52,7 @@ func NewAuthHandler(
 		idTokenHandler: idTokenHandler,
 		secretStore:    secretStore,
 		secretProvider: secretProvider,
+		randomProvider: randomProvider,
 	}, nil
 }
 
@@ -67,9 +69,7 @@ func (h *AuthHandler) Commit(
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, challenge string, err error) {
-	att := attestation.FromContext(ctx)
-
-	codeVerifier, err := randomHex(att, 32)
+	codeVerifier, err := randomHex(h.randomProvider(ctx), 32)
 	if err != nil {
 		return "", "", "", fmt.Errorf("generate code verifier: %w", err)
 	}

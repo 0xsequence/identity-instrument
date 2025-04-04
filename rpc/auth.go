@@ -4,12 +4,12 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
-	"github.com/0xsequence/identity-instrument/attestation"
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/auth/authcode"
 	"github.com/0xsequence/identity-instrument/auth/idtoken"
@@ -19,8 +19,9 @@ import (
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/proto/builder"
-	"github.com/0xsequence/identity-instrument/rpc/ecosystem"
 	"github.com/0xsequence/identity-instrument/rpc/email"
+	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
+	"github.com/0xsequence/identity-instrument/rpc/internal/ecosystem"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -239,6 +240,9 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		return nil, err
 	}
 
+	randomProvider := func(ctx context.Context) io.Reader {
+		return attestation.FromContext(ctx)
+	}
 	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, ecosystem string, iss string, aud string) (string, error) {
 		secretName := "oauth/" + ecosystem + "/" + encodeValueForSecretName(iss) + "/" + encodeValueForSecretName(aud)
 
@@ -253,7 +257,7 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		}
 		return *secret.SecretString, nil
 	})
-	authCodeHandler, err := authcode.NewAuthHandler(cacheBackend, s.HTTPClient, idTokenHandler, secretProvider)
+	authCodeHandler, err := authcode.NewAuthHandler(cacheBackend, s.HTTPClient, idTokenHandler, secretProvider, randomProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +266,7 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		cfg.Builder.BaseURL,
 		builder.NewAuthenticatedClient(s.HTTPClient, s.Secrets, cfg.Builder.SecretID),
 	)
-	otpHandler := otp.NewAuthHandler(map[proto.IdentityType]otp.Sender{
+	otpHandler := otp.NewAuthHandler(randomProvider, map[proto.IdentityType]otp.Sender{
 		proto.IdentityType_Email: email.NewSender(builderClient, awsCfg, cfg.SES),
 	})
 
