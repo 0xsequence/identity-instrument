@@ -61,40 +61,46 @@ func (*AuthHandler) Supports(identityType proto.IdentityType) bool {
 func (h *AuthHandler) Commit(
 	ctx context.Context,
 	authID proto.AuthID,
-	commitment *proto.AuthCommitmentData,
+	_commitment *proto.AuthCommitmentData,
+	signer *proto.SignerData,
 	authKey *proto.AuthKey,
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
-) (resVerifier string, challenge string, err error) {
+) (resVerifier string, loginHint string, challenge string, err error) {
 	att := attestation.FromContext(ctx)
-
-	if commitment != nil {
-		return "", "", fmt.Errorf("cannot reuse an old commitment")
-	}
 
 	codeVerifier, err := randomHex(att, 32)
 	if err != nil {
-		return "", "", fmt.Errorf("generate code verifier: %w", err)
+		return "", "", "", fmt.Errorf("generate code verifier: %w", err)
 	}
 	codeVerifierHash := sha256.Sum256([]byte(codeVerifier))
 	codeChallenge := base64.RawURLEncoding.EncodeToString(codeVerifierHash[:])
 
-	commitment = &proto.AuthCommitmentData{
+	commitment := &proto.AuthCommitmentData{
 		Ecosystem:    authID.Ecosystem,
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
-		Verifier:     codeChallenge,
+		Handle:       codeChallenge,
 		Answer:       codeVerifier,
 		Challenge:    codeChallenge,
 		Metadata:     metadata,
 		Expiry:       time.Now().Add(5 * time.Minute),
 	}
-	if err := storeFn(ctx, commitment); err != nil {
-		return "", "", err
+
+	if signer != nil {
+		loginHint = signer.Identity.Subject
+		commitment.Signer, err = signer.Address()
+		if err != nil {
+			return "", "", "", fmt.Errorf("failed to get signer address: %w", err)
+		}
 	}
 
-	return commitment.Verifier, commitment.Challenge, nil
+	if err := storeFn(ctx, commitment); err != nil {
+		return "", "", "", fmt.Errorf("store commitment: %w", err)
+	}
+
+	return commitment.Verifier(), loginHint, commitment.Challenge, nil
 }
 
 func (h *AuthHandler) Verify(
