@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
+	"crypto/sha256"
 	"fmt"
 	"math/big"
 	"strings"
@@ -57,9 +58,10 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 			Y:     y,
 		}
 
+		digestHash := sha256.Sum256(digestBytes)
 		r := new(big.Int).SetBytes(sigBytes[:32])
 		s := new(big.Int).SetBytes(sigBytes[32:64])
-		if !ecdsa.Verify(&pub, digestBytes, r, s) {
+		if !ecdsa.Verify(&pub, digestHash[:], r, s) {
 			return "", fmt.Errorf("invalid auth key signature")
 		}
 
