@@ -19,7 +19,12 @@ import (
 )
 
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error) {
-	att := attestation.FromContext(ctx)
+	if params == nil {
+		return "", fmt.Errorf("params is required")
+	}
+	if params.AuthKey == nil {
+		return "", fmt.Errorf("auth key is required")
+	}
 
 	digestBytes := common.FromHex(params.Digest)
 	sigBytes := common.FromHex(params.Signature)
@@ -77,7 +82,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", fmt.Errorf("auth key not found")
 	}
 
-	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
 	if err != nil {
 		return "", fmt.Errorf("decrypt auth key data: %w", err)
 	}
@@ -102,7 +107,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", fmt.Errorf("signer not found")
 	}
 
-	signerData, err := dbSigner.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+	signerData, err := dbSigner.EncryptedData.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
 	if err != nil {
 		return "", fmt.Errorf("decrypt signer data: %w", err)
 	}

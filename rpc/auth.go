@@ -32,7 +32,10 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	att := attestation.FromContext(ctx)
 
 	if params == nil {
-		return "", "", "", fmt.Errorf("params is nil")
+		return "", "", "", fmt.Errorf("params is required")
+	}
+	if params.AuthKey == nil {
+		return "", "", "", fmt.Errorf("auth key is required")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
@@ -115,6 +118,13 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 
 func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (string, error) {
 	att := attestation.FromContext(ctx)
+
+	if params == nil {
+		return "", fmt.Errorf("params is required")
+	}
+	if params.AuthKey == nil {
+		return "", fmt.Errorf("auth key is required")
+	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
 	if err != nil {
