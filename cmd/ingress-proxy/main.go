@@ -99,6 +99,8 @@ func proxy(httpClient *http.Client) http.Handler {
 		}
 		copyHeader(clientReq.Header, r.Header)
 
+		clientReq.Header.Set("X-Sequence-Ecosystem", os.Getenv("SEQUENCE_ECOSYSTEM"))
+
 		res, err := httpClient.Do(clientReq.WithContext(r.Context()))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
