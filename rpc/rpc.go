@@ -204,7 +204,7 @@ func (s *RPC) Handler() http.Handler {
 	r.Use(traceid.Middleware)
 
 	// HTTP request logger
-	r.Use(httplog.RequestLogger(s.Log, []string{"/", "/ping", "/status", "/favicon.ico"}))
+	r.Use(httplog.RequestLogger(s.Log))
 
 	// Timeout any request after 28 seconds as Cloudflare has a 30 second limit anyways.
 	r.Use(middleware.Timeout(28 * time.Second))
@@ -217,8 +217,8 @@ func (s *RPC) Handler() http.Handler {
 		r.Use(attestation.Middleware(s.Enclave))
 
 		// Healthcheck
-		r.Use(middleware.PageRoute("/health", http.HandlerFunc(s.healthHandler)))
-		r.Use(middleware.PageRoute("/status", http.HandlerFunc(s.statusHandler)))
+		r.Handle("/health", http.HandlerFunc(s.healthHandler))
+		r.Handle("/status", http.HandlerFunc(s.statusHandler))
 	})
 
 	r.Group(func(r chi.Router) {
