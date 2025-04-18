@@ -13,7 +13,7 @@ github.com/0xsequence/ethkit/go-ethereum/crypto/secp256k1/libsecp256k1/src
 github.com/0xsequence/ethkit/go-ethereum/crypto/secp256k1/libsecp256k1/src/modules/recovery
 github.com/0xsequence/ethkit/go-ethereum/rlp
 github.com/0xsequence/ethkit/go-ethereum/rlp/internal/rlpstruct
-# github.com/0xsequence/nitrocontrol v0.3.0
+# github.com/0xsequence/nitrocontrol v0.4.1
 ## explicit; go 1.21
 github.com/0xsequence/nitrocontrol/aescbc
 github.com/0xsequence/nitrocontrol/cms

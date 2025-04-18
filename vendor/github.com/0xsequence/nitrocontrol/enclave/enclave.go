@@ -53,14 +53,14 @@ func New(ctx context.Context, provider Provider, kms KMS, optPrivKey ...*rsa.Pri
 // cryptographic operations with AWS KMS.
 //
 // NOTE: Attestation must always be Closed manually after use.
-func (e *Enclave) GetAttestation(ctx context.Context, nonce []byte) (*Attestation, error) {
+func (e *Enclave) GetAttestation(ctx context.Context, nonce []byte, userData []byte) (*Attestation, error) {
 	sess, err := e.provider(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("open NSM session: %w", err)
 	}
 
 	res, err := sess.Send(&request.Attestation{
-		UserData:  nil,
+		UserData:  userData,
 		Nonce:     nonce,
 		PublicKey: e.pkixPubKey,
 	})

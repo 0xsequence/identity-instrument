@@ -7,7 +7,7 @@ replace github.com/imdario/mergo => dario.cat/mergo v1.0.0
 
 require (
 	github.com/0xsequence/ethkit v1.30.6
-	github.com/0xsequence/nitrocontrol v0.3.0
+	github.com/0xsequence/nitrocontrol v0.4.1
 	github.com/BurntSushi/toml v1.4.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.27.26
