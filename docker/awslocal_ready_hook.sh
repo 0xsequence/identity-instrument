@@ -8,8 +8,13 @@ fi
 
 
 if [ -n "$GOOGLE_CLIENT_ID" ] && [ -n "$GOOGLE_CLIENT_SECRET" ]; then
-  awslocal secretsmanager create-secret --name "oauth/1/accounts.google.com/$GOOGLE_CLIENT_ID" --secret-string "$GOOGLE_CLIENT_SECRET"
-  awslocal secretsmanager create-secret --name "oauth/694/accounts.google.com/$GOOGLE_CLIENT_ID" --secret-string "$GOOGLE_CLIENT_SECRET"
+  awslocal secretsmanager create-secret --name "oauth/1/accounts.google.com/$GOOGLE_CLIENT_ID" --secret-string "{\"value\":\"$GOOGLE_CLIENT_SECRET\"}"
+  awslocal secretsmanager create-secret --name "oauth/694/accounts.google.com/$GOOGLE_CLIENT_ID" --secret-string "{\"value\":\"$GOOGLE_CLIENT_SECRET\"}"
+fi
+
+if [ -n "$APPLE_CLIENT_ID" ] && [ -n "$APPLE_PRIVATE_KEY" ] && [ -n "$APPLE_KEY_ID" ] && [ -n "$APPLE_TEAM_ID" ]; then
+  awslocal secretsmanager create-secret --name "oauth/1/appleid.apple.com/$APPLE_CLIENT_ID" --secret-string "{\"generate_jwt\":{\"claims\":{\"iss\":\"$APPLE_TEAM_ID\",\"aud\":\"https://appleid.apple.com\",\"sub\":\"$APPLE_CLIENT_ID\"},\"signing_key\":{\"private_key\":\"$APPLE_PRIVATE_KEY\",\"kid\":\"$APPLE_KEY_ID\",\"alg\":\"ES256\"}}}"
+  awslocal secretsmanager create-secret --name "oauth/694/appleid.apple.com/$APPLE_CLIENT_ID" --secret-string "{\"generate_jwt\":{\"claims\":{\"iss\":\"$APPLE_TEAM_ID\",\"aud\":\"https://appleid.apple.com\",\"sub\":\"$APPLE_CLIENT_ID\"},\"signing_key\":{\"private_key\":\"$APPLE_PRIVATE_KEY\",\"kid\":\"$APPLE_KEY_ID\",\"alg\":\"ES256\"}}}"
 fi
 
 awslocal kms create-key --region us-east-1 --tags '[{"TagKey":"_custom_id_","TagValue":"27ebbde0-49d2-4cb6-ad78-4f2c24fe7b79"}]'
