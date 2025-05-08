@@ -283,6 +283,7 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 
 	handlers := map[proto.AuthMode]auth.Handler{
 		proto.AuthMode_IDToken:      o11y.NewTracedAuthHandler("idtoken.AuthProvider", idTokenHandler),
+		proto.AuthMode_AuthCode:     o11y.NewTracedAuthHandler("authcode.AuthProvider", authCodeHandler),
 		proto.AuthMode_AuthCodePKCE: o11y.NewTracedAuthHandler("authcode.AuthProvider", authCodeHandler),
 		proto.AuthMode_OTP:          o11y.NewTracedAuthHandler("otp.AuthProvider", otpHandler),
 	}
