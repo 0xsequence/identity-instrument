@@ -168,7 +168,7 @@ func deriveKey(t *testing.T, source string) *ecdsa.PrivateKey {
 
 func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string, source string) string {
 	ctx := context.Background()
-	att, err := svc.Enclave.GetAttestation(ctx, nil)
+	att, err := svc.Enclave.GetAttestation(ctx, nil, nil)
 	require.NoError(t, err)
 
 	signer := deriveKey(t, source)
