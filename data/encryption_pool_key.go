@@ -2,27 +2,34 @@ package data
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type EncryptionPoolKey struct {
 	// Generation is a sequence number of the encryption config used to encrypt the shares of this key.
-	Generation int `dynamodbav:"Generation"`
+	Generation int `dynamodbav:"Generation" cbor:"0,keyasint"`
 	// KeyIndex is the index of the key within the config version.
-	KeyIndex int `dynamodbav:"KeyIndex"`
+	KeyIndex int `dynamodbav:"KeyIndex" cbor:"1,keyasint"`
 	// KeyRef uniquely identifies the private key material.
-	KeyRef string `dynamodbav:"KeyRef"`
+	KeyRef string `dynamodbav:"KeyRef" cbor:"2,keyasint"`
 
-	EncryptedShares map[string]string `dynamodbav:"EncryptedShares"`
+	// EncryptedShares is a map of remote key references to encrypted share values.
+	EncryptedShares map[string]string `dynamodbav:"EncryptedShares" cbor:"3,keyasint"`
 
-	Attestation []byte `dynamodbav:"Attestation"`
+	// Attestation is the Nitro attestation document with the EncryptionPoolKey's Hash as UserData.
+	Attestation []byte `dynamodbav:"Attestation" cbor:"-"`
+
+	CreatedAt time.Time `dynamodbav:"CreatedAt" cbor:"4,keyasint"`
 }
 
 func (k *EncryptionPoolKey) Key() map[string]types.AttributeValue {
@@ -30,6 +37,21 @@ func (k *EncryptionPoolKey) Key() map[string]types.AttributeValue {
 		"Generation": &types.AttributeValueMemberN{Value: strconv.Itoa(k.Generation)},
 		"KeyIndex":   &types.AttributeValueMemberN{Value: strconv.Itoa(k.KeyIndex)},
 	}
+}
+
+func (k *EncryptionPoolKey) Hash() ([]byte, error) {
+	enc, err := cbor.CanonicalEncOptions().EncMode()
+	if err != nil {
+		return nil, fmt.Errorf("create canonical encoder: %w", err)
+	}
+	b, err := enc.Marshal(k)
+	if err != nil {
+		return nil, fmt.Errorf("marshal hash payload: %w", err)
+	}
+
+	h := sha256.New()
+	h.Write(b)
+	return h.Sum(nil), nil
 }
 
 type EncryptionPoolKeyIndices struct {

@@ -7,21 +7,25 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/encryption/shamir"
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/nitrocontrol/aescbc"
 	"github.com/0xsequence/nitrocontrol/enclave"
+	"github.com/0xsequence/tee-verifier/nitro"
 )
 
 type Pool struct {
+	enclave   *enclave.Enclave
 	configs   []*Config
 	keysTable *data.EncryptionPoolKeyTable
 }
 
-func NewPool(configs []*Config, keysTable *data.EncryptionPoolKeyTable) *Pool {
+func NewPool(enc *enclave.Enclave, configs []*Config, keysTable *data.EncryptionPoolKeyTable) *Pool {
 	return &Pool{
+		enclave:   enc,
 		configs:   configs,
 		keysTable: keysTable,
 	}
@@ -54,6 +58,8 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 		if err != nil {
 			return "", "", fmt.Errorf("generate key: %w", err)
 		}
+	} else if err := p.verifyKey(ctx, att, key); err != nil {
+		return "", "", fmt.Errorf("verify key: %w", err)
 	}
 	span.SetAnnotation("key_ref", key.KeyRef)
 
@@ -103,6 +109,9 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 	}
 	if !found {
 		return nil, fmt.Errorf("key not found")
+	}
+	if err := p.verifyKey(ctx, att, key); err != nil {
+		return nil, fmt.Errorf("verify key: %w", err)
 	}
 
 	span.SetAnnotation("generation", strconv.Itoa(key.Generation))
@@ -190,7 +199,20 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 		KeyIndex:        keyIndex,
 		KeyRef:          keyRef,
 		EncryptedShares: encryptedShares,
+		CreatedAt:       time.Now(),
 	}
+
+	hash, err := key.Hash()
+	if err != nil {
+		return nil, nil, fmt.Errorf("hash key: %w", err)
+	}
+
+	keyAtt, err := p.enclave.GetAttestation(ctx, nil, hash)
+	if err != nil {
+		return nil, nil, fmt.Errorf("get attestation: %w", err)
+	}
+	key.Attestation = keyAtt.Document()
+	keyAtt.Close()
 
 	alreadyExists, err := p.keysTable.Create(ctx, key)
 	if err != nil {
@@ -206,10 +228,52 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 		if !found {
 			return nil, nil, fmt.Errorf("key not found")
 		}
+		if err := p.verifyKey(ctx, att, key); err != nil {
+			return nil, nil, fmt.Errorf("verify key: %w", err)
+		}
 		return key, privateKey, nil
 	}
 
 	return key, privateKey, nil
+}
+
+func (p *Pool) verifyKey(ctx context.Context, att *enclave.Attestation, key *data.EncryptionPoolKey) (err error) {
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.verifyKey")
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
+	hash, err := key.Hash()
+	if err != nil {
+		return fmt.Errorf("hash key: %w", err)
+	}
+
+	keyAtt, err := nitro.Parse(key.Attestation)
+	if err != nil {
+		return fmt.Errorf("parse attestation: %w", err)
+	}
+
+	opts := []nitro.ValidateOption{
+		nitro.WithExpectedUserData(hash),
+		// attestation is stored long-term, so we can only ensure it was valid at the time of creation
+		nitro.WithTime(keyAtt.Timestamp),
+		// only accept attestations created by the same IAM role
+		nitro.WithExpectedPCRs(map[int]string{
+			3: att.PCRs[3], // PCR3 is the hash of the IAM role
+		}),
+		// expect the same root certificate as the one attested by the enclave
+		nitro.WithRootFingerprint(att.RootCertFingerprint()),
+	}
+	if err := keyAtt.Validate(opts...); err != nil {
+		return fmt.Errorf("validate attestation: %w", err)
+	}
+
+	if err := keyAtt.Verify(); err != nil {
+		return fmt.Errorf("verify attestation: %w", err)
+	}
+
+	return nil
 }
 
 func (p *Pool) combineShares(ctx context.Context, att *enclave.Attestation, config *Config, shares map[string]string) (_ []byte, err error) {
