@@ -3,8 +3,10 @@ package authcode
 import (
 	"context"
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,6 +20,9 @@ import (
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/goware/cachestore"
 	"github.com/goware/cachestore/memlru"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 )
 
 type AuthHandler struct {
@@ -177,11 +182,25 @@ func (h *AuthHandler) GetClientSecret(ctx context.Context, ecosystem string, iss
 	}
 
 	secretName := ecosystem + "|" + iss + "|" + aud
-	secret, err := h.secretStore.GetOrSetWithLockEx(ctx, secretName, getter, ttl)
+	secretConfigString, err := h.secretStore.GetOrSetWithLockEx(ctx, secretName, getter, ttl)
 	if err != nil {
 		return "", fmt.Errorf("get secret: %w", err)
 	}
-	return secret, nil
+
+	var secretConfig SecretConfig
+	if err := json.Unmarshal([]byte(secretConfigString), &secretConfig); err != nil {
+		return "", fmt.Errorf("unmarshal secret config: %w", err)
+	}
+
+	if secretConfig.Value != nil {
+		return *secretConfig.Value, nil
+	}
+
+	if secretConfig.GenerateJWT != nil {
+		return generateClientSecretJWT(secretConfig.GenerateJWT)
+	}
+
+	return "", nil
 }
 
 func randomHex(source io.Reader, n int) (string, error) {
@@ -190,4 +209,49 @@ func randomHex(source io.Reader, n int) (string, error) {
 		return "", err
 	}
 	return hexutil.Encode(b), nil
+}
+
+func generateClientSecretJWT(config *GenerateJWT) (string, error) {
+	builder := jwt.NewBuilder().
+		Issuer(config.Claims.Issuer).
+		Audience([]string{config.Claims.Audience}).
+		Subject(config.Claims.Subject).
+		Expiration(time.Now().Add(5 * time.Minute))
+
+	token, err := builder.Build()
+	if err != nil {
+		return "", fmt.Errorf("build token: %w", err)
+	}
+
+	block, _ := pem.Decode([]byte(config.SigningKey.PrivateKey))
+	if block == nil {
+		return "", fmt.Errorf("invalid private key")
+	}
+
+	rawKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	if err != nil {
+		return "", fmt.Errorf("parse private key: %w", err)
+	}
+	jwtKey, err := jwk.FromRaw(rawKey)
+	if err != nil {
+		return "", fmt.Errorf("convert to jwk: %w", err)
+	}
+	jwtKey.Set(jwk.KeyIDKey, config.SigningKey.KeyID)
+
+	var alg jwa.SignatureAlgorithm
+	switch config.SigningKey.Algorithm {
+	case "ES256":
+		alg = jwa.ES256
+	case "RS256":
+		alg = jwa.RS256
+	default:
+		return "", fmt.Errorf("unsupported signing key algorithm: %s", config.SigningKey.Algorithm)
+	}
+
+	signedToken, err := jwt.Sign(token, jwt.WithKey(alg, jwtKey))
+	if err != nil {
+		return "", fmt.Errorf("sign token: %w", err)
+	}
+
+	return string(signedToken), nil
 }
