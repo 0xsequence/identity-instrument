@@ -19,6 +19,7 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
+	"github.com/0xsequence/identity-instrument/auth/authcode"
 	proto "github.com/0xsequence/identity-instrument/proto/clients"
 	"github.com/0xsequence/identity-instrument/rpc"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -92,6 +93,104 @@ func TestOIDC(t *testing.T) {
 			IdentityType: proto.IdentityType_OIDC,
 			Verifier:     resVerifier,
 			Answer:       tok,
+		}
+		resSigner, err := c.CompleteAuth(ctx, registerParams)
+		require.NoError(t, err)
+		require.NotEmpty(t, resSigner)
+
+		digest := crypto.Keccak256([]byte("message"))
+		digestHex := hexutil.Encode(digest)
+		prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
+		sig, err := crypto.Sign(prefixedHash, authKey)
+		require.NoError(t, err)
+
+		signParams := &proto.SignParams{
+			AuthKey: &proto.AuthKey{
+				KeyType:   proto.KeyType_P256K1,
+				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			},
+			Signer:    resSigner,
+			Digest:    digestHex,
+			Signature: hexutil.Encode(sig),
+		}
+		resSignature, err := c.Sign(ctx, signParams)
+		require.NoError(t, err)
+
+		sigBytes := common.FromHex(resSignature)
+		if sigBytes[64] == 27 || sigBytes[64] == 28 {
+			sigBytes[64] -= 27
+		}
+
+		pub, err := crypto.Ecrecover(digest, sigBytes)
+		require.NoError(t, err)
+		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
+		assert.Equal(t, addr.String(), resSigner)
+	})
+
+	t.Run("AuthMode_AuthCode", func(t *testing.T) {
+		ctx := context.Background()
+
+		exp := time.Now().Add(120 * time.Second)
+		tokBuilderFn := func(b *jwt.Builder, url string) {
+			b.Expiration(exp)
+		}
+
+		svc := initRPC(t, nil)
+
+		authServer := newMockOAuth2Server(t, svc)
+		defer authServer.Close()
+		authServer.tokenBuilderFn = tokBuilderFn
+
+		issuer := authServer.URL()
+
+		authKey, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+		require.NoError(t, err)
+
+		srv := httptest.NewServer(svc.Handler())
+		defer srv.Close()
+
+		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
+		header := make(http.Header)
+		header.Set("X-Sequence-Ecosystem", "123")
+		ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
+		require.NoError(t, err)
+
+		code := authServer.authorize(map[string]string{
+			"client_id":    "audience",
+			"redirect_uri": "http://localhost:8080/callback",
+		})
+		require.NotEmpty(t, code)
+
+		codeHash := hexutil.Encode(crypto.Keccak256([]byte(code)))
+
+		initiateParams := &proto.CommitVerifierParams{
+			AuthKey: &proto.AuthKey{
+				KeyType:   proto.KeyType_P256K1,
+				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			},
+			AuthMode:     proto.AuthMode_AuthCode,
+			IdentityType: proto.IdentityType_OIDC,
+			Handle:       codeHash,
+			Metadata: map[string]string{
+				"iss": issuer,
+				"aud": "audience",
+			},
+		}
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams)
+		require.NoError(t, err)
+		require.NotEmpty(t, resVerifier)
+		require.Empty(t, challenge)
+		require.Empty(t, loginHint)
+
+		registerParams := &proto.CompleteAuthParams{
+			AuthKey: &proto.AuthKey{
+				KeyType:   proto.KeyType_P256K1,
+				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			},
+			AuthMode:     proto.AuthMode_AuthCode,
+			IdentityType: proto.IdentityType_OIDC,
+			Verifier:     resVerifier,
+			Answer:       code,
 		}
 		resSigner, err := c.CompleteAuth(ctx, registerParams)
 		require.NoError(t, err)
@@ -266,10 +365,16 @@ func newMockOAuth2Server(t *testing.T, svc *rpc.RPC) *mockOAuth2Server {
 
 	s.server = httptest.NewServer(mux)
 
+	secretConfig := &authcode.SecretConfig{
+		Value: &clientSecret,
+	}
+	secretConfigJSON, err := json.Marshal(secretConfig)
+	require.NoError(t, err)
+
 	secretName := "oauth/123/" + encodeValueForSecretName(s.URL()) + "/audience"
 	_, err = svc.Secrets.CreateSecret(context.Background(), &secretsmanager.CreateSecretInput{
 		Name:         aws.String(secretName),
-		SecretString: aws.String(clientSecret),
+		SecretString: aws.String(string(secretConfigJSON)),
 	})
 	require.NoError(t, err)
 
@@ -288,9 +393,6 @@ func (s *mockOAuth2Server) authorize(params map[string]string) string {
 	// Validate required PKCE parameters
 	codeChallenge := params["code_challenge"]
 	codeChallengeMethod := params["code_challenge_method"]
-
-	require.NotEmpty(s.t, codeChallenge)
-	require.NotEmpty(s.t, codeChallengeMethod)
 
 	// Generate authorization code
 	randBytes := make([]byte, 8)
