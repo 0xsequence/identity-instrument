@@ -72,7 +72,7 @@ func handler(client *http.Client) http.Handler {
 		ExposedHeaders: []string{
 			"Date", "Signature", "Signature-Input", "Content-Digest",
 			"X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset",
-			"Webrpc",
+			"Webrpc", "X-Attestation-Document",
 		},
 		MaxAge: 600,
 	}
