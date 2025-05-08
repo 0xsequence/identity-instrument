@@ -64,10 +64,10 @@ func (h *AuthHandler) Commit(
 
 	commitment, err = h.constructCommitment(authID, authKey, metadata)
 	if err != nil {
-		return "", "", "", fmt.Errorf("construct commitment: %w", err)
+		return "", "", "", err
 	}
 	if err := storeFn(ctx, commitment); err != nil {
-		return "", "", "", fmt.Errorf("store commitment: %w", err)
+		return "", "", "", err
 	}
 
 	return commitment.Handle, "", commitment.Challenge, nil
@@ -75,17 +75,17 @@ func (h *AuthHandler) Commit(
 
 func (h *AuthHandler) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (proto.Identity, error) {
 	if commitment == nil {
-		return proto.Identity{}, fmt.Errorf("commitment not found")
+		return proto.Identity{}, proto.ErrInvalidRequest.WithCausef("commitment not found")
 	}
 
 	expectedHash := hexutil.Encode(ethcrypto.Keccak256([]byte(answer)))
 	if commitment.Handle != expectedHash {
-		return proto.Identity{}, fmt.Errorf("invalid token hash")
+		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("invalid token hash")
 	}
 
 	vi, err := h.extractMetadata(commitment.Metadata)
 	if err != nil {
-		return proto.Identity{}, fmt.Errorf("extract metadata: %w", err)
+		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("extract metadata: %w", err)
 	}
 
 	return h.VerifyToken(ctx, answer, vi.issuer, vi.audience, h.getVerifyChallengeFunc(commitment))
@@ -100,12 +100,12 @@ func (h *AuthHandler) VerifyToken(
 ) (proto.Identity, error) {
 	tok, err := jwt.Parse([]byte(idToken), jwt.WithVerify(false), jwt.WithValidate(false))
 	if err != nil {
-		return proto.Identity{}, fmt.Errorf("parse JWT: %w", err)
+		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("parse JWT: %w", err)
 	}
 
 	if verifyChallenge != nil {
 		if err := verifyChallenge(tok); err != nil {
-			return proto.Identity{}, fmt.Errorf("verify challenge: %w", err)
+			return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("verify challenge: %w", err)
 		}
 	}
 
@@ -119,7 +119,7 @@ func (h *AuthHandler) VerifyToken(
 	}
 
 	if _, err := jws.Verify([]byte(idToken), jws.WithKeySet(ks, jws.WithMultipleKeysPerKeyID(false))); err != nil {
-		return proto.Identity{}, fmt.Errorf("signature verification: %w", err)
+		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("signature verification: %w", err)
 	}
 
 	validateOptions := []jwt.ValidateOption{
@@ -129,7 +129,7 @@ func (h *AuthHandler) VerifyToken(
 	}
 
 	if err := jwt.Validate(tok, validateOptions...); err != nil {
-		return proto.Identity{}, fmt.Errorf("JWT validation: %w", err)
+		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("JWT validation: %w", err)
 	}
 
 	identity := proto.Identity{
@@ -144,17 +144,17 @@ func (h *AuthHandler) VerifyToken(
 func (h *AuthHandler) GetKeySet(ctx context.Context, issuer string) (set jwk.Set, err error) {
 	openidConfig, err := h.GetOpenIDConfig(ctx, issuer)
 	if err != nil {
-		return nil, fmt.Errorf("fetch issuer keys: %w", err)
+		return nil, proto.ErrIdentityProviderError.WithCausef("fetch issuer keys: %w", err)
 	}
 
 	jwksURL := openidConfig.JWKSURL
 	if jwksURL == "" {
-		return nil, fmt.Errorf("jwks_uri not found in openid configuration")
+		return nil, proto.ErrIdentityProviderError.WithCausef("jwks_uri not found in openid configuration")
 	}
 
 	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(h.client))
 	if err != nil {
-		return nil, fmt.Errorf("fetch issuer keys: %w", err)
+		return nil, proto.ErrIdentityProviderError.WithCausef("fetch issuer keys: %w", err)
 	}
 	return keySet, nil
 }
@@ -168,7 +168,7 @@ func (h *AuthHandler) constructCommitment(
 	}
 
 	if time.Now().After(vi.expiresAt) {
-		return nil, fmt.Errorf("token expired")
+		return nil, proto.ErrProofVerificationFailed.WithCausef("token expired")
 	}
 
 	commitment := &proto.AuthCommitmentData{

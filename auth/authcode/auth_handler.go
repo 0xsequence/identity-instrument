@@ -71,7 +71,7 @@ func (h *AuthHandler) Commit(
 ) (resVerifier string, loginHint string, challenge string, err error) {
 	codeVerifier, err := randomHex(h.randomProvider(ctx), 32)
 	if err != nil {
-		return "", "", "", fmt.Errorf("generate code verifier: %w", err)
+		return "", "", "", proto.ErrInternalError.WithCausef("generate code verifier: %w", err)
 	}
 	codeVerifierHash := sha256.Sum256([]byte(codeVerifier))
 	codeChallenge := base64.RawURLEncoding.EncodeToString(codeVerifierHash[:])
@@ -92,12 +92,12 @@ func (h *AuthHandler) Commit(
 		loginHint = signer.Identity.Subject
 		commitment.Signer, err = signer.Address()
 		if err != nil {
-			return "", "", "", fmt.Errorf("failed to get signer address: %w", err)
+			return "", "", "", proto.ErrDataIntegrityError.WithCausef("failed to get signer address: %w", err)
 		}
 	}
 
 	if err := storeFn(ctx, commitment); err != nil {
-		return "", "", "", fmt.Errorf("store commitment: %w", err)
+		return "", "", "", err
 	}
 
 	return commitment.Verifier(), loginHint, commitment.Challenge, nil
@@ -110,7 +110,7 @@ func (h *AuthHandler) Verify(
 	answer string,
 ) (proto.Identity, error) {
 	if commitment == nil {
-		return proto.Identity{}, fmt.Errorf("commitment not found")
+		return proto.Identity{}, proto.ErrInvalidRequest.WithCausef("commitment not found")
 	}
 
 	iss := commitment.Metadata["iss"]
@@ -118,17 +118,17 @@ func (h *AuthHandler) Verify(
 
 	clientSecret, err := h.GetClientSecret(ctx, commitment.Ecosystem, iss, aud)
 	if err != nil {
-		return proto.Identity{}, fmt.Errorf("get client secret: %w", err)
+		return proto.Identity{}, proto.ErrDatabaseError.WithCausef("get client secret: %w", err)
 	}
 
 	openidConfig, err := h.idTokenHandler.GetOpenIDConfig(ctx, iss)
 	if err != nil {
-		return proto.Identity{}, fmt.Errorf("get openid config: %w", err)
+		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("get openid config: %w", err)
 	}
 
 	tokenEndpoint := openidConfig.TokenEndpoint
 	if tokenEndpoint == "" {
-		return proto.Identity{}, fmt.Errorf("token endpoint not found in openid configuration")
+		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("token endpoint not found in openid configuration")
 	}
 
 	data := url.Values{}
@@ -141,28 +141,28 @@ func (h *AuthHandler) Verify(
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
 	if err != nil {
-		return proto.Identity{}, fmt.Errorf("new request: %w", err)
+		return proto.Identity{}, proto.ErrInternalError.WithCausef("new request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return proto.Identity{}, fmt.Errorf("do request: %w", err)
+		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("do request: %w", err)
 	}
 	defer resp.Body.Close()
 
 	var body map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return proto.Identity{}, fmt.Errorf("decode response: %w", err)
+		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("decode response: %w", err)
 	}
 
 	if err, ok := body["error"]; ok {
-		return proto.Identity{}, fmt.Errorf("oauth error: %s: %s", err, body["error_description"])
+		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("oauth error: %s: %s", err, body["error_description"])
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return proto.Identity{}, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("unexpected status code: %d", resp.StatusCode)
 	}
 
 	idToken := body["id_token"].(string)

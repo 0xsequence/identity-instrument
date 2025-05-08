@@ -3,7 +3,6 @@ package otp
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
 	"io"
 	"math/big"
 	"time"
@@ -50,7 +49,7 @@ func (h *AuthHandler) Commit(
 ) (resVerifier string, loginHint string, resChallenge string, err error) {
 	sender, ok := h.senders[authID.IdentityType]
 	if !ok {
-		return "", "", "", fmt.Errorf("unsupported identity type: %v", authID.IdentityType)
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("unsupported identity type: %v", authID.IdentityType)
 	}
 
 	var recipient string
@@ -59,7 +58,7 @@ func (h *AuthHandler) Commit(
 	} else {
 		recipient, err = sender.NormalizeRecipient(authID.Verifier)
 		if err != nil {
-			return "", "", "", fmt.Errorf("invalid recipient: %w", err)
+			return "", "", "", proto.ErrInvalidRequest.WithCausef("invalid recipient: %w", err)
 		}
 		loginHint = recipient
 	}
@@ -69,17 +68,17 @@ func (h *AuthHandler) Commit(
 	// generate the secret verification code to be sent to the user
 	secretCode, err := randomDigits(randomSource, 6)
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate secret code: %w", err)
+		return "", "", "", proto.ErrInternalError.WithCausef("failed to generate secret code: %w", err)
 	}
 	// client salt is sent back to the client in the intent response
 	clientSalt, err := randomHex(randomSource, 12)
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate client salt: %w", err)
+		return "", "", "", proto.ErrInternalError.WithCausef("failed to generate client salt: %w", err)
 	}
 	// server salt is sent to the WaaS API and stored in the auth session
 	serverSalt, err := randomHex(randomSource, 12)
 	if err != nil {
-		return "", "", "", fmt.Errorf("failed to generate server salt: %w", err)
+		return "", "", "", proto.ErrInternalError.WithCausef("failed to generate server salt: %w", err)
 	}
 
 	// clientAnswer is the value that we expect the client to produce
@@ -105,16 +104,16 @@ func (h *AuthHandler) Commit(
 		loginHint = signer.Identity.Subject
 		commitment.Signer, err = signer.Address()
 		if err != nil {
-			return "", "", "", fmt.Errorf("failed to get signer address: %w", err)
+			return "", "", "", proto.ErrDataIntegrityError.WithCausef("failed to get signer address: %w", err)
 		}
 	}
 
 	if err := storeFn(ctx, commitment); err != nil {
-		return "", "", "", fmt.Errorf("failed to store commitment: %w", err)
+		return "", "", "", err
 	}
 
 	if err := sender.SendOTP(ctx, authID.Ecosystem, recipient, secretCode); err != nil {
-		return "", "", "", fmt.Errorf("failed to send OTP: %w", err)
+		return "", "", "", proto.ErrInternalError.WithCausef("failed to send OTP: %w", err)
 	}
 
 	// Client should combine the challenge from the response with the code from the email address and hash it.
@@ -134,13 +133,13 @@ func (h *AuthHandler) Verify(
 	answer string,
 ) (proto.Identity, error) {
 	if commitment == nil {
-		return proto.Identity{}, fmt.Errorf("commitment not found")
+		return proto.Identity{}, proto.ErrInvalidRequest.WithCausef("commitment not found")
 	}
 
 	// challenge here is the server salt; combined with the client's answer and hashed it produces the serverAnswer
 	serverAnswer := hexutil.Encode(ethcrypto.Keccak256([]byte(commitment.Challenge + answer)))
 	if serverAnswer != commitment.Answer {
-		return proto.Identity{}, fmt.Errorf("incorrect answer")
+		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("incorrect answer")
 	}
 	identity := proto.Identity{
 		Type:    commitment.IdentityType,

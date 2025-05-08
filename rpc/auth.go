@@ -32,19 +32,19 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	att := attestation.FromContext(ctx)
 
 	if params == nil {
-		return "", "", "", fmt.Errorf("params is required")
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("params is required")
 	}
 	if params.AuthKey == nil {
-		return "", "", "", fmt.Errorf("auth key is required")
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("auth key is required")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
 	if err != nil {
-		return "", "", "", fmt.Errorf("get auth handler: %w", err)
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("get auth handler: %w", err)
 	}
 
 	if !authHandler.Supports(params.IdentityType) {
-		return "", "", "", fmt.Errorf("unsupported identity type: %v", params.IdentityType)
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("unsupported identity type: %v", params.IdentityType)
 	}
 
 	var commitment *proto.AuthCommitmentData
@@ -60,29 +60,29 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		authID.Verifier = params.Signer
 		dbSigner, found, err := s.Signers.GetByAddress(ctx, ecosystem.FromContext(ctx), params.Signer)
 		if err != nil {
-			return "", "", "", fmt.Errorf("get signer: %w", err)
+			return "", "", "", proto.ErrDatabaseError.WithCausef("get signer: %w", err)
 		}
 		if !found {
-			return "", "", "", fmt.Errorf("signer not found")
+			return "", "", "", proto.ErrInvalidRequest.WithCausef("signer not found")
 		}
 		signer, err = dbSigner.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
-			return "", "", "", fmt.Errorf("decrypt signer data: %w", err)
+			return "", "", "", proto.ErrEncryptionError.WithCausef("decrypt signer data: %w", err)
 		}
 		if signer.Identity.Type != params.IdentityType {
-			return "", "", "", fmt.Errorf("signer identity type mismatch")
+			return "", "", "", proto.ErrDataIntegrityError.WithCausef("signer identity type mismatch")
 		}
 	}
 
 	if authID.Verifier != "" {
 		dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 		if err != nil {
-			return "", "", "", fmt.Errorf("getting commitment: %w", err)
+			return "", "", "", proto.ErrDatabaseError.WithCausef("getting commitment: %w", err)
 		}
 		if found && dbCommitment != nil {
 			commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 			if err != nil {
-				return "", "", "", fmt.Errorf("decrypting commitment data: %w", err)
+				return "", "", "", proto.ErrEncryptionError.WithCausef("decrypting commitment data: %w", err)
 			}
 		}
 	}
@@ -90,7 +90,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	storeFn := func(ctx context.Context, commitment *proto.AuthCommitmentData) error {
 		encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
 		if err != nil {
-			return fmt.Errorf("encrypting commitment: %w", err)
+			return proto.ErrEncryptionError.WithCausef("encrypting commitment: %w", err)
 		}
 
 		dbCommitment := &data.AuthCommitment{
@@ -104,11 +104,11 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		}
 
 		if !dbCommitment.CorrespondsTo(commitment) {
-			return fmt.Errorf("invalid commitment")
+			return proto.ErrDataIntegrityError.WithCausef("invalid commitment")
 		}
 
 		if err := s.AuthCommitments.Put(ctx, dbCommitment); err != nil {
-			return fmt.Errorf("putting verification context: %w", err)
+			return proto.ErrDatabaseError.WithCausef("putting verification context: %w", err)
 		}
 		return nil
 	}
@@ -120,15 +120,15 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	att := attestation.FromContext(ctx)
 
 	if params == nil {
-		return "", fmt.Errorf("params is required")
+		return "", proto.ErrInvalidRequest.WithCausef("params is required")
 	}
 	if params.AuthKey == nil {
-		return "", fmt.Errorf("auth key is required")
+		return "", proto.ErrInvalidRequest.WithCausef("auth key is required")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
 	if err != nil {
-		return "", fmt.Errorf("get auth handler: %w", err)
+		return "", proto.ErrInvalidRequest.WithCausef("get auth handler: %w", err)
 	}
 
 	var commitment *proto.AuthCommitmentData
@@ -140,22 +140,23 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	}
 	dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 	if err != nil {
-		return "", fmt.Errorf("get commitment: %w", err)
+		return "", proto.ErrDatabaseError.WithCausef("get commitment: %w", err)
 	}
 	if found && dbCommitment != nil {
 		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
-			return "", fmt.Errorf("decrypt commitment data: %w", err)
+			return "", proto.ErrEncryptionError.WithCausef("decrypt commitment data: %w", err)
 		}
 
 		// TODO: attempts
 
 		if time.Now().After(commitment.Expiry) {
-			return "", fmt.Errorf("commitment expired")
+			// TODO: more concrete error
+			return "", proto.ErrInvalidRequest.WithCausef("commitment expired")
 		}
 
 		if !dbCommitment.CorrespondsTo(commitment) {
-			return "", fmt.Errorf("commitment mismatch")
+			return "", proto.ErrDataIntegrityError.WithCausef("commitment mismatch")
 		}
 	}
 
@@ -164,7 +165,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		if commitment != nil {
 			// TODO: increment attempt and store it back
 		}
-		return "", fmt.Errorf("verify answer: %w", err)
+		return "", err
 	}
 
 	// always use normalized email address
