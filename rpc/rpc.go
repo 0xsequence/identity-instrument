@@ -50,7 +50,7 @@ type RPC struct {
 	Secrets         *secretsmanager.Client
 	EncryptionPool  *encryption.Pool
 
-	measurements *enclave.Measurements
+	measurements enclave.Measurements
 	startTime    time.Time
 	running      int32
 }
@@ -97,7 +97,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 	if cfg.Service.UseNSM {
 		enclaveProvider = enclave.NitroProvider
 	}
-	enc, err := enclave.New(context.Background(), enclaveProvider, kmsClient)
+	enc, err := enclave.New(context.Background(), o11y.WrapEnclaveProvider(enclaveProvider), kmsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -114,9 +114,10 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		}
 		encPoolConfigs[i] = encryption.NewConfig(encCfg.PoolSize, encCfg.Threshold, cryptors)
 	}
-	encPool := encryption.NewPool(encPoolConfigs, encPoolKeyTable)
 
-	m, err := enc.GetMeasurements(context.Background())
+	encPool := encryption.NewPool(enc, encPoolConfigs, encPoolKeyTable)
+
+	m, err := enc.GetMeasurements(context.Background(), []uint16{0})
 	if err != nil {
 		return nil, err
 	}
@@ -242,7 +243,7 @@ func (s *RPC) statusHandler(w http.ResponseWriter, r *http.Request) {
 		"startTime": s.startTime,
 		"uptime":    uint64(time.Now().UTC().Sub(s.startTime).Seconds()),
 		"ver":       identityInstrument.VERSION,
-		"pcr0":      s.measurements.PCR0,
+		"pcr0":      s.measurements[0],
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
