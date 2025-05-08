@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/0xsequence/nsm/request"
+	"github.com/0xsequence/tee-verifier/nitro"
 )
 
 // Enclave communicates with the Nitro Security Module to acquire an Attestation.
@@ -29,7 +30,7 @@ func New(ctx context.Context, provider Provider, kms KMS, optPrivKey ...*rsa.Pri
 	if len(optPrivKey) > 0 && optPrivKey[0] != nil {
 		e.privKey = optPrivKey[0]
 	} else {
-		sess, err := provider(ctx)
+		sess, err := provider()
 		if err != nil {
 			return nil, fmt.Errorf("open NSM session: %w", err)
 		}
@@ -54,12 +55,12 @@ func New(ctx context.Context, provider Provider, kms KMS, optPrivKey ...*rsa.Pri
 //
 // NOTE: Attestation must always be Closed manually after use.
 func (e *Enclave) GetAttestation(ctx context.Context, nonce []byte, userData []byte) (*Attestation, error) {
-	sess, err := e.provider(ctx)
+	sess, err := e.provider()
 	if err != nil {
 		return nil, fmt.Errorf("open NSM session: %w", err)
 	}
 
-	res, err := sess.Send(&request.Attestation{
+	res, err := sess.Send(ctx, &request.Attestation{
 		UserData:  userData,
 		Nonce:     nonce,
 		PublicKey: e.pkixPubKey,
@@ -73,36 +74,42 @@ func (e *Enclave) GetAttestation(ctx context.Context, nonce []byte, userData []b
 		return nil, fmt.Errorf("attestation document is empty")
 	}
 
+	parsed, err := nitro.Parse(res.Attestation.Document)
+	if err != nil {
+		_ = sess.Close()
+		return nil, fmt.Errorf("parse attestation document: %w", err)
+	}
+
 	att := &Attestation{
-		ReadCloser: sess,
-		document:   res.Attestation.Document,
-		kms:        e.kms,
-		key:        e.privKey,
+		SignedAttestation: parsed,
+		ReadCloser:        sess,
+		document:          res.Attestation.Document,
+		kms:               e.kms,
+		key:               e.privKey,
 	}
 	return att, nil
 }
 
 // Measurements are calculated by the Nitro supervisor at runtime based on the enclave image.
-type Measurements struct {
-	PCR0 string
-}
+type Measurements map[uint16]string
 
 // GetMeasurements opens an NSM session and requests the PCR0 hash that is then returned
 // as part of the Measurements struct.
-func (e *Enclave) GetMeasurements(ctx context.Context) (*Measurements, error) {
-	sess, err := e.provider(ctx)
+func (e *Enclave) GetMeasurements(ctx context.Context, indices []uint16) (Measurements, error) {
+	sess, err := e.provider()
 	if err != nil {
 		return nil, fmt.Errorf("open NSM session: %w", err)
 	}
 	defer sess.Close()
 
-	res, err := sess.Send(&request.DescribePCR{Index: 0})
-	if err != nil {
-		return nil, fmt.Errorf("NSM DescribePCR call: %w", err)
+	measurements := make(Measurements)
+	for _, index := range indices {
+		res, err := sess.Send(ctx, &request.DescribePCR{Index: index})
+		if err != nil {
+			return nil, fmt.Errorf("NSM DescribePCR call: %w", err)
+		}
+		measurements[index] = hex.EncodeToString(res.DescribePCR.Data)
 	}
 
-	m := &Measurements{
-		PCR0: hex.EncodeToString(res.DescribePCR.Data),
-	}
-	return m, nil
+	return measurements, nil
 }

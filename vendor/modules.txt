@@ -13,8 +13,8 @@ github.com/0xsequence/ethkit/go-ethereum/crypto/secp256k1/libsecp256k1/src
 github.com/0xsequence/ethkit/go-ethereum/crypto/secp256k1/libsecp256k1/src/modules/recovery
 github.com/0xsequence/ethkit/go-ethereum/rlp
 github.com/0xsequence/ethkit/go-ethereum/rlp/internal/rlpstruct
-# github.com/0xsequence/nitrocontrol v0.4.1
-## explicit; go 1.21
+# github.com/0xsequence/nitrocontrol v0.5.0
+## explicit; go 1.23
 github.com/0xsequence/nitrocontrol/aescbc
 github.com/0xsequence/nitrocontrol/cms
 github.com/0xsequence/nitrocontrol/enclave
@@ -24,6 +24,9 @@ github.com/0xsequence/nsm
 github.com/0xsequence/nsm/ioc
 github.com/0xsequence/nsm/request
 github.com/0xsequence/nsm/response
+# github.com/0xsequence/tee-verifier v0.1.0
+## explicit; go 1.23
+github.com/0xsequence/tee-verifier/nitro
 # github.com/BurntSushi/toml v1.4.0
 ## explicit; go 1.18
 github.com/BurntSushi/toml
@@ -236,8 +239,8 @@ github.com/emirpasic/gods/utils
 # github.com/fsnotify/fsnotify v1.7.0
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify
-# github.com/fxamacker/cbor/v2 v2.5.0
-## explicit; go 1.12
+# github.com/fxamacker/cbor/v2 v2.8.0
+## explicit; go 1.20
 github.com/fxamacker/cbor/v2
 # github.com/go-chi/chi/v5 v5.1.0
 ## explicit; go 1.14
@@ -527,8 +530,6 @@ github.com/x448/float16
 # github.com/xanzy/ssh-agent v0.3.3
 ## explicit; go 1.16
 github.com/xanzy/ssh-agent
-# go.uber.org/mock v0.4.0
-## explicit; go 1.20
 # golang.org/x/crypto v0.33.0
 ## explicit; go 1.20
 golang.org/x/crypto/argon2

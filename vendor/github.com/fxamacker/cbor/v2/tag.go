@@ -1,3 +1,6 @@
+// Copyright (c) Faye Amacker. All rights reserved.
+// Licensed under the MIT License. See LICENSE in the project root for license information.
+
 package cbor
 
 import (
@@ -7,10 +10,12 @@ import (
 	"sync"
 )
 
-// Tag represents CBOR tag data, including tag number and unmarshaled tag content.
+// Tag represents CBOR tag data, including tag number and unmarshaled tag content. Marshaling and
+// unmarshaling of tag content is subject to any encode and decode options that would apply to
+// enclosed data item if it were to appear outside of a tag.
 type Tag struct {
 	Number  uint64
-	Content interface{}
+	Content any
 }
 
 // RawTag represents CBOR tag data, including tag number and raw tag content.
@@ -21,7 +26,33 @@ type RawTag struct {
 }
 
 // UnmarshalCBOR sets *t with tag number and raw tag content copied from data.
+//
+// Deprecated: No longer used by this codec; kept for compatibility
+// with user apps that directly call this function.
 func (t *RawTag) UnmarshalCBOR(data []byte) error {
+	if t == nil {
+		return errors.New("cbor.RawTag: UnmarshalCBOR on nil pointer")
+	}
+
+	d := decoder{data: data, dm: defaultDecMode}
+
+	// Check if data is a well-formed CBOR data item.
+	// RawTag.UnmarshalCBOR() is exported, so
+	// the codec needs to support same behavior for:
+	// - Unmarshal(data, *RawTag)
+	// - RawTag.UnmarshalCBOR(data)
+	err := d.wellformed(false, false)
+	if err != nil {
+		return err
+	}
+
+	return t.unmarshalCBOR(data)
+}
+
+// unmarshalCBOR sets *t with tag number and raw tag content copied from data.
+// This function assumes data is well-formed, and does not perform bounds checking.
+// This function is called by Unmarshal().
+func (t *RawTag) unmarshalCBOR(data []byte) error {
 	if t == nil {
 		return errors.New("cbor.RawTag: UnmarshalCBOR on nil pointer")
 	}
@@ -56,7 +87,7 @@ func (t RawTag) MarshalCBOR() ([]byte, error) {
 		return b, nil
 	}
 
-	e := getEncoderBuffer()
+	e := getEncodeBuffer()
 
 	encodeHead(e, byte(cborTypeTag), t.Number)
 
@@ -69,7 +100,7 @@ func (t RawTag) MarshalCBOR() ([]byte, error) {
 	n := copy(buf, e.Bytes())
 	copy(buf[n:], content)
 
-	putEncoderBuffer(e)
+	putEncodeBuffer(e)
 	return buf, nil
 }
 
@@ -90,7 +121,7 @@ const (
 )
 
 func (dtm DecTagMode) valid() bool {
-	return dtm < maxDecTagMode
+	return dtm >= 0 && dtm < maxDecTagMode
 }
 
 // EncTagMode specifies how encoder handles tag number.
@@ -107,7 +138,7 @@ const (
 )
 
 func (etm EncTagMode) valid() bool {
-	return etm < maxEncTagMode
+	return etm >= 0 && etm < maxEncTagMode
 }
 
 // TagOptions specifies how encoder and decoder handle tag number.
@@ -191,7 +222,7 @@ func (t *syncTagSet) Add(opts TagOptions, contentType reflect.Type, num uint64, 
 	if contentType == nil {
 		return errors.New("cbor: cannot add nil content type to TagSet")
 	}
-	for contentType.Kind() == reflect.Ptr {
+	for contentType.Kind() == reflect.Pointer {
 		contentType = contentType.Elem()
 	}
 	tag, err := newTagItem(opts, contentType, num, nestedNum...)
@@ -214,7 +245,7 @@ func (t *syncTagSet) Add(opts TagOptions, contentType reflect.Type, num uint64, 
 
 // Remove removes given tag content type from TagSet.
 func (t *syncTagSet) Remove(contentType reflect.Type) {
-	for contentType.Kind() == reflect.Ptr {
+	for contentType.Kind() == reflect.Pointer {
 		contentType = contentType.Elem()
 	}
 	t.Lock()
@@ -261,7 +292,7 @@ func newTagItem(opts TagOptions, contentType reflect.Type, num uint64, nestedNum
 	if num == 2 || num == 3 {
 		return nil, errors.New("cbor: cannot add tag number 2 or 3 to TagSet, it's built-in and supported automatically")
 	}
-	if num == selfDescribedCBORTagNum {
+	if num == tagNumSelfDescribedCBOR {
 		return nil, errors.New("cbor: cannot add tag number 55799 to TagSet, it's built-in and ignored automatically")
 	}
 
@@ -269,13 +300,13 @@ func newTagItem(opts TagOptions, contentType reflect.Type, num uint64, nestedNum
 	te.num = append(te.num, nestedNum...)
 
 	// Cache encoded tag numbers
-	e := getEncoderBuffer()
+	e := getEncodeBuffer()
 	for _, n := range te.num {
 		encodeHead(e, byte(cborTypeTag), n)
 	}
 	te.cborTagNum = make([]byte, e.Len())
 	copy(te.cborTagNum, e.Bytes())
-	putEncoderBuffer(e)
+	putEncodeBuffer(e)
 
 	return &te, nil
 }

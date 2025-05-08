@@ -1,13 +1,15 @@
 module github.com/0xsequence/identity-instrument
 
-go 1.23.3
+go 1.23
 
 // Fix sprig/v3 dependency.
 replace github.com/imdario/mergo => dario.cat/mergo v1.0.0
 
 require (
 	github.com/0xsequence/ethkit v1.30.6
-	github.com/0xsequence/nitrocontrol v0.4.1
+	github.com/0xsequence/nitrocontrol v0.5.0
+	github.com/0xsequence/nsm v0.1.0
+	github.com/0xsequence/tee-verifier v0.1.0
 	github.com/BurntSushi/toml v1.4.0
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.27.26
@@ -19,6 +21,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ses v1.30.1
 	github.com/aws/aws-sdk-go-v2/service/sts v1.30.3
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0
+	github.com/fxamacker/cbor/v2 v2.8.0
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/httplog v0.3.2
@@ -35,7 +38,6 @@ require (
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
-	github.com/0xsequence/nsm v0.1.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.3.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
@@ -58,7 +60,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
-	github.com/fxamacker/cbor/v2 v2.5.0 // indirect
 	github.com/go-git/gcfg v1.5.1-0.20230307220236-3a3c6141e376 // indirect
 	github.com/go-git/go-billy/v5 v5.6.2 // indirect
 	github.com/go-git/go-git/v5 v5.13.2 // indirect
@@ -105,7 +106,6 @@ require (
 	github.com/webrpc/gen-typescript v0.16.3 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
-	go.uber.org/mock v0.4.0 // indirect
 	golang.org/x/crypto v0.33.0 // indirect
 	golang.org/x/exp v0.0.0-20241009180824-f66d83c29e7c // indirect
 	golang.org/x/mod v0.23.0 // indirect

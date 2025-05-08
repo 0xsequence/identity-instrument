@@ -11,6 +11,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms/types"
 
 	"github.com/0xsequence/nitrocontrol/cms"
+	"github.com/0xsequence/tee-verifier/nitro"
 )
 
 // Attestation represents an open NSM session. It also includes a Document that is the result of
@@ -19,6 +20,9 @@ import (
 //
 // NOTE: Attestation must always be Closed manually after use.
 type Attestation struct {
+	// SignedAttestation is the parsed attestation document.
+	*nitro.SignedAttestation
+
 	// ReadCloser is an open NSM session. Reading from it returns random bytes.
 	io.ReadCloser
 
