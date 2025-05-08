@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
+	ethcrypto "github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/auth/idtoken"
 	"github.com/0xsequence/identity-instrument/proto"
@@ -74,23 +75,29 @@ func (h *AuthHandler) Commit(
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, challenge string, err error) {
-	codeVerifier, err := randomHex(h.randomProvider(ctx), 32)
-	if err != nil {
-		return "", "", "", proto.ErrInternalError.WithCausef("generate code verifier: %w", err)
-	}
-	codeVerifierHash := sha256.Sum256([]byte(codeVerifier))
-	codeChallenge := base64.RawURLEncoding.EncodeToString(codeVerifierHash[:])
-
 	commitment := &proto.AuthCommitmentData{
 		Ecosystem:    authID.Ecosystem,
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
-		Handle:       codeChallenge,
-		Answer:       codeVerifier,
-		Challenge:    codeChallenge,
 		Metadata:     metadata,
 		Expiry:       time.Now().Add(5 * time.Minute),
+	}
+
+	if commitment.AuthMode == proto.AuthMode_AuthCodePKCE {
+		codeVerifier, err := randomHex(h.randomProvider(ctx), 32)
+		if err != nil {
+			return "", "", "", proto.ErrInternalError.WithCausef("generate code verifier: %w", err)
+		}
+		codeVerifierHash := sha256.Sum256([]byte(codeVerifier))
+		codeChallenge := base64.RawURLEncoding.EncodeToString(codeVerifierHash[:])
+
+		commitment.Handle = codeChallenge
+		commitment.Answer = codeVerifier
+		commitment.Challenge = codeChallenge
+	} else {
+		// TODO verify that the verifier is a valid keccak256 hash
+		commitment.Handle = authID.Verifier
 	}
 
 	if signer != nil {
@@ -118,6 +125,14 @@ func (h *AuthHandler) Verify(
 		return proto.Identity{}, proto.ErrInvalidRequest.WithCausef("commitment not found")
 	}
 
+	// When not in PKCE mode, we need to verify that the hashed answer matches the commitment
+	if commitment.AuthMode != proto.AuthMode_AuthCodePKCE {
+		expectedHash := hexutil.Encode(ethcrypto.Keccak256([]byte(answer)))
+		if commitment.Handle != expectedHash {
+			return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("invalid token hash")
+		}
+	}
+
 	iss := commitment.Metadata["iss"]
 	aud := commitment.Metadata["aud"]
 
@@ -142,7 +157,9 @@ func (h *AuthHandler) Verify(
 	data.Set("redirect_uri", commitment.Metadata["redirect_uri"])
 	data.Set("client_id", aud)
 	data.Set("client_secret", clientSecret)
-	data.Set("code_verifier", commitment.Answer) // TODO: only use PKCE if in AuthCodePKCE mode
+	if commitment.AuthMode == proto.AuthMode_AuthCodePKCE {
+		data.Set("code_verifier", commitment.Answer)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
 	if err != nil {
