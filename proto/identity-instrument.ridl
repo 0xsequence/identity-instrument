@@ -107,6 +107,29 @@ struct AuthCommitmentData
   - expiry: timestamp
     + json = expiry
 
+##
+## Errors
+##
+
+# Server errors
+error 7100 InternalError "Internal error" HTTP 500
+error 7101 EncryptionError "Encryption error" HTTP 500
+error 7102 DatabaseError "Database error" HTTP 500
+error 7103 DataIntegrityError "Data integrity error" HTTP 500
+error 7104 IdentityProviderError "Identity provider error" HTTP 500
+
+# Client errors
+error 7200 InvalidRequest "The request was invalid" HTTP 400
+
+error 7002 ProofVerificationFailed "The authentication proof could not be verified" HTTP 400
+error 7003 AnswerIncorrect "The provided answer is incorrect" HTTP 400
+error 7004 ChallengeExpired "The challenge has expired" HTTP 400
+error 7005 TooManyAttempts "Too many attempts" HTTP 400
+
+##
+## Services
+##
+
 service IdentityInstrument
   - CommitVerifier(params: CommitVerifierParams) => (verifier: string, loginHint: string, challenge: string)
   - CompleteAuth(params: CompleteAuthParams) => (signer: string)
