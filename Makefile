@@ -26,7 +26,7 @@ define build
 	go build -v \
 		-trimpath \
 		-buildvcs=false \
-		-ldflags='-s -w -buildid=' \
+		-ldflags='-X "github.com/0xsequence/identity-instrument.VERSION=$(VERSION)" -s -w -buildid= ' \
 		-o ./bin/$(1) \
 		./cmd/$(1)
 endef
@@ -48,7 +48,6 @@ proto:
 
 clean:
 	rm -rf ./bin/*
-	rm -rf version.go
 	go clean -cache -testcache
 
 test: test-clean
@@ -65,9 +64,6 @@ eif: clean ensure-version
 
 ensure-version:
 	@test -n "$(VERSION)" || (echo "Oops! you forgot to pass the VERSION env variable, try: make VERSION=vX.X.X eif" && exit 1)
-	@rm -rf version.go
-	@echo "package identityinstrument" > version.go
-	@echo "const VERSION = \"$(VERSION)\"" >> version.go
 
 .PHONY: vendor
 vendor:
