@@ -25,20 +25,16 @@ FROM base AS ingress-dev
 
 WORKDIR /go/src/github.com/0xsequence/identity-instrument
 
-ADD ./ ./
-
 CMD ["make", "run-ingress-proxy"]
 
 #
-# Ingress proxy prod image
+# Builder mock dev image
 #
-FROM alpine:3.21 AS ingress
+FROM base AS builder-mock-dev
 
 WORKDIR /go/src/github.com/0xsequence/identity-instrument
 
-COPY --from=builder /go/src/github.com/0xsequence/identity-instrument/bin/ingress-proxy /usr/local/bin/ingress-proxy
-
-CMD ["ingress-proxy"]
+CMD ["make", "run-builder-mock"]
 
 #
 # Enclave dev image

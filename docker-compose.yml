@@ -7,7 +7,7 @@ services:
     volumes:
       - .:/go/src/github.com/0xsequence/identity-instrument
     environment:
-      CONFIG: ./etc/identity.conf
+      CONFIG: ./etc/identity.local.conf
     ports:
       - "9123:9123"
 
@@ -22,7 +22,7 @@ services:
       TARGET_HOST: nitro
       TARGET_PORT: "9123"
       LISTEN_ADDRESS: "0.0.0.0:8080"
-      SEQUENCE_ECOSYSTEM: "694"
+      SEQUENCE_ECOSYSTEM: "1"
     ports:
       - "8080:8080"
 
@@ -43,3 +43,13 @@ services:
     volumes:
       - "./docker/awslocal_ready_hook.sh:/etc/localstack/init/ready.d/awslocal_ready_hook.sh"
       - "/var/run/docker.sock:/var/run/docker.sock"
+
+  builder-mock:
+    build:
+      dockerfile: Dockerfile
+      target: builder-mock-dev
+      context: .
+    ports:
+      - "9999:9999"
+    volumes:
+      - .:/go/src/github.com/0xsequence/identity-instrument
