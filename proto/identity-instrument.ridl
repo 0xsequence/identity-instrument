@@ -120,6 +120,10 @@ error 7104 IdentityProviderError "Identity provider error" HTTP 500
 
 # Client errors
 error 7200 InvalidRequest "The request was invalid" HTTP 400
+error 7201 InvalidSignature "The signature was invalid" HTTP 400
+error 7202 KeyNotFound "The authentication key was not found" HTTP 404
+error 7203 KeyExpired "The authentication key expired" HTTP 400
+error 7204 SignerNotFound "The signer was not found" HTTP 404
 
 error 7002 ProofVerificationFailed "The authentication proof could not be verified" HTTP 400
 error 7003 AnswerIncorrect "The provided answer is incorrect" HTTP 400
