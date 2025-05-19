@@ -173,21 +173,21 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, ecosystem.FromContext(ctx), ident)
 	if err != nil {
-		return "", fmt.Errorf("retrieve signer: %w", err)
+		return "", proto.ErrDatabaseError.WithCausef("retrieve signer: %w", err)
 	}
 
 	if dbSigner != nil && commitment.Signer != "" && dbSigner.Address != commitment.Signer {
-		return "", fmt.Errorf("signer address mismatch")
+		return "", proto.ErrDataIntegrityError.WithCausef("signer address mismatch")
 	}
 
 	if !signerFound {
 		if commitment.Signer != "" {
-			return "", fmt.Errorf("signer not found")
+			return "", proto.ErrDataIntegrityError.WithCausef("signer not found")
 		}
 
 		signer, err := ecdsa.GenerateKey(secp256k1.S256(), att)
 		if err != nil {
-			return "", fmt.Errorf("generate signer: %w", err)
+			return "", proto.ErrInternalError.WithCausef("generate signer: %w", err)
 		}
 
 		signerData := &proto.SignerData{
@@ -197,7 +197,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 		encData, err := data.Encrypt(ctx, att, s.EncryptionPool, signerData)
 		if err != nil {
-			return "", fmt.Errorf("encrypt signer data: %w", err)
+			return "", proto.ErrEncryptionError.WithCausef("encrypt signer data: %w", err)
 		}
 		dbSigner = &data.Signer{
 			Ecosystem:     ecosystem.FromContext(ctx),
@@ -206,7 +206,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			EncryptedData: encData,
 		}
 		if err := s.Signers.Put(ctx, dbSigner); err != nil {
-			return "", fmt.Errorf("put signer: %w", err)
+			return "", proto.ErrDatabaseError.WithCausef("put signer: %w", err)
 		}
 	}
 
@@ -221,7 +221,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	encData, err := data.Encrypt(ctx, att, s.EncryptionPool, authKeyData)
 	if err != nil {
-		return "", fmt.Errorf("encrypt auth key data: %w", err)
+		return "", proto.ErrEncryptionError.WithCausef("encrypt auth key data: %w", err)
 	}
 
 	dbAuthKey := &data.AuthKey{
@@ -230,7 +230,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		EncryptedData: encData,
 	}
 	if err := s.AuthKeys.Put(ctx, dbAuthKey); err != nil {
-		return "", fmt.Errorf("put auth key: %w", err)
+		return "", proto.ErrDatabaseError.WithCausef("put auth key: %w", err)
 	}
 
 	return dbSigner.Address, nil
