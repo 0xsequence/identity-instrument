@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	proto "github.com/0xsequence/identity-instrument/proto"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -99,6 +100,33 @@ func (t *AuthCommitmentTable) Put(ctx context.Context, commitment *AuthCommitmen
 	input := &dynamodb.PutItemInput{
 		TableName: &t.tableARN,
 		Item:      av,
+	}
+	if _, err := t.db.PutItem(ctx, input); err != nil {
+		return fmt.Errorf("PutItem: %w", err)
+	}
+	return nil
+}
+
+func (t *AuthCommitmentTable) UpdateData(
+	ctx context.Context, current *AuthCommitment, data EncryptedData[*proto.AuthCommitmentData],
+) error {
+	oldData := current.EncryptedData
+	current.EncryptedData = data
+
+	av, err := attributevalue.MarshalMap(current)
+	if err != nil {
+		return fmt.Errorf("marshal input: %w", err)
+	}
+	input := &dynamodb.PutItemInput{
+		TableName: &t.tableARN,
+		Item:      av,
+		ConditionExpression: aws.String(
+			"attribute_exists(ID) AND EncryptionKeyRef = :key_ref AND Ciphertext = :ciphertext",
+		),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":key_ref":    &types.AttributeValueMemberS{Value: oldData.EncryptionKeyRef},
+			":ciphertext": &types.AttributeValueMemberS{Value: oldData.Ciphertext},
+		},
 	}
 	if _, err := t.db.PutItem(ctx, input); err != nil {
 		return fmt.Errorf("PutItem: %w", err)
