@@ -104,6 +104,8 @@ struct AuthCommitmentData
     + json = answer
   - metadata: map<string, string>
     + json = metadata
+  - attempts: uint
+    + json = attempts
   - expiry: timestamp
     + json = expiry
 
