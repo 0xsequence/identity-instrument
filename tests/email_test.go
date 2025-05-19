@@ -96,31 +96,28 @@ func TestEmail(t *testing.T) {
 				return true
 			},
 		},
-		// TODO: reenable after adding attempt tracking
-		/*
-			"TooManyAttempts": {
-				retryAttempts: 10,
-				assertInitiateAuth: func(t *testing.T, p assertionParams, err error) bool {
-					return true
-				},
-				extractAnswer: func(t *testing.T, p assertionParams) string {
-					if p.attempt < 3 {
-						return "Wrong"
-					}
-					_, message, found := getSentEmailMessage(t, p.email)
-					require.True(t, found)
-					return strings.TrimPrefix(message, "Your login code: ")
-				},
-				assertRegisterAuth: func(t *testing.T, p assertionParams, err error) bool {
-					if p.attempt < 3 {
-						require.ErrorContains(t, err, "incorrect answer")
-					} else {
-						require.ErrorContains(t, err, "Too many attempts")
-					}
-					return false
-				},
+		"TooManyAttempts": {
+			retryAttempts: 10,
+			assertCommitVerifier: func(t *testing.T, p assertionParams, err error) bool {
+				return true
 			},
-		*/
+			extractAnswer: func(t *testing.T, p assertionParams) string {
+				if p.attempt < 3 {
+					return "Wrong"
+				}
+				_, message, found := getSentEmailMessage(t, p.email)
+				require.True(t, found)
+				return strings.TrimPrefix(message, "Your login code: ")
+			},
+			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
+				if p.attempt < 3 {
+					require.ErrorContains(t, err, "incorrect answer")
+				} else {
+					require.ErrorContains(t, err, "Too many attempts")
+				}
+				return false
+			},
+		},
 		"UsingSigner": {
 			prepareCommitParams: func(t *testing.T, p assertionParams, cp *proto.CommitVerifierParams) {
 				cp.Handle = ""
