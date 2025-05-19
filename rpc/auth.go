@@ -148,11 +148,12 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			return "", proto.ErrEncryptionError.WithCausef("decrypt commitment data: %w", err)
 		}
 
-		// TODO: attempts
+		if commitment.Attempts >= 3 {
+			return "", proto.ErrTooManyAttempts
+		}
 
 		if time.Now().After(commitment.Expiry) {
-			// TODO: more concrete error
-			return "", proto.ErrInvalidRequest.WithCausef("commitment expired")
+			return "", proto.ErrChallengeExpired
 		}
 
 		if !dbCommitment.CorrespondsTo(commitment) {
@@ -163,7 +164,14 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	ident, err := authHandler.Verify(ctx, commitment, params.AuthKey, params.Answer)
 	if err != nil {
 		if commitment != nil {
-			// TODO: increment attempt and store it back
+			commitment.Attempts += 1
+			encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
+			if err != nil {
+				return "", proto.ErrEncryptionError.WithCausef("encrypting commitment: %w", err)
+			}
+			if err := s.AuthCommitments.UpdateData(ctx, dbCommitment, encryptedData); err != nil {
+				return "", proto.ErrDatabaseError.WithCausef("updating commitment: %w", err)
+			}
 		}
 		return "", err
 	}
