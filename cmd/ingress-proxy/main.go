@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log"
 	"net"
@@ -92,14 +93,29 @@ func proxy(httpClient *http.Client) http.Handler {
 			return
 		}
 
-		clientReq, err := http.NewRequest(r.Method, url, bytes.NewBuffer(reqBody))
+		var parsedRequest struct {
+			Params map[string]any `json:"params"`
+		}
+		if err := json.Unmarshal(reqBody, &parsedRequest); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		ecosystem := os.Getenv("SEQUENCE_ECOSYSTEM")
+		parsedRequest.Params["scope"] = "@" + ecosystem
+
+		jsonBody, err := json.Marshal(parsedRequest)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+
+		clientReq, err := http.NewRequest(r.Method, url, bytes.NewBuffer(jsonBody))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
 		copyHeader(clientReq.Header, r.Header)
-
-		clientReq.Header.Set("X-Sequence-Ecosystem", os.Getenv("SEQUENCE_ECOSYSTEM"))
 
 		res, err := httpClient.Do(clientReq.WithContext(r.Context()))
 		if err != nil {
