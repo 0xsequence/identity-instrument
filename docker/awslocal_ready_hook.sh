@@ -30,17 +30,17 @@ awslocal secretsmanager create-secret \
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name SignersTable \
-  --attribute-definitions AttributeName=Ecosystem,AttributeType=S AttributeName=Identity,AttributeType=S AttributeName=Address,AttributeType=S \
-  --key-schema AttributeName=Identity,KeyType=HASH AttributeName=Ecosystem,KeyType=SORT \
+  --attribute-definitions AttributeName=ScopedKeyType,AttributeType=S AttributeName=Identity,AttributeType=S AttributeName=Address,AttributeType=S \
+  --key-schema AttributeName=Identity,KeyType=HASH AttributeName=ScopedKeyType,KeyType=SORT \
   --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 \
   --global-secondary-indexes \
-  "IndexName=Address-Index,KeySchema=[{AttributeName=Address,KeyType=HASH},{AttributeName=Ecosystem,KeyType=SORT}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}"
+  "IndexName=Address-Index,KeySchema=[{AttributeName=Address,KeyType=HASH},{AttributeName=ScopedKeyType,KeyType=SORT}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}"
 
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name AuthKeysTable \
-  --attribute-definitions AttributeName=Ecosystem,AttributeType=S AttributeName=KeyID,AttributeType=S \
-  --key-schema AttributeName=KeyID,KeyType=HASH AttributeName=Ecosystem,KeyType=SORT \
+  --attribute-definitions AttributeName=Scope,AttributeType=S AttributeName=KeyID,AttributeType=S \
+  --key-schema AttributeName=KeyID,KeyType=HASH AttributeName=Scope,KeyType=SORT \
   --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10
 
 awslocal dynamodb create-table \
