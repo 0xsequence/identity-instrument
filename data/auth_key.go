@@ -11,28 +11,24 @@ import (
 )
 
 type AuthKey struct {
-	Ecosystem string `dynamodbav:"Ecosystem"`
-	KeyID     string `dynamodbav:"KeyID"`
+	KeyID string      `dynamodbav:"KeyID"`
+	Scope proto.Scope `dynamodbav:"Scope"`
 
 	EncryptedData[*proto.AuthKeyData]
 }
 
-func (k *AuthKey) Key() map[string]types.AttributeValue {
+func (k *AuthKey) DatabaseKey() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"Ecosystem": &types.AttributeValueMemberS{Value: k.Ecosystem},
-		"KeyID":     &types.AttributeValueMemberS{Value: k.KeyID},
+		"Scope": &types.AttributeValueMemberS{Value: k.Scope.String()},
+		"KeyID": &types.AttributeValueMemberS{Value: k.KeyID},
 	}
 }
 
 func (k *AuthKey) CorrespondsTo(data *proto.AuthKeyData) bool {
-	if k.Ecosystem != data.Ecosystem {
+	if k.Scope != data.Scope {
 		return false
 	}
-	expectedKey := &proto.AuthKey{
-		PublicKey: data.PublicKey,
-		KeyType:   data.KeyType,
-	}
-	if k.KeyID != expectedKey.String() {
+	if k.KeyID != data.AuthKey.String() {
 		return false
 	}
 	return true
@@ -54,12 +50,12 @@ func NewAuthKeyTable(db DB, tableARN string, indices AuthKeyIndices) *AuthKeyTab
 	}
 }
 
-func (t *AuthKeyTable) Get(ctx context.Context, ecosystem string, keyID string) (*AuthKey, bool, error) {
-	authKey := AuthKey{Ecosystem: ecosystem, KeyID: keyID}
+func (t *AuthKeyTable) Get(ctx context.Context, scope proto.Scope, key proto.Key) (*AuthKey, bool, error) {
+	authKey := AuthKey{Scope: scope, KeyID: key.String()}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
-		Key:       authKey.Key(),
+		Key:       authKey.DatabaseKey(),
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("GetItem: %w", err)

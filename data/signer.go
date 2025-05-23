@@ -2,10 +2,9 @@ package data
 
 import (
 	"context"
-	"crypto/ecdsa"
 	"fmt"
+	"strings"
 
-	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	proto "github.com/0xsequence/identity-instrument/proto"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -13,29 +12,83 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+type ScopedKeyType struct {
+	Scope   proto.Scope
+	KeyType proto.KeyType
+}
+
+func (s ScopedKeyType) String() string {
+	return fmt.Sprintf("%s/%s", s.Scope, s.KeyType)
+}
+
+func (s ScopedKeyType) MarshalDynamoDBAttributeValue() (types.AttributeValue, error) {
+	return &types.AttributeValueMemberS{Value: s.String()}, nil
+}
+
+func (s *ScopedKeyType) UnmarshalDynamoDBAttributeValue(value types.AttributeValue) error {
+	v, ok := value.(*types.AttributeValueMemberS)
+	if !ok {
+		return fmt.Errorf("invalid scoped key type of type: %T", value)
+	}
+	parts := strings.Split(v.Value, "/")
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid scoped key type: %s", v.Value)
+	}
+	s.Scope = proto.Scope(parts[0])
+	s.KeyType = proto.KeyType(parts[1])
+	return nil
+}
+
 type Signer struct {
-	Ecosystem string   `dynamodbav:"Ecosystem"`
-	Address   string   `dynamodbav:"Address"`
-	Identity  Identity `dynamodbav:"Identity"`
+	Address       string        `dynamodbav:"Address"`
+	Identity      Identity      `dynamodbav:"Identity"`
+	ScopedKeyType ScopedKeyType `dynamodbav:"ScopedKeyType"`
 
 	EncryptedData[*proto.SignerData]
 }
 
-func (s *Signer) Key() map[string]types.AttributeValue {
-	return map[string]types.AttributeValue{
-		"Ecosystem": &types.AttributeValueMemberS{Value: s.Ecosystem},
-		"Identity":  &types.AttributeValueMemberS{Value: s.Identity.String()},
+func (s *Signer) Key() proto.Key {
+	return proto.Key{
+		KeyType: s.ScopedKeyType.KeyType,
+		Address: s.Address,
 	}
 }
 
-func (s *Signer) CorrespondsTo(data *proto.SignerData, key *ecdsa.PrivateKey) bool {
-	if s.Ecosystem != data.Ecosystem {
+func (s *Signer) DatabaseKey() map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"Identity":      &types.AttributeValueMemberS{Value: s.Identity.String()},
+		"ScopedKeyType": &types.AttributeValueMemberS{Value: s.ScopedKeyType.String()},
+	}
+}
+
+func (s *Signer) CorrespondsToData(data *proto.SignerData, cryptoKey any) bool {
+	if s.ScopedKeyType.Scope != data.Scope {
+		return false
+	}
+	if s.ScopedKeyType.KeyType != data.KeyType {
 		return false
 	}
 	if s.Identity.String() != data.Identity.String() {
 		return false
 	}
-	if s.Address != crypto.PubkeyToAddress(key.PublicKey).Hex() {
+	key, err := proto.NewKeyFromPrivateKey(data.KeyType, cryptoKey)
+	if err != nil {
+		return false
+	}
+	if s.Address != key.Address {
+		return false
+	}
+	if key.KeyType != data.KeyType {
+		return false
+	}
+	return true
+}
+
+func (s *Signer) CorrespondsToProtoKey(protoKey proto.Key) bool {
+	if s.ScopedKeyType.KeyType != protoKey.KeyType {
+		return false
+	}
+	if s.Address != protoKey.Address {
 		return false
 	}
 	return true
@@ -59,12 +112,15 @@ func NewSignerTable(db DB, tableARN string, indices SignerIndices) *SignerTable 
 	}
 }
 
-func (t *SignerTable) GetByIdentity(ctx context.Context, ecosystem string, ident proto.Identity) (*Signer, bool, error) {
-	signer := Signer{Ecosystem: ecosystem, Identity: Identity(ident)}
+func (t *SignerTable) GetByIdentity(ctx context.Context, ident proto.Identity, scope proto.Scope, keyType proto.KeyType) (*Signer, bool, error) {
+	signer := Signer{
+		Identity:      Identity(ident),
+		ScopedKeyType: ScopedKeyType{Scope: scope, KeyType: keyType},
+	}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
-		Key:       signer.Key(),
+		Key:       signer.DatabaseKey(),
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("GetItem: %w", err)
@@ -79,20 +135,24 @@ func (t *SignerTable) GetByIdentity(ctx context.Context, ecosystem string, ident
 	return &signer, true, nil
 }
 
-func (t *SignerTable) GetByAddress(ctx context.Context, ecosystem string, address string) (*Signer, bool, error) {
+func (t *SignerTable) GetByAddress(ctx context.Context, scope proto.Scope, key proto.Key) (*Signer, bool, error) {
 	var signer Signer
+	scopedKeyType := ScopedKeyType{
+		Scope:   scope,
+		KeyType: key.KeyType,
+	}
 	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
 		TableName:              &t.tableARN,
 		IndexName:              &t.indices.ByAddress,
-		KeyConditionExpression: aws.String("Address = :address and Ecosystem = :ecosystem"),
+		KeyConditionExpression: aws.String("Address = :address and ScopedKeyType = :scopedKeyType"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":address":   &types.AttributeValueMemberS{Value: address},
-			":ecosystem": &types.AttributeValueMemberS{Value: ecosystem},
+			":address":       &types.AttributeValueMemberS{Value: strings.ToLower(key.Address)},
+			":scopedKeyType": &types.AttributeValueMemberS{Value: scopedKeyType.String()},
 		},
 		Limit: aws.Int32(1),
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("GetItem: %w", err)
+		return nil, false, fmt.Errorf("Query: %w", err)
 	}
 	if len(out.Items) == 0 || len(out.Items[0]) == 0 {
 		return nil, false, nil
@@ -104,6 +164,7 @@ func (t *SignerTable) GetByAddress(ctx context.Context, ecosystem string, addres
 }
 
 func (t *SignerTable) Put(ctx context.Context, signer *Signer) error {
+	signer.Address = strings.ToLower(signer.Address)
 	av, err := attributevalue.MarshalMap(signer)
 	if err != nil {
 		return fmt.Errorf("marshal input: %w", err)
