@@ -11,3 +11,11 @@ func (s *SignerData) Address() (string, error) {
 	}
 	return crypto.PubkeyToAddress(privKey.PublicKey).Hex(), nil
 }
+
+func (s *SignerData) Key() (Key, error) {
+	address, err := s.Address()
+	if err != nil {
+		return Key{}, err
+	}
+	return NewKey(s.KeyType, address)
+}
