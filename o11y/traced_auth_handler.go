@@ -22,7 +22,7 @@ func (t *tracedAuthHandler) Commit(
 	authID proto.AuthID,
 	commitment *proto.AuthCommitmentData,
 	signer *proto.SignerData,
-	authKey *proto.AuthKey,
+	authKey proto.Key,
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (_ string, _ string, _ string, err error) {
@@ -35,7 +35,7 @@ func (t *tracedAuthHandler) Commit(
 }
 
 // Verify implements auth.Handler.
-func (t *tracedAuthHandler) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (_ proto.Identity, err error) {
+func (t *tracedAuthHandler) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey proto.Key, answer string) (_ proto.Identity, err error) {
 	ctx, span := Trace(ctx, t.name+".Verify")
 	defer func() {
 		span.RecordError(err)
