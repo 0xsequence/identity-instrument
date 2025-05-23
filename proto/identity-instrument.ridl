@@ -4,26 +4,36 @@ name = identity-instrument
 version = v0.1.0
 
 struct CommitVerifierParams
-  - authKey: AuthKey
+  - scope?: string
+    + go.field.type = Scope
+  - authKey: Key
+    + go.field.type = Key
   - identityType: IdentityType
   - authMode: AuthMode
   - metadata: map<string, string>
   - handle?: string
     + go.field.type = string
-  - signer?: string
-    + go.field.type = string
+  - signer?: Key
 
 struct CompleteAuthParams
-  - authKey: AuthKey
+  - scope?: string
+    + go.field.type = Scope
+  - authKey: Key
+    + go.field.type = Key
   - identityType: IdentityType
+  - signerType: KeyType
   - authMode: AuthMode
   - verifier: string
   - answer: string
 
 struct SignParams
-  - signer: string
+  - scope?: string
+    + go.field.type = Scope
+  - signer: Key
+    + go.field.type = Key
   - digest: string
-  - authKey: AuthKey
+  - authKey: Key
+    + go.field.type = Key
   - signature: string
 
 struct Identity
@@ -36,9 +46,13 @@ struct Identity
   - email: string
     + go.tag.json = email,omitempty
 
+struct Key
+  - keyType: KeyType
+  - address: string
+
 enum KeyType: string
-  - P256K1
-  - P256R1
+  - Secp256k1
+  - Secp256r1
 
 enum IdentityType: string
   - Guest
@@ -54,30 +68,29 @@ enum AuthMode: string
   - AuthCodePKCE
 
 struct AuthID
-  - ecosystem: string
+  - scope: string
+    + go.field.type = Scope
   - authMode: AuthMode
   - identityType: IdentityType
   - verifier: string
 
-struct AuthKey
-  - publicKey: string
-  - keyType: KeyType
-
 struct AuthKeyData
-  - ecosystem: string
-    + json = ecosystem
-  - signerAddress: string
-    + json = signerAddress
-  - publicKey: string
-    + json = publicKey
-  - keyType: KeyType
-    + json = keyType
+  - scope: string
+    + json = scope
+    + go.field.type = Scope
+  - authKey: string
+    + json = authKey
+    + go.field.type = Key
+  - signer: string
+    + json = signer
+    + go.field.type = Key
   - expiry: timestamp
     + json = expiry
 
 struct SignerData
-  - ecosystem: string
-    + json = ecosystem
+  - scope: string
+    + json = scope
+    + go.field.type = Scope
   - identity: Identity
     + json = identity
   - keyType: KeyType
@@ -86,10 +99,12 @@ struct SignerData
     + json = privateKey
 
 struct AuthCommitmentData
-  - ecosystem: string
-    + json = ecosystem
-  - authKey: AuthKey
+  - scope: string
+    + json = scope
+    + go.field.type = Scope
+  - authKey: string
     + json = authKey
+    + go.field.type = Key
   - authMode: AuthMode
     + json = authMode
   - identityType: IdentityType
@@ -98,6 +113,7 @@ struct AuthCommitmentData
     + json = handle
   - signer: string
     + go.tag.json = signer,omitempty
+    + go.field.type = Key
   - challenge: string
     + json = challenge
   - answer: string
@@ -138,7 +154,7 @@ error 7005 TooManyAttempts "Too many attempts" HTTP 400
 
 service IdentityInstrument
   - CommitVerifier(params: CommitVerifierParams) => (verifier: string, loginHint: string, challenge: string)
-  - CompleteAuth(params: CompleteAuthParams) => (signer: string)
+  - CompleteAuth(params: CompleteAuthParams) => (signer: Key)
 
   - Sign(params: SignParams) => (signature: string)
 
