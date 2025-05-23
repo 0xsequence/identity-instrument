@@ -71,12 +71,12 @@ func (h *AuthHandler) Commit(
 	authID proto.AuthID,
 	_commitment *proto.AuthCommitmentData,
 	signer *proto.SignerData,
-	authKey *proto.AuthKey,
+	authKey proto.Key,
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, challenge string, err error) {
 	commitment := &proto.AuthCommitmentData{
-		Ecosystem:    authID.Ecosystem,
+		Scope:        authID.Scope,
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
@@ -102,7 +102,7 @@ func (h *AuthHandler) Commit(
 
 	if signer != nil {
 		loginHint = signer.Identity.Subject
-		commitment.Signer, err = signer.Address()
+		commitment.Signer, err = signer.Key()
 		if err != nil {
 			return "", "", "", proto.ErrDataIntegrityError.WithCausef("failed to get signer address: %w", err)
 		}
@@ -118,7 +118,7 @@ func (h *AuthHandler) Commit(
 func (h *AuthHandler) Verify(
 	ctx context.Context,
 	commitment *proto.AuthCommitmentData,
-	authKey *proto.AuthKey,
+	authKey proto.Key,
 	answer string,
 ) (proto.Identity, error) {
 	if commitment == nil {
@@ -136,7 +136,7 @@ func (h *AuthHandler) Verify(
 	iss := commitment.Metadata["iss"]
 	aud := commitment.Metadata["aud"]
 
-	clientSecret, err := h.GetClientSecret(ctx, commitment.Ecosystem, iss, aud)
+	clientSecret, err := h.GetClientSecret(ctx, commitment.Scope, iss, aud)
 	if err != nil {
 		return proto.Identity{}, proto.ErrDatabaseError.WithCausef("get client secret: %w", err)
 	}
@@ -192,13 +192,13 @@ func (h *AuthHandler) Verify(
 	return h.idTokenHandler.VerifyToken(ctx, idToken, iss, aud, nil)
 }
 
-func (h *AuthHandler) GetClientSecret(ctx context.Context, ecosystem string, iss string, aud string) (string, error) {
+func (h *AuthHandler) GetClientSecret(ctx context.Context, scope proto.Scope, iss string, aud string) (string, error) {
 	ttl := 1 * time.Hour
 	getter := func(ctx context.Context, _ string) (string, error) {
-		return h.secretProvider.GetClientSecret(ctx, ecosystem, iss, aud)
+		return h.secretProvider.GetClientSecret(ctx, scope, iss, aud)
 	}
 
-	secretName := ecosystem + "|" + iss + "|" + aud
+	secretName := scope.String() + "|" + iss + "|" + aud
 	secretConfigString, err := h.secretStore.GetOrSetWithLockEx(ctx, secretName, getter, ttl)
 	if err != nil {
 		return "", fmt.Errorf("get secret: %w", err)

@@ -2,16 +2,18 @@ package authcode
 
 import (
 	"context"
+
+	"github.com/0xsequence/identity-instrument/proto"
 )
 
 type SecretProvider interface {
-	GetClientSecret(ctx context.Context, ecosystem string, issuer string, audience string) (string, error)
+	GetClientSecret(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, error)
 }
 
-type SecretProviderFunc func(ctx context.Context, ecosystem string, issuer string, audience string) (string, error)
+type SecretProviderFunc func(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, error)
 
-func (f SecretProviderFunc) GetClientSecret(ctx context.Context, ecosystem string, issuer string, audience string) (string, error) {
-	return f(ctx, ecosystem, issuer, audience)
+func (f SecretProviderFunc) GetClientSecret(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, error) {
+	return f(ctx, scope, issuer, audience)
 }
 
 type SecretConfig struct {

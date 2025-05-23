@@ -54,7 +54,7 @@ func (h *AuthHandler) Commit(
 	authID proto.AuthID,
 	commitment *proto.AuthCommitmentData,
 	signer *proto.SignerData,
-	authKey *proto.AuthKey,
+	authKey proto.Key,
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, resChallenge string, err error) {
@@ -73,7 +73,12 @@ func (h *AuthHandler) Commit(
 	return commitment.Handle, "", commitment.Challenge, nil
 }
 
-func (h *AuthHandler) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey *proto.AuthKey, answer string) (proto.Identity, error) {
+func (h *AuthHandler) Verify(
+	ctx context.Context,
+	commitment *proto.AuthCommitmentData,
+	authKey proto.Key,
+	answer string,
+) (proto.Identity, error) {
 	if commitment == nil {
 		return proto.Identity{}, proto.ErrInvalidRequest.WithCausef("commitment not found")
 	}
@@ -160,7 +165,7 @@ func (h *AuthHandler) GetKeySet(ctx context.Context, issuer string) (set jwk.Set
 }
 
 func (h *AuthHandler) constructCommitment(
-	authID proto.AuthID, authKey *proto.AuthKey, metadata map[string]string,
+	authID proto.AuthID, authKey proto.Key, metadata map[string]string,
 ) (*proto.AuthCommitmentData, error) {
 	vi, err := h.extractMetadata(metadata)
 	if err != nil {
@@ -172,7 +177,7 @@ func (h *AuthHandler) constructCommitment(
 	}
 
 	commitment := &proto.AuthCommitmentData{
-		Ecosystem:    authID.Ecosystem,
+		Scope:        authID.Scope,
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,

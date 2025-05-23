@@ -43,7 +43,7 @@ func (h *AuthHandler) Commit(
 	authID proto.AuthID,
 	_commitment *proto.AuthCommitmentData,
 	signer *proto.SignerData,
-	authKey *proto.AuthKey,
+	authKey proto.Key,
 	_metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, resChallenge string, err error) {
@@ -89,7 +89,7 @@ func (h *AuthHandler) Commit(
 
 	expiresAt := time.Now().Add(30 * time.Minute)
 	commitment := &proto.AuthCommitmentData{
-		Ecosystem:    authID.Ecosystem,
+		Scope:        authID.Scope,
 		AuthKey:      authKey,
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
@@ -102,7 +102,7 @@ func (h *AuthHandler) Commit(
 
 	if signer != nil {
 		loginHint = signer.Identity.Subject
-		commitment.Signer, err = signer.Address()
+		commitment.Signer, err = signer.Key()
 		if err != nil {
 			return "", "", "", proto.ErrDataIntegrityError.WithCausef("failed to get signer address: %w", err)
 		}
@@ -112,7 +112,7 @@ func (h *AuthHandler) Commit(
 		return "", "", "", err
 	}
 
-	if err := sender.SendOTP(ctx, authID.Ecosystem, recipient, secretCode); err != nil {
+	if err := sender.SendOTP(ctx, authID.Scope, recipient, secretCode); err != nil {
 		return "", "", "", proto.ErrInternalError.WithCausef("failed to send OTP: %w", err)
 	}
 
@@ -129,7 +129,7 @@ func (h *AuthHandler) Commit(
 func (h *AuthHandler) Verify(
 	ctx context.Context,
 	commitment *proto.AuthCommitmentData,
-	authKey *proto.AuthKey,
+	authKey proto.Key,
 	answer string,
 ) (proto.Identity, error) {
 	if commitment == nil {
