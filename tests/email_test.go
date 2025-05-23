@@ -30,7 +30,7 @@ func TestEmail(t *testing.T) {
 		attempt   int
 		verifier  string
 		challenge string
-		signer    string
+		signer    *proto.Key
 		loginHint string
 	}
 
@@ -120,16 +120,21 @@ func TestEmail(t *testing.T) {
 		},
 		"UsingSigner": {
 			prepareCommitParams: func(t *testing.T, p assertionParams, cp *proto.CommitVerifierParams) {
+				signer := insertSigner(t, p.svc, "123", "Email:"+p.email, p.email)
 				cp.Handle = ""
-				cp.Signer = insertSigner(t, p.svc, "123", "Email:"+p.email, p.email)
+				cp.Signer = &proto.Key{
+					KeyType: proto.KeyType_Secp256k1,
+					Address: signer.Address,
+				}
 			},
 			assertCommitVerifier: func(t *testing.T, p assertionParams, err error) bool {
 				signer := deriveKey(t, p.email)
+				signerAddr := strings.ToLower(crypto.PubkeyToAddress(signer.PublicKey).Hex())
 				require.NoError(t, err)
 				require.NotEmpty(t, p.verifier)
 				require.NotEmpty(t, p.challenge)
 				assert.Equal(t, p.email, p.loginHint)
-				assert.Equal(t, crypto.PubkeyToAddress(signer.PublicKey).Hex(), p.verifier)
+				assert.Equal(t, "Secp256k1:"+signerAddr, p.verifier)
 				return true
 			},
 			extractAnswer: func(t *testing.T, p assertionParams) string {
@@ -141,9 +146,10 @@ func TestEmail(t *testing.T) {
 			},
 			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
 				signer := deriveKey(t, p.email)
+				signerAddr := strings.ToLower(crypto.PubkeyToAddress(signer.PublicKey).Hex())
 				require.NoError(t, err)
 				require.NotEmpty(t, p.signer)
-				assert.Equal(t, crypto.PubkeyToAddress(signer.PublicKey).Hex(), p.signer)
+				assert.Equal(t, "Secp256k1:"+signerAddr, p.signer.String())
 				return true
 			},
 		},
@@ -167,10 +173,6 @@ func TestEmail(t *testing.T) {
 			defer srv.Close()
 
 			c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
-			header := make(http.Header)
-			header.Set("X-Sequence-Ecosystem", "123")
-			ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
-			require.NoError(t, err)
 
 			var p assertionParams
 			p.svc = svc
@@ -183,9 +185,10 @@ func TestEmail(t *testing.T) {
 			}
 
 			commitParams := &proto.CommitVerifierParams{
-				AuthKey: &proto.AuthKey{
-					KeyType:   proto.KeyType_P256K1,
-					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+				Scope: proto.Scope("@123"),
+				AuthKey: proto.Key{
+					KeyType: proto.KeyType_Secp256k1,
+					Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 				},
 				AuthMode:     proto.AuthMode_OTP,
 				IdentityType: proto.IdentityType_Email,
@@ -209,12 +212,14 @@ func TestEmail(t *testing.T) {
 				answer := hexutil.Encode(crypto.Keccak256([]byte(p.challenge + code)))
 
 				completeParams := &proto.CompleteAuthParams{
-					AuthKey: &proto.AuthKey{
-						KeyType:   proto.KeyType_P256K1,
-						PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+					Scope: proto.Scope("@123"),
+					AuthKey: proto.Key{
+						KeyType: proto.KeyType_Secp256k1,
+						Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 					},
 					AuthMode:     proto.AuthMode_OTP,
 					IdentityType: proto.IdentityType_Email,
+					SignerType:   proto.KeyType_Secp256k1,
 					Verifier:     p.verifier,
 					Answer:       answer,
 				}
@@ -234,11 +239,12 @@ func TestEmail(t *testing.T) {
 			require.NoError(t, err)
 
 			signParams := &proto.SignParams{
-				AuthKey: &proto.AuthKey{
-					KeyType:   proto.KeyType_P256K1,
-					PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+				Scope: proto.Scope("@123"),
+				AuthKey: proto.Key{
+					KeyType: proto.KeyType_Secp256k1,
+					Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 				},
-				Signer:    p.signer,
+				Signer:    *p.signer,
 				Digest:    digestHex,
 				Signature: hexutil.Encode(sig),
 			}
@@ -253,7 +259,7 @@ func TestEmail(t *testing.T) {
 			pub, err := crypto.Ecrecover(digest, sigBytes)
 			require.NoError(t, err)
 			addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-			assert.Equal(t, addr.String(), p.signer)
+			assert.Equal(t, "Secp256k1:"+strings.ToLower(addr.Hex()), p.signer.String())
 		})
 	}
 }

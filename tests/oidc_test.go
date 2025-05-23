@@ -57,17 +57,14 @@ func TestOIDC(t *testing.T) {
 		defer srv.Close()
 
 		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
-		header := make(http.Header)
-		header.Set("X-Sequence-Ecosystem", "123")
-		ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
-		require.NoError(t, err)
 
 		hashedToken := hexutil.Encode(crypto.Keccak256([]byte(tok)))
 
 		initiateParams := &proto.CommitVerifierParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
 			AuthMode:     proto.AuthMode_IDToken,
 			IdentityType: proto.IdentityType_OIDC,
@@ -85,12 +82,14 @@ func TestOIDC(t *testing.T) {
 		require.Empty(t, challenge)
 
 		registerParams := &proto.CompleteAuthParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
 			AuthMode:     proto.AuthMode_IDToken,
 			IdentityType: proto.IdentityType_OIDC,
+			SignerType:   proto.KeyType_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       tok,
 		}
@@ -105,11 +104,12 @@ func TestOIDC(t *testing.T) {
 		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
-			Signer:    resSigner,
+			Signer:    *resSigner,
 			Digest:    digestHex,
 			Signature: hexutil.Encode(sig),
 		}
@@ -124,7 +124,7 @@ func TestOIDC(t *testing.T) {
 		pub, err := crypto.Ecrecover(digest, sigBytes)
 		require.NoError(t, err)
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-		assert.Equal(t, addr.String(), resSigner)
+		assert.Equal(t, "Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
 
 	t.Run("AuthMode_AuthCode", func(t *testing.T) {
@@ -150,10 +150,6 @@ func TestOIDC(t *testing.T) {
 		defer srv.Close()
 
 		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
-		header := make(http.Header)
-		header.Set("X-Sequence-Ecosystem", "123")
-		ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
-		require.NoError(t, err)
 
 		code := authServer.authorize(map[string]string{
 			"client_id":    "audience",
@@ -164,9 +160,10 @@ func TestOIDC(t *testing.T) {
 		codeHash := hexutil.Encode(crypto.Keccak256([]byte(code)))
 
 		initiateParams := &proto.CommitVerifierParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
 			AuthMode:     proto.AuthMode_AuthCode,
 			IdentityType: proto.IdentityType_OIDC,
@@ -183,12 +180,14 @@ func TestOIDC(t *testing.T) {
 		require.Empty(t, loginHint)
 
 		registerParams := &proto.CompleteAuthParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
 			AuthMode:     proto.AuthMode_AuthCode,
 			IdentityType: proto.IdentityType_OIDC,
+			SignerType:   proto.KeyType_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
@@ -203,11 +202,12 @@ func TestOIDC(t *testing.T) {
 		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
-			Signer:    resSigner,
+			Signer:    *resSigner,
 			Digest:    digestHex,
 			Signature: hexutil.Encode(sig),
 		}
@@ -222,7 +222,7 @@ func TestOIDC(t *testing.T) {
 		pub, err := crypto.Ecrecover(digest, sigBytes)
 		require.NoError(t, err)
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-		assert.Equal(t, addr.String(), resSigner)
+		assert.Equal(t, "Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
 
 	t.Run("AuthMode_AuthCodePKCE", func(t *testing.T) {
@@ -248,15 +248,12 @@ func TestOIDC(t *testing.T) {
 		defer srv.Close()
 
 		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
-		header := make(http.Header)
-		header.Set("X-Sequence-Ecosystem", "123")
-		ctx, err = proto.WithHTTPRequestHeaders(ctx, header)
-		require.NoError(t, err)
 
 		initiateParams := &proto.CommitVerifierParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
 			AuthMode:     proto.AuthMode_AuthCodePKCE,
 			IdentityType: proto.IdentityType_OIDC,
@@ -280,12 +277,14 @@ func TestOIDC(t *testing.T) {
 		require.NotEmpty(t, code)
 
 		registerParams := &proto.CompleteAuthParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
 			AuthMode:     proto.AuthMode_AuthCodePKCE,
 			IdentityType: proto.IdentityType_OIDC,
+			SignerType:   proto.KeyType_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
@@ -300,11 +299,12 @@ func TestOIDC(t *testing.T) {
 		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			AuthKey: &proto.AuthKey{
-				KeyType:   proto.KeyType_P256K1,
-				PublicKey: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			Scope: proto.Scope("@123"),
+			AuthKey: proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			},
-			Signer:    resSigner,
+			Signer:    *resSigner,
 			Digest:    digestHex,
 			Signature: hexutil.Encode(sig),
 		}
@@ -319,7 +319,7 @@ func TestOIDC(t *testing.T) {
 		pub, err := crypto.Ecrecover(digest, sigBytes)
 		require.NoError(t, err)
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-		assert.Equal(t, addr.String(), resSigner)
+		assert.Equal(t, "Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
 }
 

@@ -166,7 +166,7 @@ func deriveKey(t *testing.T, source string) *ecdsa.PrivateKey {
 	return signer
 }
 
-func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string, source string) string {
+func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string, source string) proto.Key {
 	ctx := context.Background()
 	att, err := svc.Enclave.GetAttestation(ctx, nil, nil)
 	require.NoError(t, err)
@@ -177,7 +177,8 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 	require.NoError(t, ident.FromString(identity))
 
 	signerData := &proto.SignerData{
-		Ecosystem:  ecosystem,
+		Scope:      proto.Scope("@" + ecosystem),
+		KeyType:    proto.KeyType_Secp256k1,
 		Identity:   &ident,
 		PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
 	}
@@ -186,13 +187,19 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 		t.Fatal(err)
 	}
 	dbSigner := &data.Signer{
-		Ecosystem:     ecosystem,
-		Address:       crypto.PubkeyToAddress(signer.PublicKey).Hex(),
-		Identity:      data.Identity(ident),
+		Address:  crypto.PubkeyToAddress(signer.PublicKey).Hex(),
+		Identity: data.Identity(ident),
+		ScopedKeyType: data.ScopedKeyType{
+			Scope:   proto.Scope("@" + ecosystem),
+			KeyType: proto.KeyType_Secp256k1,
+		},
 		EncryptedData: encData,
 	}
 	if err := svc.Signers.Put(ctx, dbSigner); err != nil {
 		t.Fatal(err)
 	}
-	return crypto.PubkeyToAddress(signer.PublicKey).Hex()
+	return proto.Key{
+		KeyType: proto.KeyType_Secp256k1,
+		Address: crypto.PubkeyToAddress(signer.PublicKey).Hex(),
+	}
 }
