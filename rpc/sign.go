@@ -15,23 +15,21 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
-	"github.com/0xsequence/identity-instrument/rpc/internal/ecosystem"
 )
 
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error) {
 	if params == nil {
 		return "", proto.ErrInvalidRequest.WithCausef("params is required")
 	}
-	if params.AuthKey == nil {
-		return "", proto.ErrInvalidRequest.WithCausef("auth key is required")
+	if !params.AuthKey.IsValid() {
+		return "", proto.ErrInvalidRequest.WithCausef("valid auth key is required")
 	}
 
 	digestBytes := common.FromHex(params.Digest)
 	sigBytes := common.FromHex(params.Signature)
-	authKeyBytes := common.FromHex(params.AuthKey.PublicKey)
 
 	switch params.AuthKey.KeyType {
-	case proto.KeyType_P256K1:
+	case proto.KeyType_Secp256k1:
 		// Add Ethereum prefix to the hash
 		prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(params.Digest), params.Digest)))
 
@@ -47,12 +45,13 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		}
 		addr := common.BytesToAddress(crypto.Keccak256(pubKey[1:])[12:])
 
-		if !strings.EqualFold(addr.String(), params.AuthKey.PublicKey) {
+		if !strings.EqualFold(addr.String(), params.AuthKey.Address) {
 			return "", proto.ErrInvalidSignature.WithCausef("invalid auth key signature")
 		}
 
-	case proto.KeyType_P256R1:
-		x, y := elliptic.Unmarshal(elliptic.P256(), authKeyBytes)
+	case proto.KeyType_Secp256r1:
+		pubKeyBytes := common.FromHex(params.AuthKey.Address)
+		x, y := elliptic.Unmarshal(elliptic.P256(), pubKeyBytes)
 		if x == nil || y == nil {
 			return "", proto.ErrInvalidSignature.WithCausef("invalid public key")
 		}
@@ -74,7 +73,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", proto.ErrInvalidRequest.WithCausef("unknown key type")
 	}
 
-	dbAuthKey, found, err := s.AuthKeys.Get(ctx, ecosystem.FromContext(ctx), params.AuthKey.String())
+	dbAuthKey, found, err := s.AuthKeys.Get(ctx, params.Scope, params.AuthKey)
 	if err != nil {
 		return "", proto.ErrDatabaseError.WithCausef("get auth key: %w", err)
 	}
@@ -95,11 +94,11 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", proto.ErrKeyExpired
 	}
 
-	if authKeyData.SignerAddress != params.Signer {
+	if authKeyData.Signer != params.Signer {
 		return "", proto.ErrDataIntegrityError.WithCausef("signer mismatch")
 	}
 
-	dbSigner, found, err := s.Signers.GetByAddress(ctx, ecosystem.FromContext(ctx), authKeyData.SignerAddress)
+	dbSigner, found, err := s.Signers.GetByAddress(ctx, params.Scope, authKeyData.Signer)
 	if err != nil {
 		return "", proto.ErrDatabaseError.WithCausef("get signer: %w", err)
 	}
@@ -115,7 +114,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 	if err != nil {
 		return "", proto.ErrInternalError.WithCausef("create signer: %w", err)
 	}
-	if !dbSigner.CorrespondsTo(signerData, signer) {
+	if !dbSigner.CorrespondsToData(signerData, signer) {
 		return "", proto.ErrDataIntegrityError.WithCausef("signer mismatch")
 	}
 

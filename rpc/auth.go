@@ -21,7 +21,6 @@ import (
 	"github.com/0xsequence/identity-instrument/proto/builder"
 	"github.com/0xsequence/identity-instrument/rpc/email"
 	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
-	"github.com/0xsequence/identity-instrument/rpc/internal/ecosystem"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
@@ -34,8 +33,11 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	if params == nil {
 		return "", "", "", proto.ErrInvalidRequest.WithCausef("params is required")
 	}
-	if params.AuthKey == nil {
-		return "", "", "", proto.ErrInvalidRequest.WithCausef("auth key is required")
+	if !params.AuthKey.IsValid() {
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("valid auth key is required")
+	}
+	if !params.Scope.IsValid() {
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("valid scope is required")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
@@ -49,16 +51,16 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 
 	var commitment *proto.AuthCommitmentData
 	authID := proto.AuthID{
-		Ecosystem:    ecosystem.FromContext(ctx),
+		Scope:        params.Scope,
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
 		Verifier:     params.Handle,
 	}
 
 	var signer *proto.SignerData
-	if params.Signer != "" {
-		authID.Verifier = params.Signer
-		dbSigner, found, err := s.Signers.GetByAddress(ctx, ecosystem.FromContext(ctx), params.Signer)
+	if params.Signer.IsValid() {
+		authID.Verifier = params.Signer.String()
+		dbSigner, found, err := s.Signers.GetByAddress(ctx, params.Scope, *params.Signer)
 		if err != nil {
 			return "", "", "", proto.ErrDatabaseError.WithCausef("get signer: %w", err)
 		}
@@ -95,7 +97,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 
 		dbCommitment := &data.AuthCommitment{
 			ID: data.AuthID{
-				Ecosystem:    commitment.Ecosystem,
+				Scope:        commitment.Scope,
 				AuthMode:     commitment.AuthMode,
 				IdentityType: commitment.IdentityType,
 				Verifier:     commitment.Verifier(),
@@ -116,48 +118,56 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	return authHandler.Commit(ctx, authID, commitment, signer, params.AuthKey, params.Metadata, storeFn)
 }
 
-func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (string, error) {
+func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (*proto.Key, error) {
 	att := attestation.FromContext(ctx)
 
 	if params == nil {
-		return "", proto.ErrInvalidRequest.WithCausef("params is required")
+		return nil, proto.ErrInvalidRequest.WithCausef("params is required")
 	}
-	if params.AuthKey == nil {
-		return "", proto.ErrInvalidRequest.WithCausef("auth key is required")
+	if !params.AuthKey.IsValid() {
+		return nil, proto.ErrInvalidRequest.WithCausef("valid auth key is required")
+	}
+	if !params.Scope.IsValid() {
+		return nil, proto.ErrInvalidRequest.WithCausef("valid scope is required")
+	}
+
+	// Currently we only support secp256k1 signers
+	if !params.SignerType.Is(proto.KeyType_Secp256k1) {
+		return nil, proto.ErrInvalidRequest.WithCausef("signer key type must be secp256k1")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
 	if err != nil {
-		return "", proto.ErrInvalidRequest.WithCausef("get auth handler: %w", err)
+		return nil, proto.ErrInvalidRequest.WithCausef("get auth handler: %w", err)
 	}
 
 	var commitment *proto.AuthCommitmentData
 	authID := proto.AuthID{
-		Ecosystem:    ecosystem.FromContext(ctx),
+		Scope:        params.Scope,
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
 		Verifier:     params.Verifier,
 	}
 	dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 	if err != nil {
-		return "", proto.ErrDatabaseError.WithCausef("get commitment: %w", err)
+		return nil, proto.ErrDatabaseError.WithCausef("get commitment: %w", err)
 	}
 	if found && dbCommitment != nil {
 		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
-			return "", proto.ErrEncryptionError.WithCausef("decrypt commitment data: %w", err)
+			return nil, proto.ErrEncryptionError.WithCausef("decrypt commitment data: %w", err)
 		}
 
 		if commitment.Attempts >= 3 {
-			return "", proto.ErrTooManyAttempts
+			return nil, proto.ErrTooManyAttempts
 		}
 
 		if time.Now().After(commitment.Expiry) {
-			return "", proto.ErrChallengeExpired
+			return nil, proto.ErrChallengeExpired
 		}
 
-		if !dbCommitment.CorrespondsTo(commitment) {
-			return "", proto.ErrDataIntegrityError.WithCausef("commitment mismatch")
+		if !dbCommitment.CorrespondsTo(commitment) || commitment.Scope != params.Scope {
+			return nil, proto.ErrDataIntegrityError.WithCausef("commitment mismatch")
 		}
 	}
 
@@ -167,81 +177,85 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			commitment.Attempts += 1
 			encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
 			if err != nil {
-				return "", proto.ErrEncryptionError.WithCausef("encrypting commitment: %w", err)
+				return nil, proto.ErrEncryptionError.WithCausef("encrypting commitment: %w", err)
 			}
 			if err := s.AuthCommitments.UpdateData(ctx, dbCommitment, encryptedData); err != nil {
-				return "", proto.ErrDatabaseError.WithCausef("updating commitment: %w", err)
+				return nil, proto.ErrDatabaseError.WithCausef("updating commitment: %w", err)
 			}
 		}
-		return "", err
+		return nil, err
 	}
 
 	// always use normalized email address
 	ident.Email = email.Normalize(ident.Email)
 
-	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, ecosystem.FromContext(ctx), ident)
+	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, ident, params.Scope, params.SignerType)
 	if err != nil {
-		return "", proto.ErrDatabaseError.WithCausef("retrieve signer: %w", err)
+		return nil, proto.ErrDatabaseError.WithCausef("retrieve signer: %w", err)
 	}
 
-	if dbSigner != nil && commitment.Signer != "" && dbSigner.Address != commitment.Signer {
-		return "", proto.ErrDataIntegrityError.WithCausef("signer address mismatch")
+	if dbSigner != nil && commitment.Signer.IsValid() && !dbSigner.CorrespondsToProtoKey(commitment.Signer) {
+		return nil, proto.ErrDataIntegrityError.WithCausef("signer address mismatch")
 	}
 
 	if !signerFound {
-		if commitment.Signer != "" {
-			return "", proto.ErrDataIntegrityError.WithCausef("signer not found")
+		if commitment.Signer.IsValid() {
+			return nil, proto.ErrDataIntegrityError.WithCausef("signer not found")
 		}
 
 		signer, err := ecdsa.GenerateKey(secp256k1.S256(), att)
 		if err != nil {
-			return "", proto.ErrInternalError.WithCausef("generate signer: %w", err)
+			return nil, proto.ErrInternalError.WithCausef("generate signer: %w", err)
 		}
 
 		signerData := &proto.SignerData{
-			Ecosystem:  ecosystem.FromContext(ctx),
+			Scope:      params.Scope,
 			Identity:   &ident,
+			KeyType:    params.SignerType,
 			PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
 		}
 		encData, err := data.Encrypt(ctx, att, s.EncryptionPool, signerData)
 		if err != nil {
-			return "", proto.ErrEncryptionError.WithCausef("encrypt signer data: %w", err)
+			return nil, proto.ErrEncryptionError.WithCausef("encrypt signer data: %w", err)
 		}
 		dbSigner = &data.Signer{
-			Ecosystem:     ecosystem.FromContext(ctx),
-			Address:       crypto.PubkeyToAddress(signer.PublicKey).Hex(),
+			ScopedKeyType: data.ScopedKeyType{
+				Scope:   params.Scope,
+				KeyType: params.SignerType,
+			},
+			Address:       strings.ToLower(crypto.PubkeyToAddress(signer.PublicKey).Hex()),
 			Identity:      data.Identity(ident),
 			EncryptedData: encData,
 		}
 		if err := s.Signers.Put(ctx, dbSigner); err != nil {
-			return "", proto.ErrDatabaseError.WithCausef("put signer: %w", err)
+			return nil, proto.ErrDatabaseError.WithCausef("put signer: %w", err)
 		}
 	}
 
 	ttl := 5 * time.Minute
 	authKeyData := &proto.AuthKeyData{
-		Ecosystem:     ecosystem.FromContext(ctx),
-		SignerAddress: dbSigner.Address,
-		KeyType:       params.AuthKey.KeyType,
-		PublicKey:     params.AuthKey.PublicKey,
-		Expiry:        time.Now().Add(ttl),
+		Scope:   params.Scope,
+		Signer:  dbSigner.Key(),
+		AuthKey: params.AuthKey,
+		Expiry:  time.Now().Add(ttl),
 	}
 
 	encData, err := data.Encrypt(ctx, att, s.EncryptionPool, authKeyData)
 	if err != nil {
-		return "", proto.ErrEncryptionError.WithCausef("encrypt auth key data: %w", err)
+		return nil, proto.ErrEncryptionError.WithCausef("encrypt auth key data: %w", err)
 	}
 
 	dbAuthKey := &data.AuthKey{
-		Ecosystem:     ecosystem.FromContext(ctx),
+		Scope:         params.Scope,
 		KeyID:         params.AuthKey.String(),
 		EncryptedData: encData,
 	}
 	if err := s.AuthKeys.Put(ctx, dbAuthKey); err != nil {
-		return "", proto.ErrDatabaseError.WithCausef("put auth key: %w", err)
+		return nil, proto.ErrDatabaseError.WithCausef("put auth key: %w", err)
 	}
 
-	return dbSigner.Address, nil
+	res := dbSigner.Key()
+	return &res, nil
 }
 
 func (s *RPC) getAuthHandler(authMode proto.AuthMode) (auth.Handler, error) {
@@ -262,7 +276,11 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 	randomProvider := func(ctx context.Context) io.Reader {
 		return attestation.FromContext(ctx)
 	}
-	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, ecosystem string, iss string, aud string) (string, error) {
+	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, scope proto.Scope, iss string, aud string) (string, error) {
+		ecosystem, err := scope.Ecosystem()
+		if err != nil {
+			return "", fmt.Errorf("get ecosystem: %w", err)
+		}
 		secretName := "oauth/" + ecosystem + "/" + encodeValueForSecretName(iss) + "/" + encodeValueForSecretName(aud)
 
 		secret, err := s.Secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
