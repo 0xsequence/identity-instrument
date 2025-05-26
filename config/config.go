@@ -45,10 +45,10 @@ type SESConfig struct {
 }
 
 type DatabaseConfig struct {
-	AuthCommitmentsTable    string `toml:"auth_commitments_table"`
-	AuthKeysTable           string `toml:"auth_keys_table"`
-	SignersTable            string `toml:"signers_table"`
-	EncryptionPoolKeysTable string `toml:"encryption_pool_keys_table"`
+	AuthCommitmentsTable string `toml:"auth_commitments_table"`
+	AuthKeysTable        string `toml:"auth_keys_table"`
+	SignersTable         string `toml:"signers_table"`
+	CipherKeysTable      string `toml:"cipher_keys_table"`
 }
 
 type EncryptionConfig struct {

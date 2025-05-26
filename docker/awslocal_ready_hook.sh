@@ -52,7 +52,7 @@ awslocal dynamodb create-table \
 
 awslocal dynamodb create-table \
   --region us-east-1 \
-  --table-name EncryptionPoolKeysTable \
+  --table-name CipherKeysTable \
   --attribute-definitions AttributeName=KeyRef,AttributeType=S AttributeName=Generation,AttributeType=N AttributeName=KeyIndex,AttributeType=N \
   --key-schema AttributeName=Generation,KeyType=HASH AttributeName=KeyIndex,KeyType=SORT \
   --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 \

@@ -121,10 +121,10 @@ func (t *AuthCommitmentTable) UpdateData(
 		TableName: &t.tableARN,
 		Item:      av,
 		ConditionExpression: aws.String(
-			"attribute_exists(ID) AND EncryptionKeyRef = :key_ref AND Ciphertext = :ciphertext",
+			"attribute_exists(ID) AND CipherKeyRef = :key_ref AND Ciphertext = :ciphertext",
 		),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":key_ref":    &types.AttributeValueMemberS{Value: oldData.EncryptionKeyRef},
+			":key_ref":    &types.AttributeValueMemberS{Value: oldData.CipherKeyRef},
 			":ciphertext": &types.AttributeValueMemberS{Value: oldData.Ciphertext},
 		},
 	}

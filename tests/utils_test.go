@@ -50,10 +50,10 @@ func initConfig(t *testing.T, awsEndpoint string) *config.Config {
 	return &config.Config{
 		Region: "us-east-1",
 		Database: config.DatabaseConfig{
-			AuthCommitmentsTable:    "AuthCommitmentsTable",
-			AuthKeysTable:           "AuthKeysTable",
-			SignersTable:            "SignersTable",
-			EncryptionPoolKeysTable: "EncryptionPoolKeysTable",
+			AuthCommitmentsTable: "AuthCommitmentsTable",
+			AuthKeysTable:        "AuthKeysTable",
+			SignersTable:         "SignersTable",
+			CipherKeysTable:      "CipherKeysTable",
 		},
 		Endpoints: config.EndpointsConfig{
 			AWSEndpoint: awsEndpoint,

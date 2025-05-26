@@ -20,10 +20,10 @@ import (
 type Pool struct {
 	enclave   *enclave.Enclave
 	configs   []*Config
-	keysTable *data.EncryptionPoolKeyTable
+	keysTable *data.CipherKeyTable
 }
 
-func NewPool(enc *enclave.Enclave, configs []*Config, keysTable *data.EncryptionPoolKeyTable) *Pool {
+func NewPool(enc *enclave.Enclave, configs []*Config, keysTable *data.CipherKeyTable) *Pool {
 	return &Pool{
 		enclave:   enc,
 		configs:   configs,
@@ -154,7 +154,7 @@ func (p *Pool) getConfig(configVersion int) (*Config, error) {
 	return p.configs[configVersion], nil
 }
 
-func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyIndex int) (_ *data.EncryptionPoolKey, _ []byte, err error) {
+func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyIndex int) (_ *data.CipherKey, _ []byte, err error) {
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.generateKey", o11y.WithAnnotation("key_index", strconv.Itoa(keyIndex)))
 	defer func() {
 		span.RecordError(err)
@@ -194,7 +194,7 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 		i++
 	}
 
-	key := &data.EncryptionPoolKey{
+	key := &data.CipherKey{
 		Generation:      generation,
 		KeyIndex:        keyIndex,
 		KeyRef:          keyRef,
@@ -237,7 +237,7 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 	return key, privateKey, nil
 }
 
-func (p *Pool) verifyKey(ctx context.Context, att *enclave.Attestation, key *data.EncryptionPoolKey) (err error) {
+func (p *Pool) verifyKey(ctx context.Context, att *enclave.Attestation, key *data.CipherKey) (err error) {
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.verifyKey")
 	defer func() {
 		span.RecordError(err)

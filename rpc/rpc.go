@@ -102,7 +102,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 	}
 
 	db := dynamodb.NewFromConfig(awsCfg)
-	encPoolKeyTable := data.NewEncryptionPoolKeyTable(db, cfg.Database.EncryptionPoolKeysTable, data.EncryptionPoolKeyIndices{
+	cipherKeyTable := data.NewCipherKeyTable(db, cfg.Database.CipherKeysTable, data.CipherKeyIndices{
 		KeyRefIndex: "KeyRef-Index",
 	})
 	encPoolConfigs := make([]*encryption.Config, len(cfg.Encryption))
@@ -114,7 +114,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		encPoolConfigs[i] = encryption.NewConfig(encCfg.PoolSize, encCfg.Threshold, cryptors)
 	}
 
-	encPool := encryption.NewPool(enc, encPoolConfigs, encPoolKeyTable)
+	encPool := encryption.NewPool(enc, encPoolConfigs, cipherKeyTable)
 
 	m, err := enc.GetMeasurements(context.Background(), []uint16{0})
 	if err != nil {

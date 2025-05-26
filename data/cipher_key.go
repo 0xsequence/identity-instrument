@@ -15,7 +15,7 @@ import (
 	"github.com/fxamacker/cbor/v2"
 )
 
-type EncryptionPoolKey struct {
+type CipherKey struct {
 	// Generation is a sequence number of the encryption config used to encrypt the shares of this key.
 	Generation int `dynamodbav:"Generation" cbor:"0,keyasint"`
 	// KeyIndex is the index of the key within the config version.
@@ -32,14 +32,14 @@ type EncryptionPoolKey struct {
 	CreatedAt time.Time `dynamodbav:"CreatedAt" cbor:"4,keyasint"`
 }
 
-func (k *EncryptionPoolKey) Key() map[string]types.AttributeValue {
+func (k *CipherKey) Key() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
 		"Generation": &types.AttributeValueMemberN{Value: strconv.Itoa(k.Generation)},
 		"KeyIndex":   &types.AttributeValueMemberN{Value: strconv.Itoa(k.KeyIndex)},
 	}
 }
 
-func (k *EncryptionPoolKey) Hash() ([]byte, error) {
+func (k *CipherKey) Hash() ([]byte, error) {
 	enc, err := cbor.CanonicalEncOptions().EncMode()
 	if err != nil {
 		return nil, fmt.Errorf("create canonical encoder: %w", err)
@@ -54,26 +54,26 @@ func (k *EncryptionPoolKey) Hash() ([]byte, error) {
 	return h.Sum(nil), nil
 }
 
-type EncryptionPoolKeyIndices struct {
+type CipherKeyIndices struct {
 	KeyRefIndex string
 }
 
-type EncryptionPoolKeyTable struct {
+type CipherKeyTable struct {
 	db       DB
 	tableARN string
-	indices  EncryptionPoolKeyIndices
+	indices  CipherKeyIndices
 }
 
-func NewEncryptionPoolKeyTable(db DB, tableARN string, indices EncryptionPoolKeyIndices) *EncryptionPoolKeyTable {
-	return &EncryptionPoolKeyTable{
+func NewCipherKeyTable(db DB, tableARN string, indices CipherKeyIndices) *CipherKeyTable {
+	return &CipherKeyTable{
 		db:       db,
 		tableARN: tableARN,
 		indices:  indices,
 	}
 }
 
-func (t *EncryptionPoolKeyTable) Get(ctx context.Context, generation int, keyIndex int, consistentRead bool) (*EncryptionPoolKey, bool, error) {
-	key := EncryptionPoolKey{Generation: generation, KeyIndex: keyIndex}
+func (t *CipherKeyTable) Get(ctx context.Context, generation int, keyIndex int, consistentRead bool) (*CipherKey, bool, error) {
+	key := CipherKey{Generation: generation, KeyIndex: keyIndex}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      &t.tableARN,
@@ -93,8 +93,8 @@ func (t *EncryptionPoolKeyTable) Get(ctx context.Context, generation int, keyInd
 	return &key, true, nil
 }
 
-func (t *EncryptionPoolKeyTable) GetLatestByKeyRef(ctx context.Context, keyRef string, consistentRead bool) (*EncryptionPoolKey, bool, error) {
-	var key EncryptionPoolKey
+func (t *CipherKeyTable) GetLatestByKeyRef(ctx context.Context, keyRef string, consistentRead bool) (*CipherKey, bool, error) {
+	var key CipherKey
 	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
 		TableName:              &t.tableARN,
 		IndexName:              &t.indices.KeyRefIndex,
@@ -118,7 +118,7 @@ func (t *EncryptionPoolKeyTable) GetLatestByKeyRef(ctx context.Context, keyRef s
 	return &key, true, nil
 }
 
-func (t *EncryptionPoolKeyTable) Create(ctx context.Context, key *EncryptionPoolKey) (alreadyExists bool, err error) {
+func (t *CipherKeyTable) Create(ctx context.Context, key *CipherKey) (alreadyExists bool, err error) {
 	av, err := attributevalue.MarshalMap(key)
 	if err != nil {
 		return false, fmt.Errorf("marshal input: %w", err)
