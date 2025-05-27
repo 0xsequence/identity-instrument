@@ -93,9 +93,13 @@ func TestOIDC(t *testing.T) {
 			Verifier:     resVerifier,
 			Answer:       tok,
 		}
-		resSigner, err := c.CompleteAuth(ctx, registerParams)
+		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams)
 		require.NoError(t, err)
 		require.NotEmpty(t, resSigner)
+		require.NotEmpty(t, resIdentity)
+		assert.Equal(t, resIdentity.Type, proto.IdentityType_OIDC)
+		assert.Equal(t, resIdentity.Subject, "subject")
+		assert.Equal(t, resIdentity.Issuer, issuer)
 
 		digest := crypto.Keccak256([]byte("message"))
 		digestHex := hexutil.Encode(digest)
@@ -191,9 +195,13 @@ func TestOIDC(t *testing.T) {
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
-		resSigner, err := c.CompleteAuth(ctx, registerParams)
+		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams)
 		require.NoError(t, err)
 		require.NotEmpty(t, resSigner)
+		require.NotEmpty(t, resIdentity)
+		assert.Equal(t, resIdentity.Type, proto.IdentityType_OIDC)
+		assert.Equal(t, resIdentity.Subject, "subject")
+		assert.Equal(t, resIdentity.Issuer, issuer)
 
 		digest := crypto.Keccak256([]byte("message"))
 		digestHex := hexutil.Encode(digest)
@@ -288,9 +296,13 @@ func TestOIDC(t *testing.T) {
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
-		resSigner, err := c.CompleteAuth(ctx, registerParams)
+		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams)
 		require.NoError(t, err)
 		require.NotEmpty(t, resSigner)
+		require.NotEmpty(t, resIdentity)
+		assert.Equal(t, resIdentity.Type, proto.IdentityType_OIDC)
+		assert.Equal(t, resIdentity.Subject, "subject")
+		assert.Equal(t, resIdentity.Issuer, issuer)
 
 		digest := crypto.Keccak256([]byte("message"))
 		digestHex := hexutil.Encode(digest)

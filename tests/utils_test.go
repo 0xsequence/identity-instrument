@@ -188,7 +188,7 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 	}
 	dbSigner := &data.Signer{
 		Address:  crypto.PubkeyToAddress(signer.PublicKey).Hex(),
-		Identity: data.Identity(ident),
+		Identity: &ident,
 		ScopedKeyType: data.ScopedKeyType{
 			Scope:   proto.Scope("@" + ecosystem),
 			KeyType: proto.KeyType_Secp256k1,

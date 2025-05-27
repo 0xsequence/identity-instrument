@@ -31,6 +31,7 @@ func TestEmail(t *testing.T) {
 		verifier  string
 		challenge string
 		signer    *proto.Key
+		identity  *proto.Identity
 		loginHint string
 	}
 
@@ -59,6 +60,10 @@ func TestEmail(t *testing.T) {
 			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
 				require.NoError(t, err)
 				require.NotEmpty(t, p.signer)
+				require.NotEmpty(t, p.identity)
+				assert.Equal(t, p.identity.Type, proto.IdentityType_Email)
+				assert.Equal(t, p.identity.Subject, p.email)
+				assert.Equal(t, p.identity.Email, p.email)
 				return true
 			},
 		},
@@ -223,7 +228,7 @@ func TestEmail(t *testing.T) {
 					Verifier:     p.verifier,
 					Answer:       answer,
 				}
-				p.signer, err = c.CompleteAuth(ctx, completeParams)
+				p.signer, p.identity, err = c.CompleteAuth(ctx, completeParams)
 				if testCase.assertCompleteAuth != nil {
 					proceed = testCase.assertCompleteAuth(t, p, err)
 				}
