@@ -154,7 +154,7 @@ error 7005 TooManyAttempts "Too many attempts" HTTP 400
 
 service IdentityInstrument
   - CommitVerifier(params: CommitVerifierParams) => (verifier: string, loginHint: string, challenge: string)
-  - CompleteAuth(params: CompleteAuthParams) => (signer: Key)
+  - CompleteAuth(params: CompleteAuthParams) => (signer: Key, identity: Identity)
 
   - Sign(params: SignParams) => (signature: string)
 
