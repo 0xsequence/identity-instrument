@@ -96,7 +96,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		}
 
 		dbCommitment := &data.AuthCommitment{
-			ID: data.AuthID{
+			AuthID: &proto.AuthID{
 				Scope:        commitment.Scope,
 				AuthMode:     commitment.AuthMode,
 				IdentityType: commitment.IdentityType,
@@ -118,27 +118,27 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	return authHandler.Commit(ctx, authID, commitment, signer, params.AuthKey, params.Metadata, storeFn)
 }
 
-func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (*proto.Key, error) {
+func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (*proto.Key, *proto.Identity, error) {
 	att := attestation.FromContext(ctx)
 
 	if params == nil {
-		return nil, proto.ErrInvalidRequest.WithCausef("params is required")
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("params is required")
 	}
 	if !params.AuthKey.IsValid() {
-		return nil, proto.ErrInvalidRequest.WithCausef("valid auth key is required")
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("valid auth key is required")
 	}
 	if !params.Scope.IsValid() {
-		return nil, proto.ErrInvalidRequest.WithCausef("valid scope is required")
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("valid scope is required")
 	}
 
 	// Currently we only support secp256k1 signers
 	if !params.SignerType.Is(proto.KeyType_Secp256k1) {
-		return nil, proto.ErrInvalidRequest.WithCausef("signer key type must be secp256k1")
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("signer key type must be secp256k1")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
 	if err != nil {
-		return nil, proto.ErrInvalidRequest.WithCausef("get auth handler: %w", err)
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("get auth handler: %w", err)
 	}
 
 	var commitment *proto.AuthCommitmentData
@@ -150,24 +150,24 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	}
 	dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 	if err != nil {
-		return nil, proto.ErrDatabaseError.WithCausef("get commitment: %w", err)
+		return nil, nil, proto.ErrDatabaseError.WithCausef("get commitment: %w", err)
 	}
 	if found && dbCommitment != nil {
 		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
-			return nil, proto.ErrEncryptionError.WithCausef("decrypt commitment data: %w", err)
+			return nil, nil, proto.ErrEncryptionError.WithCausef("decrypt commitment data: %w", err)
 		}
 
 		if commitment.Attempts >= 3 {
-			return nil, proto.ErrTooManyAttempts
+			return nil, nil, proto.ErrTooManyAttempts
 		}
 
 		if time.Now().After(commitment.Expiry) {
-			return nil, proto.ErrChallengeExpired
+			return nil, nil, proto.ErrChallengeExpired
 		}
 
 		if !dbCommitment.CorrespondsTo(commitment) || commitment.Scope != params.Scope {
-			return nil, proto.ErrDataIntegrityError.WithCausef("commitment mismatch")
+			return nil, nil, proto.ErrDataIntegrityError.WithCausef("commitment mismatch")
 		}
 	}
 
@@ -177,13 +177,13 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			commitment.Attempts += 1
 			encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
 			if err != nil {
-				return nil, proto.ErrEncryptionError.WithCausef("encrypting commitment: %w", err)
+				return nil, nil, proto.ErrEncryptionError.WithCausef("encrypting commitment: %w", err)
 			}
 			if err := s.AuthCommitments.UpdateData(ctx, dbCommitment, encryptedData); err != nil {
-				return nil, proto.ErrDatabaseError.WithCausef("updating commitment: %w", err)
+				return nil, nil, proto.ErrDatabaseError.WithCausef("updating commitment: %w", err)
 			}
 		}
-		return nil, err
+		return nil, nil, err
 	}
 
 	// always use normalized email address
@@ -191,21 +191,21 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, ident, params.Scope, params.SignerType)
 	if err != nil {
-		return nil, proto.ErrDatabaseError.WithCausef("retrieve signer: %w", err)
+		return nil, nil, proto.ErrDatabaseError.WithCausef("retrieve signer: %w", err)
 	}
 
 	if dbSigner != nil && commitment.Signer.IsValid() && !dbSigner.CorrespondsToProtoKey(commitment.Signer) {
-		return nil, proto.ErrDataIntegrityError.WithCausef("signer address mismatch")
+		return nil, nil, proto.ErrDataIntegrityError.WithCausef("signer address mismatch")
 	}
 
 	if !signerFound {
 		if commitment.Signer.IsValid() {
-			return nil, proto.ErrDataIntegrityError.WithCausef("signer not found")
+			return nil, nil, proto.ErrDataIntegrityError.WithCausef("signer not found")
 		}
 
 		signer, err := ecdsa.GenerateKey(secp256k1.S256(), att)
 		if err != nil {
-			return nil, proto.ErrInternalError.WithCausef("generate signer: %w", err)
+			return nil, nil, proto.ErrInternalError.WithCausef("generate signer: %w", err)
 		}
 
 		signerData := &proto.SignerData{
@@ -216,7 +216,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 		encData, err := data.Encrypt(ctx, att, s.EncryptionPool, signerData)
 		if err != nil {
-			return nil, proto.ErrEncryptionError.WithCausef("encrypt signer data: %w", err)
+			return nil, nil, proto.ErrEncryptionError.WithCausef("encrypt signer data: %w", err)
 		}
 		dbSigner = &data.Signer{
 			ScopedKeyType: data.ScopedKeyType{
@@ -224,11 +224,11 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 				KeyType: params.SignerType,
 			},
 			Address:       strings.ToLower(crypto.PubkeyToAddress(signer.PublicKey).Hex()),
-			Identity:      data.Identity(ident),
+			Identity:      &ident,
 			EncryptedData: encData,
 		}
 		if err := s.Signers.Put(ctx, dbSigner); err != nil {
-			return nil, proto.ErrDatabaseError.WithCausef("put signer: %w", err)
+			return nil, nil, proto.ErrDatabaseError.WithCausef("put signer: %w", err)
 		}
 	}
 
@@ -242,20 +242,20 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	encData, err := data.Encrypt(ctx, att, s.EncryptionPool, authKeyData)
 	if err != nil {
-		return nil, proto.ErrEncryptionError.WithCausef("encrypt auth key data: %w", err)
+		return nil, nil, proto.ErrEncryptionError.WithCausef("encrypt auth key data: %w", err)
 	}
 
 	dbAuthKey := &data.AuthKey{
 		Scope:         params.Scope,
-		KeyID:         params.AuthKey.String(),
+		Key:           &params.AuthKey,
 		EncryptedData: encData,
 	}
 	if err := s.AuthKeys.Put(ctx, dbAuthKey); err != nil {
-		return nil, proto.ErrDatabaseError.WithCausef("put auth key: %w", err)
+		return nil, nil, proto.ErrDatabaseError.WithCausef("put auth key: %w", err)
 	}
 
 	res := dbSigner.Key()
-	return &res, nil
+	return &res, &ident, nil
 }
 
 func (s *RPC) getAuthHandler(authMode proto.AuthMode) (auth.Handler, error) {
