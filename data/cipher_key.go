@@ -26,7 +26,7 @@ type CipherKey struct {
 	// EncryptedShares is a map of remote key references to encrypted share values.
 	EncryptedShares map[string]string `dynamodbav:"EncryptedShares" cbor:"3,keyasint"`
 
-	// Attestation is the Nitro attestation document with the EncryptionPoolKey's Hash as UserData.
+	// Attestation is the Nitro attestation document with the CipherKey's Hash as UserData.
 	Attestation []byte `dynamodbav:"Attestation" cbor:"-"`
 
 	CreatedAt time.Time `dynamodbav:"CreatedAt" cbor:"4,keyasint"`

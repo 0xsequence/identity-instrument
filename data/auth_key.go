@@ -11,16 +11,18 @@ import (
 )
 
 type AuthKey struct {
-	KeyID string      `dynamodbav:"KeyID"`
-	Scope proto.Scope `dynamodbav:"Scope"`
+	KeyHash string      `dynamodbav:"KeyHash"`
+	Scope   proto.Scope `dynamodbav:"Scope"`
+
+	Key *proto.Key `dynamodbav:"-"`
 
 	EncryptedData[*proto.AuthKeyData]
 }
 
 func (k *AuthKey) DatabaseKey() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"Scope": &types.AttributeValueMemberS{Value: k.Scope.String()},
-		"KeyID": &types.AttributeValueMemberS{Value: k.KeyID},
+		"Scope":   &types.AttributeValueMemberS{Value: k.Scope.String()},
+		"KeyHash": &types.AttributeValueMemberS{Value: k.KeyHash},
 	}
 }
 
@@ -28,7 +30,7 @@ func (k *AuthKey) CorrespondsTo(data *proto.AuthKeyData) bool {
 	if k.Scope != data.Scope {
 		return false
 	}
-	if k.KeyID != data.AuthKey.String() {
+	if k.KeyHash != data.AuthKey.Hash() {
 		return false
 	}
 	return true
@@ -51,7 +53,7 @@ func NewAuthKeyTable(db DB, tableARN string, indices AuthKeyIndices) *AuthKeyTab
 }
 
 func (t *AuthKeyTable) Get(ctx context.Context, scope proto.Scope, key proto.Key) (*AuthKey, bool, error) {
-	authKey := AuthKey{Scope: scope, KeyID: key.String()}
+	authKey := AuthKey{Scope: scope, KeyHash: key.Hash()}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
@@ -71,6 +73,8 @@ func (t *AuthKeyTable) Get(ctx context.Context, scope proto.Scope, key proto.Key
 }
 
 func (t *AuthKeyTable) Put(ctx context.Context, key *AuthKey) error {
+	key.KeyHash = key.Key.Hash()
+
 	av, err := attributevalue.MarshalMap(key)
 	if err != nil {
 		return fmt.Errorf("marshal input: %w", err)

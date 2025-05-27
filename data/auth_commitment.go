@@ -11,29 +11,17 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-type AuthID proto.AuthID
-
-func (id *AuthID) MarshalDynamoDBAttributeValue() (types.AttributeValue, error) {
-	return &types.AttributeValueMemberS{Value: proto.AuthID(*id).String()}, nil
-}
-
-func (id *AuthID) UnmarshalDynamoDBAttributeValue(value types.AttributeValue) error {
-	v, ok := value.(*types.AttributeValueMemberS)
-	if !ok {
-		return fmt.Errorf("invalid auth session ID of type: %T", value)
-	}
-	return (*proto.AuthID)(id).FromString(v.Value)
-}
-
 type AuthCommitment struct {
-	ID AuthID `dynamodbav:"ID"`
+	ID string `dynamodbav:"ID"`
+
+	AuthID *proto.AuthID `dynamodbav:"-"`
 
 	EncryptedData[*proto.AuthCommitmentData]
 }
 
 func (c *AuthCommitment) Key() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"ID": &types.AttributeValueMemberS{Value: proto.AuthID(c.ID).String()},
+		"ID": &types.AttributeValueMemberS{Value: c.ID},
 	}
 }
 
@@ -41,16 +29,21 @@ func (c *AuthCommitment) CorrespondsTo(data *proto.AuthCommitmentData) bool {
 	if c == nil || data == nil {
 		return false
 	}
-	if c.ID.AuthMode != data.AuthMode {
-		return false
+	handleAuthID := proto.AuthID{
+		AuthMode:     data.AuthMode,
+		IdentityType: data.IdentityType,
+		Verifier:     data.Handle,
+		Scope:        data.Scope,
 	}
-	if c.ID.IdentityType != data.IdentityType {
-		return false
+	signerAuthID := proto.AuthID{
+		AuthMode:     data.AuthMode,
+		IdentityType: data.IdentityType,
+		Verifier:     data.Signer.String(),
+		Scope:        data.Scope,
 	}
-	if c.ID.Verifier != data.Handle && c.ID.Verifier != data.Signer.String() {
+	if c.AuthID != nil && *c.AuthID != handleAuthID && *c.AuthID != signerAuthID {
 		return false
-	}
-	if c.ID.Scope != data.Scope {
+	} else if c.ID != "" && c.ID != handleAuthID.Hash() && c.ID != signerAuthID.Hash() {
 		return false
 	}
 	return true
@@ -73,7 +66,7 @@ func NewAuthCommitmentTable(db DB, tableARN string, indices AuthCommitmentIndice
 }
 
 func (t *AuthCommitmentTable) Get(ctx context.Context, authID proto.AuthID) (*AuthCommitment, bool, error) {
-	commitment := AuthCommitment{ID: AuthID(authID)}
+	commitment := AuthCommitment{ID: authID.Hash()}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
@@ -93,6 +86,8 @@ func (t *AuthCommitmentTable) Get(ctx context.Context, authID proto.AuthID) (*Au
 }
 
 func (t *AuthCommitmentTable) Put(ctx context.Context, commitment *AuthCommitment) error {
+	commitment.ID = commitment.AuthID.Hash()
+
 	av, err := attributevalue.MarshalMap(commitment)
 	if err != nil {
 		return fmt.Errorf("marshal input: %w", err)

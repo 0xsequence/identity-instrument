@@ -41,8 +41,10 @@ func (s *ScopedKeyType) UnmarshalDynamoDBAttributeValue(value types.AttributeVal
 
 type Signer struct {
 	Address       string        `dynamodbav:"Address"`
-	Identity      Identity      `dynamodbav:"Identity"`
+	IdentityHash  string        `dynamodbav:"IdentityHash"`
 	ScopedKeyType ScopedKeyType `dynamodbav:"ScopedKeyType"`
+
+	Identity *proto.Identity `dynamodbav:"-"`
 
 	EncryptedData[*proto.SignerData]
 }
@@ -56,7 +58,7 @@ func (s *Signer) Key() proto.Key {
 
 func (s *Signer) DatabaseKey() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"Identity":      &types.AttributeValueMemberS{Value: s.Identity.String()},
+		"IdentityHash":  &types.AttributeValueMemberS{Value: s.IdentityHash},
 		"ScopedKeyType": &types.AttributeValueMemberS{Value: s.ScopedKeyType.String()},
 	}
 }
@@ -68,7 +70,7 @@ func (s *Signer) CorrespondsToData(data *proto.SignerData, cryptoKey any) bool {
 	if s.ScopedKeyType.KeyType != data.KeyType {
 		return false
 	}
-	if s.Identity.String() != data.Identity.String() {
+	if s.IdentityHash != data.Identity.Hash() {
 		return false
 	}
 	key, err := proto.NewKeyFromPrivateKey(data.KeyType, cryptoKey)
@@ -114,7 +116,7 @@ func NewSignerTable(db DB, tableARN string, indices SignerIndices) *SignerTable 
 
 func (t *SignerTable) GetByIdentity(ctx context.Context, ident proto.Identity, scope proto.Scope, keyType proto.KeyType) (*Signer, bool, error) {
 	signer := Signer{
-		Identity:      Identity(ident),
+		IdentityHash:  ident.Hash(),
 		ScopedKeyType: ScopedKeyType{Scope: scope, KeyType: keyType},
 	}
 
@@ -164,7 +166,13 @@ func (t *SignerTable) GetByAddress(ctx context.Context, scope proto.Scope, key p
 }
 
 func (t *SignerTable) Put(ctx context.Context, signer *Signer) error {
+	if signer.Identity == nil {
+		return fmt.Errorf("identity is required")
+	}
+
 	signer.Address = strings.ToLower(signer.Address)
+	signer.IdentityHash = signer.Identity.Hash()
+
 	av, err := attributevalue.MarshalMap(signer)
 	if err != nil {
 		return fmt.Errorf("marshal input: %w", err)
