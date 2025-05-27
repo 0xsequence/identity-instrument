@@ -203,9 +203,6 @@ func (s *RPC) Handler() http.Handler {
 	// Propagate TraceId
 	r.Use(traceid.Middleware)
 
-	// HTTP request logger
-	r.Use(httplog.RequestLogger(s.Log))
-
 	// Timeout any request after 28 seconds as Cloudflare has a 30 second limit anyways.
 	r.Use(middleware.Timeout(28 * time.Second))
 
