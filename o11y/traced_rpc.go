@@ -25,7 +25,7 @@ func (t *tracedRPC) CommitVerifier(ctx context.Context, params *proto.CommitVeri
 	return t.svc.CommitVerifier(ctx, params)
 }
 
-func (t *tracedRPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (_ *proto.Key, err error) {
+func (t *tracedRPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (_ *proto.Key, _ *proto.Identity, err error) {
 	ctx, span := Trace(ctx, "CompleteAuth")
 	defer func() {
 		span.RecordError(err)
