@@ -2,6 +2,8 @@ package proto
 
 import (
 	"crypto/ecdsa"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -41,4 +43,9 @@ func (k *Key) IsValid() bool {
 
 func (k *Key) HasValidKeyType() bool {
 	return k != nil && k.KeyType.Is(KeyType_Secp256k1, KeyType_Secp256r1)
+}
+
+func (k *Key) Hash() string {
+	hash := sha256.Sum256([]byte(k.String()))
+	return hex.EncodeToString(hash[:])
 }

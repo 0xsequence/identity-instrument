@@ -1,6 +1,8 @@
 package proto
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -45,4 +47,9 @@ func (id *Identity) FromString(s string) error {
 		return fmt.Errorf("invalid identity type: %s", parts[0])
 	}
 	return nil
+}
+
+func (id *Identity) Hash() string {
+	hash := sha256.Sum256([]byte(id.String()))
+	return hex.EncodeToString(hash[:])
 }

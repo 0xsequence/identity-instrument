@@ -1,6 +1,8 @@
 package proto
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 )
@@ -20,4 +22,9 @@ func (id *AuthID) FromString(s string) error {
 	id.IdentityType = IdentityType(parts[2])
 	id.Verifier = parts[3]
 	return nil
+}
+
+func (id *AuthID) Hash() string {
+	hash := sha256.Sum256([]byte(id.String()))
+	return hex.EncodeToString(hash[:])
 }
