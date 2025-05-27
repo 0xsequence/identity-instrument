@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
+	"time"
 
 	proto "github.com/0xsequence/identity-instrument/proto"
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -12,7 +13,8 @@ import (
 )
 
 type AuthCommitment struct {
-	ID string `dynamodbav:"ID"`
+	ID        string    `dynamodbav:"ID"`
+	ExpiresAt time.Time `dynamodbav:"ExpiresAt,unixtime"`
 
 	AuthID *proto.AuthID `dynamodbav:"-"`
 
@@ -44,6 +46,9 @@ func (c *AuthCommitment) CorrespondsTo(data *proto.AuthCommitmentData) bool {
 	if c.AuthID != nil && *c.AuthID != handleAuthID && *c.AuthID != signerAuthID {
 		return false
 	} else if c.ID != "" && c.ID != handleAuthID.Hash() && c.ID != signerAuthID.Hash() {
+		return false
+	}
+	if c.ExpiresAt.Unix() != data.Expiry.Unix() {
 		return false
 	}
 	return true

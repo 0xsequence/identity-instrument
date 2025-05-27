@@ -39,16 +39,18 @@ awslocal dynamodb create-table \
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name AuthKeysTable \
-  --attribute-definitions AttributeName=Scope,AttributeType=S AttributeName=KeyHash,AttributeType=S \
+  --attribute-definitions AttributeName=Scope,AttributeType=S AttributeName=KeyHash,AttributeType=S\
   --key-schema AttributeName=KeyHash,KeyType=HASH AttributeName=Scope,KeyType=SORT \
-  --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10
+  --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 
+awslocal dynamodb update-time-to-live --region us-east-1 --table-name AuthKeysTable --time-to-live-specification "AttributeName=ExpiresAt,Enabled=true"
 
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name AuthCommitmentsTable \
   --attribute-definitions AttributeName=ID,AttributeType=S \
   --key-schema AttributeName=ID,KeyType=HASH \
-  --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10
+  --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 
+awslocal dynamodb update-time-to-live --region us-east-1 --table-name AuthCommitmentsTable --time-to-live-specification "AttributeName=ExpiresAt,Enabled=true"
 
 awslocal dynamodb create-table \
   --region us-east-1 \

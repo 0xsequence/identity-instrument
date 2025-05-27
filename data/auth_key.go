@@ -3,6 +3,7 @@ package data
 import (
 	"context"
 	"fmt"
+	"time"
 
 	proto "github.com/0xsequence/identity-instrument/proto"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -11,8 +12,9 @@ import (
 )
 
 type AuthKey struct {
-	KeyHash string      `dynamodbav:"KeyHash"`
-	Scope   proto.Scope `dynamodbav:"Scope"`
+	KeyHash   string      `dynamodbav:"KeyHash"`
+	Scope     proto.Scope `dynamodbav:"Scope"`
+	ExpiresAt time.Time   `dynamodbav:"ExpiresAt,unixtime"`
 
 	Key *proto.Key `dynamodbav:"-"`
 
@@ -31,6 +33,9 @@ func (k *AuthKey) CorrespondsTo(data *proto.AuthKeyData) bool {
 		return false
 	}
 	if k.KeyHash != data.AuthKey.Hash() {
+		return false
+	}
+	if k.ExpiresAt.Unix() != data.Expiry.Unix() {
 		return false
 	}
 	return true

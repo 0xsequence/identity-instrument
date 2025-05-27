@@ -81,7 +81,9 @@ func (h *AuthHandler) Commit(
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
 		Metadata:     metadata,
-		Expiry:       time.Now().Add(5 * time.Minute),
+		// We don't know what the validity of the auth code itself is. So we set this to a long time
+		// to prevent replays, as the hash of the code identifies the commitment.
+		Expiry: time.Now().Add(365 * 24 * time.Hour),
 	}
 
 	if commitment.AuthMode == proto.AuthMode_AuthCodePKCE {

@@ -102,6 +102,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 				IdentityType: commitment.IdentityType,
 				Verifier:     commitment.Verifier(),
 			},
+			ExpiresAt:     commitment.Expiry,
 			EncryptedData: encryptedData,
 		}
 
@@ -248,6 +249,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	dbAuthKey := &data.AuthKey{
 		Scope:         params.Scope,
 		Key:           &params.AuthKey,
+		ExpiresAt:     authKeyData.Expiry,
 		EncryptedData: encData,
 	}
 	if err := s.AuthKeys.Put(ctx, dbAuthKey); err != nil {
