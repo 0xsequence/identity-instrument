@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"net/http"
 )
@@ -22,10 +21,6 @@ func generateUserData(r *http.Request, resBody []byte) ([]byte, error) {
 	hasher.Write([]byte("\n"))
 	hasher.Write(resBody)
 	hash := hasher.Sum(nil)
-
-	fmt.Println(r.Method + " " + r.URL.Path)
-	fmt.Println(string(reqBody))
-	fmt.Println(string(resBody))
 
 	userData := "Sequence/1:" + base64.StdEncoding.EncodeToString(hash)
 	return []byte(userData), nil
