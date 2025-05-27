@@ -145,6 +145,9 @@ func (h *AuthHandler) Verify(
 		Type:    commitment.IdentityType,
 		Subject: commitment.Handle,
 	}
+	if commitment.IdentityType == proto.IdentityType_Email {
+		identity.Email = identity.Subject
+	}
 	return identity, nil
 }
 
