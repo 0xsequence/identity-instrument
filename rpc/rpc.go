@@ -28,6 +28,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httplog"
 	"github.com/go-chi/traceid"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 )
 
@@ -206,6 +207,8 @@ func (s *RPC) Handler() http.Handler {
 	// Timeout any request after 28 seconds as Cloudflare has a 30 second limit anyways.
 	r.Use(middleware.Timeout(28 * time.Second))
 
+	r.Handle("/metrics", promhttp.Handler())
+
 	r.Group(func(r chi.Router) {
 		// Observability middleware
 		r.Use(o11y.Middleware())
@@ -225,7 +228,10 @@ func (s *RPC) Handler() http.Handler {
 		// Generate attestation document
 		r.Use(attestation.Middleware(s.Enclave))
 
-		r.Handle("/rpc/IdentityInstrument/*", proto.NewIdentityInstrumentServer(s))
+		srv := proto.NewIdentityInstrumentServer(s)
+		r.Handle("/rpc/IdentityInstrument/CommitVerifier", srv)
+		r.Handle("/rpc/IdentityInstrument/CompleteAuth", srv)
+		r.Handle("/rpc/IdentityInstrument/Sign", srv)
 	})
 
 	return r
