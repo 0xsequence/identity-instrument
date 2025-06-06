@@ -31,15 +31,36 @@ func (t *tracedAuthHandler) Commit(
 		span.RecordError(err)
 		span.End()
 	}()
+
+	span.SetAnnotation("operation", "auth.commit")
+	span.SetAnnotation("auth_mode", string(authID.AuthMode))
+	span.SetAnnotation("identity_type", string(authID.IdentityType))
+	if metadata != nil && metadata["iss"] != "" {
+		span.SetAnnotation("issuer", metadata["iss"])
+	}
+
 	return t.Handler.Commit(ctx, authID, commitment, signer, authKey, metadata, storeFn)
 }
 
 // Verify implements auth.Handler.
-func (t *tracedAuthHandler) Verify(ctx context.Context, commitment *proto.AuthCommitmentData, authKey proto.Key, answer string) (_ proto.Identity, err error) {
+func (t *tracedAuthHandler) Verify(
+	ctx context.Context,
+	commitment *proto.AuthCommitmentData,
+	authKey proto.Key,
+	answer string,
+) (_ proto.Identity, err error) {
 	ctx, span := Trace(ctx, t.name+".Verify")
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
+
+	span.SetAnnotation("operation", "auth.verify")
+	span.SetAnnotation("auth_mode", string(commitment.AuthMode))
+	span.SetAnnotation("identity_type", string(commitment.IdentityType))
+	if commitment.Metadata != nil && commitment.Metadata["iss"] != "" {
+		span.SetAnnotation("issuer", commitment.Metadata["iss"])
+	}
+
 	return t.Handler.Verify(ctx, commitment, authKey, answer)
 }
