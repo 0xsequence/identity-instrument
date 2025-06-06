@@ -33,3 +33,15 @@ func (s Scope) Ecosystem() (string, error) {
 	ecosystem := matches[1]
 	return ecosystem, nil
 }
+
+func (p *CommitVerifierParams) GetScope() Scope {
+	return p.Scope
+}
+
+func (p *CompleteAuthParams) GetScope() Scope {
+	return p.Scope
+}
+
+func (p *SignParams) GetScope() Scope {
+	return p.Scope
+}

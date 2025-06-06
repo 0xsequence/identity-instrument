@@ -254,3 +254,26 @@ func (s *RPC) healthHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusOK)
 }
+
+type scopedParams interface {
+	GetScope() proto.Scope
+}
+
+func (s *RPC) getScope(ctx context.Context, params scopedParams) (proto.Scope, error) {
+	scope := params.GetScope()
+	if scope.IsValid() {
+		return scope, nil
+	}
+
+	r := ctx.Value(proto.HTTPRequestCtxKey)
+	if r == nil {
+		return "", fmt.Errorf("missing http request")
+	}
+
+	scope = proto.Scope(r.(*http.Request).Header.Get("X-Sequence-Scope"))
+	if !scope.IsValid() {
+		return "", fmt.Errorf("invalid X-Sequence-Scope header")
+	}
+
+	return scope, nil
+}

@@ -18,6 +18,11 @@ import (
 )
 
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error) {
+	scope, err := s.getScope(ctx, params)
+	if err != nil {
+		return "", proto.ErrInvalidRequest.WithCausef("valid scope is required")
+	}
+
 	if params == nil {
 		return "", proto.ErrInvalidRequest.WithCausef("params is required")
 	}
@@ -73,7 +78,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", proto.ErrInvalidRequest.WithCausef("unknown key type")
 	}
 
-	dbAuthKey, found, err := s.AuthKeys.Get(ctx, params.Scope, params.AuthKey)
+	dbAuthKey, found, err := s.AuthKeys.Get(ctx, scope, params.AuthKey)
 	if err != nil {
 		return "", proto.ErrDatabaseError.WithCausef("get auth key: %w", err)
 	}
@@ -98,7 +103,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		return "", proto.ErrDataIntegrityError.WithCausef("signer mismatch")
 	}
 
-	dbSigner, found, err := s.Signers.GetByAddress(ctx, params.Scope, authKeyData.Signer)
+	dbSigner, found, err := s.Signers.GetByAddress(ctx, scope, authKeyData.Signer)
 	if err != nil {
 		return "", proto.ErrDatabaseError.WithCausef("get signer: %w", err)
 	}

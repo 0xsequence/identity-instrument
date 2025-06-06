@@ -101,21 +101,15 @@ func proxy(httpClient *http.Client) http.Handler {
 			return
 		}
 
-		ecosystem := os.Getenv("SEQUENCE_ECOSYSTEM")
-		parsedRequest.Params["scope"] = "@" + ecosystem
-
-		jsonBody, err := json.Marshal(parsedRequest)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-			return
-		}
-
-		clientReq, err := http.NewRequest(r.Method, url, bytes.NewBuffer(jsonBody))
+		clientReq, err := http.NewRequest(r.Method, url, bytes.NewBuffer(reqBody))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
 		copyHeader(clientReq.Header, r.Header)
+
+		ecosystem := os.Getenv("SEQUENCE_ECOSYSTEM")
+		clientReq.Header.Set("X-Sequence-Scope", "@"+ecosystem)
 
 		res, err := httpClient.Do(clientReq.WithContext(r.Context()))
 		if err != nil {

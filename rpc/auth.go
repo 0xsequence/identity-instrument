@@ -30,14 +30,16 @@ import (
 func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams) (string, string, string, error) {
 	att := attestation.FromContext(ctx)
 
+	scope, err := s.getScope(ctx, params)
+	if err != nil {
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("valid scope is required")
+	}
+
 	if params == nil {
 		return "", "", "", proto.ErrInvalidRequest.WithCausef("params is required")
 	}
 	if !params.AuthKey.IsValid() {
 		return "", "", "", proto.ErrInvalidRequest.WithCausef("valid auth key is required")
-	}
-	if !params.Scope.IsValid() {
-		return "", "", "", proto.ErrInvalidRequest.WithCausef("valid scope is required")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
@@ -51,7 +53,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 
 	var commitment *proto.AuthCommitmentData
 	authID := proto.AuthID{
-		Scope:        params.Scope,
+		Scope:        scope,
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
 		Verifier:     params.Handle,
@@ -60,7 +62,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	var signer *proto.SignerData
 	if params.Signer.IsValid() {
 		authID.Verifier = params.Signer.String()
-		dbSigner, found, err := s.Signers.GetByAddress(ctx, params.Scope, *params.Signer)
+		dbSigner, found, err := s.Signers.GetByAddress(ctx, scope, *params.Signer)
 		if err != nil {
 			return "", "", "", proto.ErrDatabaseError.WithCausef("get signer: %w", err)
 		}
@@ -122,14 +124,16 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (*proto.Key, *proto.Identity, error) {
 	att := attestation.FromContext(ctx)
 
+	scope, err := s.getScope(ctx, params)
+	if err != nil {
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("valid scope is required")
+	}
+
 	if params == nil {
 		return nil, nil, proto.ErrInvalidRequest.WithCausef("params is required")
 	}
 	if !params.AuthKey.IsValid() {
 		return nil, nil, proto.ErrInvalidRequest.WithCausef("valid auth key is required")
-	}
-	if !params.Scope.IsValid() {
-		return nil, nil, proto.ErrInvalidRequest.WithCausef("valid scope is required")
 	}
 
 	// Currently we only support secp256k1 signers
@@ -144,7 +148,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	var commitment *proto.AuthCommitmentData
 	authID := proto.AuthID{
-		Scope:        params.Scope,
+		Scope:        scope,
 		AuthMode:     params.AuthMode,
 		IdentityType: params.IdentityType,
 		Verifier:     params.Verifier,
@@ -167,7 +171,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			return nil, nil, proto.ErrChallengeExpired
 		}
 
-		if !dbCommitment.CorrespondsTo(commitment) || commitment.Scope != params.Scope {
+		if !dbCommitment.CorrespondsTo(commitment) || commitment.Scope != scope {
 			return nil, nil, proto.ErrDataIntegrityError.WithCausef("commitment mismatch")
 		}
 	}
@@ -190,7 +194,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	// always use normalized email address
 	ident.Email = email.Normalize(ident.Email)
 
-	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, ident, params.Scope, params.SignerType)
+	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, ident, scope, params.SignerType)
 	if err != nil {
 		return nil, nil, proto.ErrDatabaseError.WithCausef("retrieve signer: %w", err)
 	}
@@ -210,7 +214,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 
 		signerData := &proto.SignerData{
-			Scope:      params.Scope,
+			Scope:      scope,
 			Identity:   &ident,
 			KeyType:    params.SignerType,
 			PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
@@ -221,7 +225,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 		dbSigner = &data.Signer{
 			ScopedKeyType: data.ScopedKeyType{
-				Scope:   params.Scope,
+				Scope:   scope,
 				KeyType: params.SignerType,
 			},
 			Address:       strings.ToLower(crypto.PubkeyToAddress(signer.PublicKey).Hex()),
@@ -235,7 +239,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	ttl := 5 * time.Minute
 	authKeyData := &proto.AuthKeyData{
-		Scope:   params.Scope,
+		Scope:   scope,
 		Signer:  dbSigner.Key(),
 		AuthKey: params.AuthKey,
 		Expiry:  time.Now().Add(ttl),
@@ -247,7 +251,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	}
 
 	dbAuthKey := &data.AuthKey{
-		Scope:         params.Scope,
+		Scope:         scope,
 		Key:           &params.AuthKey,
 		ExpiresAt:     authKeyData.Expiry,
 		EncryptedData: encData,
