@@ -3,7 +3,7 @@ package idtoken
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net/http"
 	"time"
 )
@@ -20,22 +20,22 @@ func (h *AuthHandler) GetOpenIDConfig(ctx context.Context, issuer string) (*Open
 		issuerConfigURL := normalizeIssuer(issuer) + "/.well-known/openid-configuration"
 		req, err := http.NewRequest(http.MethodGet, issuerConfigURL, nil)
 		if err != nil {
-			return OpenIDConfig{}, err
+			return OpenIDConfig{}, fmt.Errorf("failed to create request: %w", err)
 		}
 
 		resp, err := h.client.Do(req.WithContext(ctx))
 		if err != nil {
-			return OpenIDConfig{}, err
+			return OpenIDConfig{}, fmt.Errorf("failed to fetch openid configuration: %w", err)
 		}
 		defer resp.Body.Close()
 
 		if resp.StatusCode != http.StatusOK {
-			return OpenIDConfig{}, errors.New("failed to fetch openid configuration")
+			return OpenIDConfig{}, fmt.Errorf("failed to fetch openid configuration: %d", resp.StatusCode)
 		}
 
 		var config OpenIDConfig
 		if err := json.NewDecoder(resp.Body).Decode(&config); err != nil {
-			return OpenIDConfig{}, err
+			return OpenIDConfig{}, fmt.Errorf("failed to decode openid configuration: %w", err)
 		}
 		return config, nil
 	}

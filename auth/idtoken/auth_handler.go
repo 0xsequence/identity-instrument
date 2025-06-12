@@ -10,9 +10,9 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	ethcrypto "github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/auth"
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/goware/cachestore"
-	"github.com/goware/cachestore/memlru"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -26,23 +26,20 @@ type AuthHandler struct {
 
 var _ auth.Handler = (*AuthHandler)(nil)
 
-func NewAuthHandler(cacheBackend cachestore.Backend, client HTTPClient) (*AuthHandler, error) {
+func NewAuthHandler(
+	client HTTPClient,
+	jwkStore cachestore.Store[jwk.Key],
+	openidConfigStore cachestore.Store[OpenIDConfig],
+) *AuthHandler {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	jwkStore, err := memlru.NewWithBackend[jwk.Key](cacheBackend)
-	if err != nil {
-		return nil, err
-	}
-	openidConfigStore, err := memlru.NewWithBackend[OpenIDConfig](cacheBackend)
-	if err != nil {
-		return nil, err
-	}
+
 	return &AuthHandler{
 		client:            client,
 		jwkStore:          jwkStore,
 		openidConfigStore: openidConfigStore,
-	}, nil
+	}
 }
 
 func (*AuthHandler) Supports(identityType proto.IdentityType) bool {
@@ -59,7 +56,7 @@ func (h *AuthHandler) Commit(
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, resChallenge string, err error) {
 	if commitment != nil {
-		return "", "", "", fmt.Errorf("cannot reuse an old ID token")
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("cannot reuse an old ID token")
 	}
 
 	commitment, err = h.constructCommitment(authID, authKey, metadata)
@@ -79,18 +76,22 @@ func (h *AuthHandler) Verify(
 	authKey proto.Key,
 	answer string,
 ) (proto.Identity, error) {
+	log := o11y.LoggerFromContext(ctx)
+
 	if commitment == nil {
 		return proto.Identity{}, proto.ErrInvalidRequest.WithCausef("commitment not found")
 	}
 
 	expectedHash := hexutil.Encode(ethcrypto.Keccak256([]byte(answer)))
 	if commitment.Handle != expectedHash {
-		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("invalid token hash")
+		log.Error("invalid token hash", "expected", expectedHash, "actual", commitment.Handle)
+		return proto.Identity{}, proto.ErrProofVerificationFailed
 	}
 
 	vi, err := h.extractMetadata(commitment.Metadata)
 	if err != nil {
-		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("extract metadata: %w", err)
+		log.Error("failed to extract metadata", "error", err)
+		return proto.Identity{}, proto.ErrProofVerificationFailed
 	}
 
 	return h.VerifyToken(ctx, answer, vi.issuer, vi.audience, h.getVerifyChallengeFunc(commitment))
@@ -103,14 +104,17 @@ func (h *AuthHandler) VerifyToken(
 	expectedAudience string,
 	verifyChallenge func(tok jwt.Token) error,
 ) (proto.Identity, error) {
+	log := o11y.LoggerFromContext(ctx)
 	tok, err := jwt.Parse([]byte(idToken), jwt.WithVerify(false), jwt.WithValidate(false))
 	if err != nil {
-		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("parse JWT: %w", err)
+		log.Error("failed to parse JWT", "error", err)
+		return proto.Identity{}, proto.ErrProofVerificationFailed
 	}
 
 	if verifyChallenge != nil {
 		if err := verifyChallenge(tok); err != nil {
-			return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("verify challenge: %w", err)
+			log.Error("failed to verify challenge", "error", err)
+			return proto.Identity{}, proto.ErrProofVerificationFailed
 		}
 	}
 
@@ -124,7 +128,8 @@ func (h *AuthHandler) VerifyToken(
 	}
 
 	if _, err := jws.Verify([]byte(idToken), jws.WithKeySet(ks, jws.WithMultipleKeysPerKeyID(false))); err != nil {
-		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("signature verification: %w", err)
+		log.Error("failed to verify signature", "error", err)
+		return proto.Identity{}, proto.ErrProofVerificationFailed
 	}
 
 	validateOptions := []jwt.ValidateOption{
@@ -134,7 +139,8 @@ func (h *AuthHandler) VerifyToken(
 	}
 
 	if err := jwt.Validate(tok, validateOptions...); err != nil {
-		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("JWT validation: %w", err)
+		log.Error("failed to validate JWT", "error", err)
+		return proto.Identity{}, proto.ErrProofVerificationFailed
 	}
 
 	identity := proto.Identity{
@@ -147,19 +153,23 @@ func (h *AuthHandler) VerifyToken(
 }
 
 func (h *AuthHandler) GetKeySet(ctx context.Context, issuer string) (set jwk.Set, err error) {
+	log := o11y.LoggerFromContext(ctx)
 	openidConfig, err := h.GetOpenIDConfig(ctx, issuer)
 	if err != nil {
-		return nil, proto.ErrIdentityProviderError.WithCausef("fetch issuer keys: %w", err)
+		log.Error("failed to get openid configuration", "error", err)
+		return nil, proto.ErrIdentityProviderError
 	}
 
 	jwksURL := openidConfig.JWKSURL
 	if jwksURL == "" {
-		return nil, proto.ErrIdentityProviderError.WithCausef("jwks_uri not found in openid configuration")
+		log.Error("jwks_uri not found in openid configuration")
+		return nil, proto.ErrIdentityProviderError
 	}
 
 	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(h.client))
 	if err != nil {
-		return nil, proto.ErrIdentityProviderError.WithCausef("fetch issuer keys: %w", err)
+		log.Error("failed to fetch issuer keys", "error", err)
+		return nil, proto.ErrIdentityProviderError
 	}
 	return keySet, nil
 }

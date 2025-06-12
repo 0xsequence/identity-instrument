@@ -20,7 +20,6 @@ import (
 	"github.com/0xsequence/identity-instrument/auth/idtoken"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/goware/cachestore"
-	"github.com/goware/cachestore/memlru"
 	"github.com/lestrrat-go/jwx/v2/jwa"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jwt"
@@ -37,21 +36,17 @@ type AuthHandler struct {
 var _ auth.Handler = (*AuthHandler)(nil)
 
 func NewAuthHandler(
-	cacheBackend cachestore.Backend,
 	client idtoken.HTTPClient,
 	idTokenHandler *idtoken.AuthHandler,
 	secretProvider SecretProvider,
 	randomProvider func(ctx context.Context) io.Reader,
+	secretStore cachestore.Store[string],
 ) (auth.Handler, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	if idTokenHandler == nil {
 		return nil, fmt.Errorf("idtoken handler is nil")
-	}
-	secretStore, err := memlru.NewWithBackend[string](cacheBackend)
-	if err != nil {
-		return nil, fmt.Errorf("open secret store: %w", err)
 	}
 	return &AuthHandler{
 		client:         client,

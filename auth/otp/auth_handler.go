@@ -10,6 +10,7 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	ethcrypto "github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/auth"
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 )
 
@@ -47,6 +48,7 @@ func (h *AuthHandler) Commit(
 	_metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, resChallenge string, err error) {
+	log := o11y.LoggerFromContext(ctx)
 	sender, ok := h.senders[authID.IdentityType]
 	if !ok {
 		return "", "", "", proto.ErrInvalidRequest.WithCausef("unsupported identity type: %v", authID.IdentityType)
@@ -68,17 +70,20 @@ func (h *AuthHandler) Commit(
 	// generate the secret verification code to be sent to the user
 	secretCode, err := randomDigits(randomSource, 6)
 	if err != nil {
-		return "", "", "", proto.ErrInternalError.WithCausef("failed to generate secret code: %w", err)
+		log.Error("failed to generate secret code", "error", err)
+		return "", "", "", proto.ErrInternalError
 	}
 	// client salt is sent back to the client in the intent response
 	clientSalt, err := randomHex(randomSource, 12)
 	if err != nil {
-		return "", "", "", proto.ErrInternalError.WithCausef("failed to generate client salt: %w", err)
+		log.Error("failed to generate client salt", "error", err)
+		return "", "", "", proto.ErrInternalError
 	}
 	// server salt is sent to the WaaS API and stored in the auth session
 	serverSalt, err := randomHex(randomSource, 12)
 	if err != nil {
-		return "", "", "", proto.ErrInternalError.WithCausef("failed to generate server salt: %w", err)
+		log.Error("failed to generate server salt", "error", err)
+		return "", "", "", proto.ErrInternalError
 	}
 
 	// clientAnswer is the value that we expect the client to produce
@@ -104,7 +109,8 @@ func (h *AuthHandler) Commit(
 		loginHint = signer.Identity.Subject
 		commitment.Signer, err = signer.Key()
 		if err != nil {
-			return "", "", "", proto.ErrDataIntegrityError.WithCausef("failed to get signer address: %w", err)
+			log.Error("failed to get signer address", "error", err)
+			return "", "", "", proto.ErrDataIntegrityError
 		}
 	}
 
@@ -113,7 +119,8 @@ func (h *AuthHandler) Commit(
 	}
 
 	if err := sender.SendOTP(ctx, authID.Scope, recipient, secretCode); err != nil {
-		return "", "", "", proto.ErrInternalError.WithCausef("failed to send OTP: %w", err)
+		log.Error("failed to send OTP", "error", err)
+		return "", "", "", proto.ErrInternalError
 	}
 
 	// Client should combine the challenge from the response with the code from the email address and hash it.
