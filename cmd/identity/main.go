@@ -7,11 +7,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	identityInstrument "github.com/0xsequence/identity-instrument"
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/rpc"
+	"github.com/go-chi/traceid"
 	"github.com/go-chi/transport"
 	"github.com/mdlayher/vsock"
 )
@@ -23,14 +25,17 @@ func main() {
 	}
 
 	baseTransport := http.DefaultTransport
-	if cfg.Service.VSock {
+	if cfg.Service.VSock || cfg.Service.ProxyHost != "" {
 		baseTransport = &http.Transport{
 			Proxy: func(_ *http.Request) (*url.URL, error) {
 				return url.Parse("http://vsock-proxy")
 			},
 			DialContext: func(ctx context.Context, network string, addr string) (net.Conn, error) {
-				log.Printf("Outgoing connection to %s://%s\n", network, addr)
-				return vsock.Dial(3, cfg.Service.ProxyPort, nil)
+				if cfg.Service.VSock {
+					log.Printf("Outgoing connection to %s://%s\n", network, addr)
+					return vsock.Dial(3, cfg.Service.ProxyPort, nil)
+				}
+				return net.Dial(network, cfg.Service.ProxyHost+":"+strconv.Itoa(int(cfg.Service.ProxyPort)))
 			},
 			MaxIdleConns:          100,
 			IdleConnTimeout:       90 * time.Second,
@@ -43,7 +48,7 @@ func main() {
 	transportChain := transport.Chain(
 		baseTransport,
 		transport.SetHeader("User-Agent", "identity-instrument/"+identityInstrument.VERSION),
-		// traceid.Transport,
+		traceid.Transport,
 	)
 
 	s, err := rpc.New(cfg, transportChain)

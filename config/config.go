@@ -23,6 +23,7 @@ type ServiceConfig struct {
 	VSock         bool   `toml:"vsock"`
 	UseNSM        bool   `toml:"use_nsm"`
 	EnclavePort   uint32 `toml:"enclave_port"`
+	ProxyHost     string `toml:"proxy_host"`
 	ProxyPort     uint32 `toml:"proxy_port"`
 	DebugProfiler bool   `toml:"debug_profiler"`
 }
