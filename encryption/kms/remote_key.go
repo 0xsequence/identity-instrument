@@ -1,4 +1,4 @@
-package encryption
+package kms
 
 import (
 	"context"
@@ -11,22 +11,22 @@ import (
 	"github.com/0xsequence/nitrocontrol/enclave"
 )
 
-type KMSKey struct {
+type RemoteKey struct {
 	keyARN string
 }
 
-func NewKMSKey(keyARN string) *KMSKey {
-	return &KMSKey{
+func NewRemoteKey(keyARN string) *RemoteKey {
+	return &RemoteKey{
 		keyARN: keyARN,
 	}
 }
 
-func (k *KMSKey) CryptorID() string {
+func (k *RemoteKey) RemoteKeyID() string {
 	return "awskms|" + k.keyARN
 }
 
-func (k *KMSKey) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (_ string, err error) {
-	ctx, span := o11y.Trace(ctx, "encryption.KMSKey.Encrypt", o11y.WithAnnotation("key_arn", k.keyARN))
+func (k *RemoteKey) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (_ string, err error) {
+	ctx, span := o11y.Trace(ctx, "kms.RemoteKey.Encrypt", o11y.WithAnnotation("key_arn", k.keyARN))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -49,8 +49,8 @@ func (k *KMSKey) Encrypt(ctx context.Context, att *enclave.Attestation, plaintex
 	return strings.Join(ciphertextParts, "."), nil
 }
 
-func (k *KMSKey) Decrypt(ctx context.Context, att *enclave.Attestation, ciphertext string) (_ []byte, err error) {
-	ctx, span := o11y.Trace(ctx, "encryption.KMSKey.Decrypt", o11y.WithAnnotation("key_arn", k.keyARN))
+func (k *RemoteKey) Decrypt(ctx context.Context, att *enclave.Attestation, ciphertext string) (_ []byte, err error) {
+	ctx, span := o11y.Trace(ctx, "kms.RemoteKey.Decrypt", o11y.WithAnnotation("key_arn", k.keyARN))
 	defer func() {
 		span.RecordError(err)
 		span.End()

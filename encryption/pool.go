@@ -32,6 +32,7 @@ func NewPool(enc *enclave.Enclave, configs []*Config, keysTable *data.CipherKeyT
 }
 
 func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (_ string, _ string, err error) {
+	log := o11y.LoggerFromContext(ctx)
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.Encrypt")
 	defer func() {
 		span.RecordError(err)
@@ -54,6 +55,8 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 		return "", "", fmt.Errorf("get key: %w", err)
 	}
 	if !found {
+		log.Info("generating new cipher key", "generation", generation, "key_index", keyIndex)
+
 		key, privateKey, err = p.generateKey(ctx, att, keyIndex)
 		if err != nil {
 			return "", "", fmt.Errorf("generate key: %w", err)
@@ -155,6 +158,7 @@ func (p *Pool) getConfig(configVersion int) (*Config, error) {
 }
 
 func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyIndex int) (_ *data.CipherKey, _ []byte, err error) {
+	log := o11y.LoggerFromContext(ctx)
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.generateKey", o11y.WithAnnotation("key_index", strconv.Itoa(keyIndex)))
 	defer func() {
 		span.RecordError(err)
@@ -178,19 +182,19 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 	}
 	keyRef := base64.RawURLEncoding.EncodeToString(refBytes)
 
-	shares, err := shamir.Split(privateKey, len(config.Cryptors), config.Threshold)
+	shares, err := shamir.Split(privateKey, len(config.RemoteKeys), config.Threshold)
 	if err != nil {
 		return nil, nil, fmt.Errorf("split private key: %w", err)
 	}
 
 	i := 0
 	encryptedShares := make(map[string]string)
-	for cryptorID, cryptor := range config.Cryptors {
-		encryptedShare, err := cryptor.Encrypt(ctx, att, shares[i])
+	for remoteKeyID, remoteKey := range config.RemoteKeys {
+		encryptedShare, err := remoteKey.Encrypt(ctx, att, shares[i])
 		if err != nil {
 			return nil, nil, fmt.Errorf("encrypt share %d: %w", i, err)
 		}
-		encryptedShares[cryptorID] = encryptedShare
+		encryptedShares[remoteKeyID] = encryptedShare
 		i++
 	}
 
@@ -219,6 +223,8 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 		return nil, nil, fmt.Errorf("create key: %w", err)
 	}
 	if alreadyExists {
+		log.Info("attempted to create key that already exists", "key_ref", keyRef, "generation", generation, "key_index", keyIndex)
+
 		// The key was created by another instance. We need to get the latest key from the database.
 		// This time, use a strongly consistent read.
 		key, found, err := p.keysTable.GetLatestByKeyRef(ctx, keyRef, true)
@@ -277,6 +283,7 @@ func (p *Pool) verifyKey(ctx context.Context, att *enclave.Attestation, key *dat
 }
 
 func (p *Pool) combineShares(ctx context.Context, att *enclave.Attestation, config *Config, shares map[string]string) (_ []byte, err error) {
+	log := o11y.LoggerFromContext(ctx)
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.combineShares")
 	defer func() {
 		span.RecordError(err)
@@ -284,14 +291,14 @@ func (p *Pool) combineShares(ctx context.Context, att *enclave.Attestation, conf
 	}()
 
 	decryptedShares := make([][]byte, 0, len(shares))
-	for cryptorID, encryptedShare := range shares {
-		cryptor, ok := config.Cryptors[cryptorID]
+	for remoteKeyID, encryptedShare := range shares {
+		remoteKey, ok := config.RemoteKeys[remoteKeyID]
 		if !ok {
-			return nil, fmt.Errorf("cryptor not found: %s", cryptorID)
+			return nil, fmt.Errorf("remote key not found: %s", remoteKeyID)
 		}
-		decryptedShare, err := cryptor.Decrypt(ctx, att, encryptedShare)
+		decryptedShare, err := remoteKey.Decrypt(ctx, att, encryptedShare)
 		if err != nil {
-			// TODO: log error?
+			log.Error("decrypt share failed", "error", err, "remote_key_id", remoteKeyID)
 			continue
 		}
 		decryptedShares = append(decryptedShares, decryptedShare)
