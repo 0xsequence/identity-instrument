@@ -25,10 +25,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/goware/cachestore/memlru"
+	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
 func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams) (string, string, string, error) {
 	att := attestation.FromContext(ctx)
+	log := o11y.LoggerFromContext(ctx)
 
 	scope, err := s.getScope(ctx, params)
 	if err != nil {
@@ -64,29 +66,34 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		authID.Verifier = params.Signer.String()
 		dbSigner, found, err := s.Signers.GetByAddress(ctx, scope, *params.Signer)
 		if err != nil {
-			return "", "", "", proto.ErrDatabaseError.WithCausef("get signer: %w", err)
+			log.Error("retrieve signer by address failed", "error", err)
+			return "", "", "", proto.ErrDatabaseError
 		}
 		if !found {
 			return "", "", "", proto.ErrInvalidRequest.WithCausef("signer not found")
 		}
 		signer, err = dbSigner.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
-			return "", "", "", proto.ErrEncryptionError.WithCausef("decrypt signer data: %w", err)
+			log.Error("decrypt signer data failed", "error", err)
+			return "", "", "", proto.ErrEncryptionError
 		}
 		if signer.Identity.Type != params.IdentityType {
-			return "", "", "", proto.ErrDataIntegrityError.WithCausef("signer identity type mismatch")
+			log.Error("signer identity type mismatch", "expected_identity_type", signer.Identity.Type, "params_identity_type", params.IdentityType)
+			return "", "", "", proto.ErrDataIntegrityError
 		}
 	}
 
 	if authID.Verifier != "" {
 		dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 		if err != nil {
-			return "", "", "", proto.ErrDatabaseError.WithCausef("getting commitment: %w", err)
+			log.Error("retrieve auth commitment failed", "error", err)
+			return "", "", "", proto.ErrDatabaseError
 		}
 		if found && dbCommitment != nil {
 			commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 			if err != nil {
-				return "", "", "", proto.ErrEncryptionError.WithCausef("decrypting commitment data: %w", err)
+				log.Error("decrypt auth commitment failed", "error", err)
+				return "", "", "", proto.ErrEncryptionError
 			}
 		}
 	}
@@ -94,7 +101,8 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	storeFn := func(ctx context.Context, commitment *proto.AuthCommitmentData) error {
 		encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
 		if err != nil {
-			return proto.ErrEncryptionError.WithCausef("encrypting commitment: %w", err)
+			log.Error("encrypt auth commitment failed", "error", err)
+			return proto.ErrEncryptionError
 		}
 
 		dbCommitment := &data.AuthCommitment{
@@ -109,11 +117,13 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		}
 
 		if !dbCommitment.CorrespondsTo(commitment) {
-			return proto.ErrDataIntegrityError.WithCausef("invalid commitment")
+			log.Error("invalid commitment", "commitment", commitment)
+			return proto.ErrDataIntegrityError
 		}
 
 		if err := s.AuthCommitments.Put(ctx, dbCommitment); err != nil {
-			return proto.ErrDatabaseError.WithCausef("putting verification context: %w", err)
+			log.Error("put auth commitment failed", "error", err)
+			return proto.ErrDatabaseError
 		}
 		return nil
 	}
@@ -123,6 +133,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 
 func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (*proto.Key, *proto.Identity, error) {
 	att := attestation.FromContext(ctx)
+	log := o11y.LoggerFromContext(ctx)
 
 	scope, err := s.getScope(ctx, params)
 	if err != nil {
@@ -155,12 +166,14 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	}
 	dbCommitment, found, err := s.AuthCommitments.Get(ctx, authID)
 	if err != nil {
-		return nil, nil, proto.ErrDatabaseError.WithCausef("get commitment: %w", err)
+		log.Error("retrieve auth commitment failed", "error", err)
+		return nil, nil, proto.ErrDatabaseError
 	}
 	if found && dbCommitment != nil {
 		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
-			return nil, nil, proto.ErrEncryptionError.WithCausef("decrypt commitment data: %w", err)
+			log.Error("decrypt auth commitment failed", "error", err)
+			return nil, nil, proto.ErrEncryptionError
 		}
 
 		if commitment.Attempts >= 3 {
@@ -172,7 +185,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 
 		if !dbCommitment.CorrespondsTo(commitment) || commitment.Scope != scope {
-			return nil, nil, proto.ErrDataIntegrityError.WithCausef("commitment mismatch")
+			log.Error("auth commitment mismatch", "commitment", commitment, "scope", scope)
+			return nil, nil, proto.ErrDataIntegrityError
 		}
 	}
 
@@ -182,10 +196,12 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			commitment.Attempts += 1
 			encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
 			if err != nil {
-				return nil, nil, proto.ErrEncryptionError.WithCausef("encrypting commitment: %w", err)
+				log.Error("encrypt auth commitment failed", "error", err)
+				return nil, nil, proto.ErrEncryptionError
 			}
 			if err := s.AuthCommitments.UpdateData(ctx, dbCommitment, encryptedData); err != nil {
-				return nil, nil, proto.ErrDatabaseError.WithCausef("updating commitment: %w", err)
+				log.Error("update auth commitment failed", "error", err)
+				return nil, nil, proto.ErrDatabaseError
 			}
 		}
 		return nil, nil, err
@@ -196,21 +212,25 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	dbSigner, signerFound, err := s.Signers.GetByIdentity(ctx, ident, scope, params.SignerType)
 	if err != nil {
-		return nil, nil, proto.ErrDatabaseError.WithCausef("retrieve signer: %w", err)
+		log.Error("retrieve signer failed", "error", err)
+		return nil, nil, proto.ErrDatabaseError
 	}
 
 	if dbSigner != nil && commitment.Signer.IsValid() && !dbSigner.CorrespondsToProtoKey(commitment.Signer) {
-		return nil, nil, proto.ErrDataIntegrityError.WithCausef("signer address mismatch")
+		log.Error("signer address mismatch", "commitment_signer", commitment.Signer, "db_signer", dbSigner.Key())
+		return nil, nil, proto.ErrDataIntegrityError
 	}
 
 	if !signerFound {
 		if commitment.Signer.IsValid() {
-			return nil, nil, proto.ErrDataIntegrityError.WithCausef("signer not found")
+			log.Error("signer not found", "commitment_signer", commitment.Signer)
+			return nil, nil, proto.ErrDataIntegrityError
 		}
 
 		signer, err := ecdsa.GenerateKey(secp256k1.S256(), att)
 		if err != nil {
-			return nil, nil, proto.ErrInternalError.WithCausef("generate signer: %w", err)
+			log.Error("generate signer failed", "error", err)
+			return nil, nil, proto.ErrInternalError
 		}
 
 		signerData := &proto.SignerData{
@@ -221,7 +241,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 		encData, err := data.Encrypt(ctx, att, s.EncryptionPool, signerData)
 		if err != nil {
-			return nil, nil, proto.ErrEncryptionError.WithCausef("encrypt signer data: %w", err)
+			log.Error("encrypt signer data failed", "error", err)
+			return nil, nil, proto.ErrEncryptionError
 		}
 		dbSigner = &data.Signer{
 			ScopedKeyType: data.ScopedKeyType{
@@ -233,7 +254,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			EncryptedData: encData,
 		}
 		if err := s.Signers.Put(ctx, dbSigner); err != nil {
-			return nil, nil, proto.ErrDatabaseError.WithCausef("put signer: %w", err)
+			log.Error("put signer failed", "error", err)
+			return nil, nil, proto.ErrDatabaseError
 		}
 	}
 
@@ -247,7 +269,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	encData, err := data.Encrypt(ctx, att, s.EncryptionPool, authKeyData)
 	if err != nil {
-		return nil, nil, proto.ErrEncryptionError.WithCausef("encrypt auth key data: %w", err)
+		log.Error("encrypt auth key data failed", "error", err)
+		return nil, nil, proto.ErrEncryptionError
 	}
 
 	dbAuthKey := &data.AuthKey{
@@ -257,7 +280,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		EncryptedData: encData,
 	}
 	if err := s.AuthKeys.Put(ctx, dbAuthKey); err != nil {
-		return nil, nil, proto.ErrDatabaseError.WithCausef("put auth key: %w", err)
+		log.Error("put auth key failed", "error", err)
+		return nil, nil, proto.ErrDatabaseError
 	}
 
 	res := dbSigner.Key()
@@ -274,11 +298,25 @@ func (s *RPC) getAuthHandler(authMode proto.AuthMode) (auth.Handler, error) {
 
 func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.AuthMode]auth.Handler, error) {
 	cacheBackend := memlru.Backend(1024)
-	idTokenHandler, err := idtoken.NewAuthHandler(cacheBackend, s.HTTPClient)
+
+	jwkStore, err := memlru.NewWithBackend[jwk.Key](cacheBackend)
 	if err != nil {
 		return nil, err
 	}
+	openidConfigStore, err := memlru.NewWithBackend[idtoken.OpenIDConfig](cacheBackend)
+	if err != nil {
+		return nil, err
+	}
+	idTokenHandler := idtoken.NewAuthHandler(
+		s.HTTPClient,
+		o11y.NewTracedCache("idtoken.jwkStore", jwkStore),
+		o11y.NewTracedCache("idtoken.openidConfigStore", openidConfigStore),
+	)
 
+	secretStore, err := memlru.NewWithBackend[string](cacheBackend)
+	if err != nil {
+		return nil, err
+	}
 	randomProvider := func(ctx context.Context) io.Reader {
 		return attestation.FromContext(ctx)
 	}
@@ -300,7 +338,13 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		}
 		return *secret.SecretString, nil
 	})
-	authCodeHandler, err := authcode.NewAuthHandler(cacheBackend, s.HTTPClient, idTokenHandler, secretProvider, randomProvider)
+	authCodeHandler, err := authcode.NewAuthHandler(
+		s.HTTPClient,
+		idTokenHandler,
+		secretProvider,
+		randomProvider,
+		o11y.NewTracedCache("authcode.secretStore", secretStore),
+	)
 	if err != nil {
 		return nil, err
 	}

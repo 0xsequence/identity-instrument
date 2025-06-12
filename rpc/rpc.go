@@ -14,6 +14,7 @@ import (
 	"github.com/0xsequence/identity-instrument/config"
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/encryption"
+	encryptionkms "github.com/0xsequence/identity-instrument/encryption/kms"
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
@@ -108,11 +109,11 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 	})
 	encPoolConfigs := make([]*encryption.Config, len(cfg.Encryption))
 	for i, encCfg := range cfg.Encryption {
-		cryptors := make([]encryption.Cryptor, len(encCfg.KMSKeys))
+		remoteKeys := make([]encryption.RemoteKey, len(encCfg.KMSKeys))
 		for j, kmsKey := range encCfg.KMSKeys {
-			cryptors[j] = encryption.NewKMSKey(kmsKey)
+			remoteKeys[j] = encryptionkms.NewRemoteKey(kmsKey)
 		}
-		encPoolConfigs[i] = encryption.NewConfig(encCfg.PoolSize, encCfg.Threshold, cryptors)
+		encPoolConfigs[i] = encryption.NewConfig(encCfg.PoolSize, encCfg.Threshold, remoteKeys)
 	}
 
 	encPool := encryption.NewPool(enc, encPoolConfigs, cipherKeyTable)

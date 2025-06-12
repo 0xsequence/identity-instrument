@@ -13,11 +13,14 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
 )
 
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error) {
+	log := o11y.LoggerFromContext(ctx)
+
 	scope, err := s.getScope(ctx, params)
 	if err != nil {
 		return "", proto.ErrInvalidRequest.WithCausef("valid scope is required")
@@ -46,19 +49,22 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		// Recover the public key from the signature
 		pubKey, err := crypto.Ecrecover(prefixedHash, sigBytes)
 		if err != nil {
-			return "", proto.ErrInvalidSignature.WithCausef("failed to recover public key: %w", err)
+			log.Error("failed to recover public key", "key_type", "secp256k1", "error", err)
+			return "", proto.ErrInvalidSignature
 		}
 		addr := common.BytesToAddress(crypto.Keccak256(pubKey[1:])[12:])
 
 		if !strings.EqualFold(addr.String(), params.AuthKey.Address) {
-			return "", proto.ErrInvalidSignature.WithCausef("invalid auth key signature")
+			log.Error("invalid auth key signature", "key_type", "secp256k1")
+			return "", proto.ErrInvalidSignature
 		}
 
 	case proto.KeyType_Secp256r1:
 		pubKeyBytes := common.FromHex(params.AuthKey.Address)
 		x, y := elliptic.Unmarshal(elliptic.P256(), pubKeyBytes)
 		if x == nil || y == nil {
-			return "", proto.ErrInvalidSignature.WithCausef("invalid public key")
+			log.Error("invalid public key", "key_type", "secp256r1")
+			return "", proto.ErrInvalidSignature
 		}
 
 		pub := ecdsa.PublicKey{
@@ -71,7 +77,8 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 		r := new(big.Int).SetBytes(sigBytes[:32])
 		s := new(big.Int).SetBytes(sigBytes[32:64])
 		if !ecdsa.Verify(&pub, digestHash[:], r, s) {
-			return "", proto.ErrInvalidSignature.WithCausef("invalid auth key signature")
+			log.Error("invalid auth key signature", "key_type", "secp256r1")
+			return "", proto.ErrInvalidSignature
 		}
 
 	default:
@@ -80,7 +87,8 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 
 	dbAuthKey, found, err := s.AuthKeys.Get(ctx, scope, params.AuthKey)
 	if err != nil {
-		return "", proto.ErrDatabaseError.WithCausef("get auth key: %w", err)
+		log.Error("failed to get auth key", "error", err)
+		return "", proto.ErrDatabaseError
 	}
 	if !found {
 		return "", proto.ErrKeyNotFound
@@ -88,11 +96,13 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 
 	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
 	if err != nil {
-		return "", proto.ErrEncryptionError.WithCausef("decrypt auth key data: %w", err)
+		log.Error("failed to decrypt auth key data", "error", err)
+		return "", proto.ErrEncryptionError
 	}
 
 	if !dbAuthKey.CorrespondsTo(authKeyData) {
-		return "", proto.ErrDataIntegrityError.WithCausef("auth key mismatch")
+		log.Error("auth key mismatch")
+		return "", proto.ErrDataIntegrityError
 	}
 
 	if authKeyData.Expiry.Before(time.Now()) {
@@ -100,12 +110,14 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 	}
 
 	if authKeyData.Signer != params.Signer {
-		return "", proto.ErrDataIntegrityError.WithCausef("signer mismatch")
+		log.Error("signer mismatch")
+		return "", proto.ErrDataIntegrityError
 	}
 
 	dbSigner, found, err := s.Signers.GetByAddress(ctx, scope, authKeyData.Signer)
 	if err != nil {
-		return "", proto.ErrDatabaseError.WithCausef("get signer: %w", err)
+		log.Error("failed to get signer", "error", err)
+		return "", proto.ErrDatabaseError
 	}
 	if !found {
 		return "", proto.ErrSignerNotFound
@@ -113,19 +125,23 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams) (string, error
 
 	signerData, err := dbSigner.EncryptedData.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
 	if err != nil {
-		return "", proto.ErrEncryptionError.WithCausef("decrypt signer data: %w", err)
+		log.Error("failed to decrypt signer data", "error", err)
+		return "", proto.ErrEncryptionError
 	}
 	signer, err := crypto.HexToECDSA(signerData.PrivateKey[2:])
 	if err != nil {
-		return "", proto.ErrInternalError.WithCausef("create signer: %w", err)
+		log.Error("failed to create signer", "error", err)
+		return "", proto.ErrInternalError
 	}
 	if !dbSigner.CorrespondsToData(signerData, signer) {
-		return "", proto.ErrDataIntegrityError.WithCausef("signer mismatch")
+		log.Error("signer mismatch")
+		return "", proto.ErrDataIntegrityError
 	}
 
 	sigBytes, err = crypto.Sign(digestBytes, signer)
 	if err != nil {
-		return "", proto.ErrInternalError.WithCausef("sign digest: %w", err)
+		log.Error("failed to sign digest", "error", err)
+		return "", proto.ErrInternalError
 	}
 
 	if sigBytes[64] < 27 {
