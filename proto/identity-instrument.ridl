@@ -147,6 +147,7 @@ error 7002 ProofVerificationFailed "The authentication proof could not be verifi
 error 7003 AnswerIncorrect "The provided answer is incorrect" HTTP 400
 error 7004 ChallengeExpired "The challenge has expired" HTTP 400
 error 7005 TooManyAttempts "Too many attempts" HTTP 400
+error 7006 OAuthError "Failed to exchange OAuth credentials" HTTP 400
 
 ##
 ## Services
