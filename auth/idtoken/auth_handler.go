@@ -156,19 +156,19 @@ func (h *AuthHandler) GetKeySet(ctx context.Context, issuer string) (set jwk.Set
 	log := o11y.LoggerFromContext(ctx)
 	openidConfig, err := h.GetOpenIDConfig(ctx, issuer)
 	if err != nil {
-		log.Error("failed to get openid configuration", "error", err)
+		log.Error("failed to get openid configuration", "issuer", issuer, "error", err)
 		return nil, proto.ErrIdentityProviderError
 	}
 
 	jwksURL := openidConfig.JWKSURL
 	if jwksURL == "" {
-		log.Error("jwks_uri not found in openid configuration")
+		log.Error("jwks_uri not found in openid configuration", "issuer", issuer)
 		return nil, proto.ErrIdentityProviderError
 	}
 
 	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(h.client))
 	if err != nil {
-		log.Error("failed to fetch issuer keys", "error", err)
+		log.Error("failed to fetch issuer keys", "issuer", issuer, "error", err)
 		return nil, proto.ErrIdentityProviderError
 	}
 	return keySet, nil

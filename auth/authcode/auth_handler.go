@@ -18,6 +18,7 @@ import (
 	ethcrypto "github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/auth/idtoken"
+	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/goware/cachestore"
 	"github.com/lestrrat-go/jwx/v2/jwa"
@@ -70,6 +71,8 @@ func (h *AuthHandler) Commit(
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (resVerifier string, loginHint string, challenge string, err error) {
+	log := o11y.LoggerFromContext(ctx)
+
 	commitment := &proto.AuthCommitmentData{
 		Scope:        authID.Scope,
 		AuthKey:      authKey,
@@ -84,7 +87,8 @@ func (h *AuthHandler) Commit(
 	if commitment.AuthMode == proto.AuthMode_AuthCodePKCE {
 		codeVerifier, err := randomHex(h.randomProvider(ctx), 32)
 		if err != nil {
-			return "", "", "", proto.ErrInternalError.WithCausef("generate code verifier: %w", err)
+			log.Error("failed to generate code verifier", "error", err)
+			return "", "", "", proto.ErrInternalError
 		}
 		codeVerifierHash := sha256.Sum256([]byte(codeVerifier))
 		codeChallenge := base64.RawURLEncoding.EncodeToString(codeVerifierHash[:])
@@ -101,11 +105,13 @@ func (h *AuthHandler) Commit(
 		loginHint = signer.Identity.Subject
 		commitment.Signer, err = signer.Key()
 		if err != nil {
-			return "", "", "", proto.ErrDataIntegrityError.WithCausef("failed to get signer address: %w", err)
+			log.Error("failed to get signer address", "error", err)
+			return "", "", "", proto.ErrDataIntegrityError
 		}
 	}
 
 	if err := storeFn(ctx, commitment); err != nil {
+		log.Error("failed to store commitment", "error", err)
 		return "", "", "", err
 	}
 
@@ -118,7 +124,10 @@ func (h *AuthHandler) Verify(
 	authKey proto.Key,
 	answer string,
 ) (proto.Identity, error) {
+	log := o11y.LoggerFromContext(ctx)
+
 	if commitment == nil {
+		log.Error("commitment not found")
 		return proto.Identity{}, proto.ErrInvalidRequest.WithCausef("commitment not found")
 	}
 
@@ -126,6 +135,7 @@ func (h *AuthHandler) Verify(
 	if commitment.AuthMode != proto.AuthMode_AuthCodePKCE {
 		expectedHash := hexutil.Encode(ethcrypto.Keccak256([]byte(answer)))
 		if commitment.Handle != expectedHash {
+			log.Error("invalid token hash", "expected", expectedHash, "actual", commitment.Handle)
 			return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("invalid token hash")
 		}
 	}
@@ -135,17 +145,20 @@ func (h *AuthHandler) Verify(
 
 	clientSecret, err := h.GetClientSecret(ctx, commitment.Scope, iss, aud)
 	if err != nil {
-		return proto.Identity{}, proto.ErrDatabaseError.WithCausef("get client secret: %w", err)
+		log.Error("failed to get client secret", "issuer", iss, "audience", aud, "error", err)
+		return proto.Identity{}, proto.ErrDatabaseError
 	}
 
 	openidConfig, err := h.idTokenHandler.GetOpenIDConfig(ctx, iss)
 	if err != nil {
-		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("get openid config: %w", err)
+		log.Error("failed to get openid configuration", "issuer", iss, "error", err)
+		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
 
 	tokenEndpoint := openidConfig.TokenEndpoint
 	if tokenEndpoint == "" {
-		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("token endpoint not found in openid configuration")
+		log.Error("token endpoint not found in openid configuration", "issuer", iss)
+		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
 
 	data := url.Values{}
@@ -160,28 +173,33 @@ func (h *AuthHandler) Verify(
 
 	req, err := http.NewRequestWithContext(ctx, "POST", tokenEndpoint, strings.NewReader(data.Encode()))
 	if err != nil {
-		return proto.Identity{}, proto.ErrInternalError.WithCausef("new request: %w", err)
+		log.Error("failed to create request", "error", err)
+		return proto.Identity{}, proto.ErrInternalError
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("do request: %w", err)
+		log.Error("failed to do request", "error", err)
+		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
 	defer resp.Body.Close()
 
 	var body map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("decode response: %w", err)
+		log.Error("failed to decode response", "error", err)
+		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
 
 	if err, ok := body["error"]; ok {
-		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("oauth error: %s: %s", err, body["error_description"])
+		log.Error("token exchange oauth error", "error", err, "description", body["error_description"])
+		return proto.Identity{}, proto.ErrOAuthError.WithCausef("%s: %s", err, body["error_description"])
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return proto.Identity{}, proto.ErrIdentityProviderError.WithCausef("unexpected status code: %d", resp.StatusCode)
+		log.Error("token exchange unexpected status code", "status", resp.StatusCode)
+		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
 
 	idToken := body["id_token"].(string)
