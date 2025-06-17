@@ -48,6 +48,7 @@ func Trace(ctx context.Context, name string, opts ...func(*Span)) (context.Conte
 		StartTime:   time.Now(),
 		Metadata:    make(map[string]any),
 		Annotations: make(map[string]string),
+		Logs:        make([]json.RawMessage, 0),
 	}
 	if parent != nil {
 		parent.mu.Lock()
@@ -114,7 +115,12 @@ func (s *Span) SetStatus(status int) {
 }
 
 func (s *Span) Write(p []byte) (n int, err error) {
-	s.Logs = append(s.Logs, json.RawMessage(p))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	buf := make([]byte, len(p))
+	copy(buf, p)
+	s.Logs = append(s.Logs, buf)
 	return len(p), nil
 }
 
