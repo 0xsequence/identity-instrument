@@ -25,6 +25,7 @@ struct CompleteAuthParams
   - authMode: AuthMode
   - verifier: string
   - answer: string
+  - lifetime?: uint
 
 struct SignParams
   - scope?: string

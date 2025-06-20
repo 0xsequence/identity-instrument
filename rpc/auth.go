@@ -259,7 +259,16 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 	}
 
+	maxTTL := 90 * 24 * time.Hour // 90 days
 	ttl := 5 * time.Minute
+
+	if params.Lifetime != nil {
+		ttl = time.Duration(*params.Lifetime) * time.Second
+	}
+	if ttl > maxTTL {
+		ttl = maxTTL
+	}
+
 	authKeyData := &proto.AuthKeyData{
 		Scope:   scope,
 		Signer:  dbSigner.Key(),
