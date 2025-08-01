@@ -16,29 +16,29 @@ func NewTracedRPC(svc proto.IdentityInstrument) *tracedRPC {
 	return &tracedRPC{svc: svc}
 }
 
-func (t *tracedRPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams) (_ string, _ string, _ string, err error) {
+func (t *tracedRPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams, authKey *proto.Key, signature string) (_ string, _ string, _ string, err error) {
 	ctx, span := Trace(ctx, "CommitVerifier")
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
-	return t.svc.CommitVerifier(ctx, params)
+	return t.svc.CommitVerifier(ctx, params, authKey, signature)
 }
 
-func (t *tracedRPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (_ *proto.Key, _ *proto.Identity, err error) {
+func (t *tracedRPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams, authKey *proto.Key, signature string) (_ *proto.Key, _ *proto.Identity, err error) {
 	ctx, span := Trace(ctx, "CompleteAuth")
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
-	return t.svc.CompleteAuth(ctx, params)
+	return t.svc.CompleteAuth(ctx, params, authKey, signature)
 }
 
-func (t *tracedRPC) Sign(ctx context.Context, params *proto.SignParams) (_ string, err error) {
+func (t *tracedRPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto.Key, signature string) (_ string, err error) {
 	ctx, span := Trace(ctx, "Sign")
 	defer func() {
 		span.RecordError(err)
 		span.End()
 	}()
-	return t.svc.Sign(ctx, params)
+	return t.svc.Sign(ctx, params, authKey, signature)
 }
