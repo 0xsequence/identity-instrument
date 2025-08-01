@@ -60,12 +60,12 @@ func TestOIDC(t *testing.T) {
 
 		hashedToken := hexutil.Encode(crypto.Keccak256([]byte(tok)))
 
+		protoAuthKey := &proto.Key{
+			KeyType: proto.KeyType_Secp256k1,
+			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+		}
 		initiateParams := &proto.CommitVerifierParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
+			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_IDToken,
 			IdentityType: proto.IdentityType_OIDC,
 			Handle:       hashedToken,
@@ -75,25 +75,23 @@ func TestOIDC(t *testing.T) {
 				"exp": strconv.Itoa(int(exp.Unix())),
 			},
 		}
-		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams)
+		sig := signRequest(t, authKey, initiateParams)
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams, protoAuthKey, sig)
 		require.NoError(t, err)
 		require.Equal(t, initiateParams.Handle, resVerifier)
 		require.Empty(t, loginHint)
 		require.Empty(t, challenge)
 
 		registerParams := &proto.CompleteAuthParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
+			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_IDToken,
 			IdentityType: proto.IdentityType_OIDC,
 			SignerType:   proto.KeyType_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       tok,
 		}
-		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams)
+		sig = signRequest(t, authKey, registerParams)
+		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams, protoAuthKey, sig)
 		require.NoError(t, err)
 		require.NotEmpty(t, resSigner)
 		require.NotEmpty(t, resIdentity)
@@ -103,21 +101,14 @@ func TestOIDC(t *testing.T) {
 
 		digest := crypto.Keccak256([]byte("message"))
 		digestHex := hexutil.Encode(digest)
-		prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
-		sig, err := crypto.Sign(prefixedHash, authKey)
-		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
-			Signer:    *resSigner,
-			Digest:    digestHex,
-			Signature: hexutil.Encode(sig),
+			Scope:  proto.Scope("@123"),
+			Signer: *resSigner,
+			Digest: digestHex,
 		}
-		resSignature, err := c.Sign(ctx, signParams)
+		sig = signRequest(t, authKey, signParams)
+		resSignature, err := c.Sign(ctx, signParams, protoAuthKey, sig)
 		require.NoError(t, err)
 
 		sigBytes := common.FromHex(resSignature)
@@ -163,12 +154,12 @@ func TestOIDC(t *testing.T) {
 
 		codeHash := hexutil.Encode(crypto.Keccak256([]byte(code)))
 
+		protoAuthKey := &proto.Key{
+			KeyType: proto.KeyType_Secp256k1,
+			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+		}
 		initiateParams := &proto.CommitVerifierParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
+			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_AuthCode,
 			IdentityType: proto.IdentityType_OIDC,
 			Handle:       codeHash,
@@ -177,25 +168,23 @@ func TestOIDC(t *testing.T) {
 				"aud": "audience",
 			},
 		}
-		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams)
+		sig := signRequest(t, authKey, initiateParams)
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams, protoAuthKey, sig)
 		require.NoError(t, err)
 		require.NotEmpty(t, resVerifier)
 		require.Empty(t, challenge)
 		require.Empty(t, loginHint)
 
 		registerParams := &proto.CompleteAuthParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
+			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_AuthCode,
 			IdentityType: proto.IdentityType_OIDC,
 			SignerType:   proto.KeyType_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
-		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams)
+		sig = signRequest(t, authKey, registerParams)
+		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams, protoAuthKey, sig)
 		require.NoError(t, err)
 		require.NotEmpty(t, resSigner)
 		require.NotEmpty(t, resIdentity)
@@ -205,21 +194,14 @@ func TestOIDC(t *testing.T) {
 
 		digest := crypto.Keccak256([]byte("message"))
 		digestHex := hexutil.Encode(digest)
-		prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
-		sig, err := crypto.Sign(prefixedHash, authKey)
-		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
-			Signer:    *resSigner,
-			Digest:    digestHex,
-			Signature: hexutil.Encode(sig),
+			Scope:  proto.Scope("@123"),
+			Signer: *resSigner,
+			Digest: digestHex,
 		}
-		resSignature, err := c.Sign(ctx, signParams)
+		sig = signRequest(t, authKey, signParams)
+		resSignature, err := c.Sign(ctx, signParams, protoAuthKey, sig)
 		require.NoError(t, err)
 
 		sigBytes := common.FromHex(resSignature)
@@ -257,12 +239,12 @@ func TestOIDC(t *testing.T) {
 
 		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
 
+		protoAuthKey := &proto.Key{
+			KeyType: proto.KeyType_Secp256k1,
+			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+		}
 		initiateParams := &proto.CommitVerifierParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
+			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_AuthCodePKCE,
 			IdentityType: proto.IdentityType_OIDC,
 			Metadata: map[string]string{
@@ -270,7 +252,8 @@ func TestOIDC(t *testing.T) {
 				"aud": "audience",
 			},
 		}
-		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams)
+		sig := signRequest(t, authKey, initiateParams)
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams, protoAuthKey, sig)
 		require.NoError(t, err)
 		require.NotEmpty(t, resVerifier)
 		require.NotEmpty(t, challenge)
@@ -285,18 +268,15 @@ func TestOIDC(t *testing.T) {
 		require.NotEmpty(t, code)
 
 		registerParams := &proto.CompleteAuthParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
+			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_AuthCodePKCE,
 			IdentityType: proto.IdentityType_OIDC,
 			SignerType:   proto.KeyType_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
-		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams)
+		sig = signRequest(t, authKey, registerParams)
+		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams, protoAuthKey, sig)
 		require.NoError(t, err)
 		require.NotEmpty(t, resSigner)
 		require.NotEmpty(t, resIdentity)
@@ -306,21 +286,14 @@ func TestOIDC(t *testing.T) {
 
 		digest := crypto.Keccak256([]byte("message"))
 		digestHex := hexutil.Encode(digest)
-		prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
-		sig, err := crypto.Sign(prefixedHash, authKey)
-		require.NoError(t, err)
 
 		signParams := &proto.SignParams{
-			Scope: proto.Scope("@123"),
-			AuthKey: proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
-				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-			},
-			Signer:    *resSigner,
-			Digest:    digestHex,
-			Signature: hexutil.Encode(sig),
+			Scope:  proto.Scope("@123"),
+			Signer: *resSigner,
+			Digest: digestHex,
 		}
-		resSignature, err := c.Sign(ctx, signParams)
+		sig = signRequest(t, authKey, signParams)
+		resSignature, err := c.Sign(ctx, signParams, protoAuthKey, sig)
 		require.NoError(t, err)
 
 		sigBytes := common.FromHex(resSignature)

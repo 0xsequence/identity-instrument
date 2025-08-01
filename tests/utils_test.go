@@ -203,3 +203,16 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 		Address: crypto.PubkeyToAddress(signer.PublicKey).Hex(),
 	}
 }
+
+func signRequest(t *testing.T, authKey *ecdsa.PrivateKey, params any) string {
+	jsonParams, err := json.Marshal(params)
+	require.NoError(t, err)
+
+	digest := crypto.Keccak256(jsonParams)
+	digestHex := hexutil.Encode(digest)
+	prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
+	sig, err := crypto.Sign(prefixedHash, authKey)
+	require.NoError(t, err)
+
+	return hexutil.Encode(sig)
+}
