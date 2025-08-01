@@ -36,7 +36,13 @@ type spanKey struct{}
 func GetSpan(ctx context.Context) *Span {
 	span, ok := ctx.Value(spanKey{}).(*Span)
 	if !ok {
-		return nil
+		return &Span{
+			Name:        "root",
+			StartTime:   time.Now(),
+			Metadata:    make(map[string]any),
+			Annotations: make(map[string]string),
+			Logs:        make([]json.RawMessage, 0),
+		}
 	}
 	return span
 }
