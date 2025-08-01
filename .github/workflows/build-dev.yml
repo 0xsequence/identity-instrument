@@ -1,0 +1,36 @@
+name: Build dev
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-dev-eif:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate VERSION variable
+        id: vars
+        run: |
+          DATE=$(date -u +%Y%m%d)
+          HASH=$(git rev-parse --short=8 HEAD)
+          VERSION="$DATE-$HASH"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build EIF
+        env:
+          ENV: dev
+          VERSION: ${{ steps.vars.outputs.VERSION }}
+        run: make eif
+
+      - name: Upload built EIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity.${{ steps.vars.outputs.VERSION }}.eif
+          path: bin/identity.${{ steps.vars.outputs.VERSION }}.eif
+
+
+
