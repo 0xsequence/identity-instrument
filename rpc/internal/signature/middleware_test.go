@@ -64,8 +64,7 @@ func TestMiddleware(t *testing.T) {
 				pubKeyHex := marshalPublicKey(&priv.PublicKey)
 
 				params := `{"foo":"bar"}`
-				digest := crypto.Keccak256([]byte(params))
-				hash := sha256.Sum256(digest)
+				hash := sha256.Sum256([]byte(params))
 				r, s, err := ecdsa.Sign(rand.Reader, priv, hash[:])
 				require.NoError(t, err)
 

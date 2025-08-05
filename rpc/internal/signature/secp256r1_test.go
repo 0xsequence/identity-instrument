@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/rpc/internal/signature"
 	"github.com/stretchr/testify/require"
 )
@@ -16,10 +15,10 @@ import (
 func TestValidateSecp256r1(t *testing.T) {
 	t.Run("InvalidPublicKey", func(t *testing.T) {
 		invalidPubKey := "0xdeadbeef"
-		digest := []byte("test message")
+		message := []byte("test message")
 		sig := make([]byte, 64) // dummy signature
 
-		err := signature.ValidateSecp256r1(invalidPubKey, digest, sig)
+		err := signature.ValidateSecp256r1(invalidPubKey, message, sig)
 		require.Error(t, err)
 	})
 
@@ -30,12 +29,12 @@ func TestValidateSecp256r1(t *testing.T) {
 
 		pubKeyHex := marshalPublicKey(&priv.PublicKey)
 
-		digest := []byte("test message")
+		message := []byte("test message")
 		// Create a random (invalid) signature
 		sig := make([]byte, 64)
 		copy(sig, []byte("thisisnotavalidsignaturethisisnotavalidsignature123456"))
 
-		err = signature.ValidateSecp256r1(pubKeyHex, digest, sig)
+		err = signature.ValidateSecp256r1(pubKeyHex, message, sig)
 		require.Error(t, err)
 	})
 
@@ -46,8 +45,7 @@ func TestValidateSecp256r1(t *testing.T) {
 		pubKeyHex := marshalPublicKey(&priv.PublicKey)
 
 		message := []byte("test message")
-		digest := crypto.Keccak256(message)
-		hash := sha256.Sum256(digest)
+		hash := sha256.Sum256(message)
 		r, s, err := ecdsa.Sign(rand.Reader, priv, hash[:])
 		require.NoError(t, err)
 
@@ -55,7 +53,7 @@ func TestValidateSecp256r1(t *testing.T) {
 		copy(sig[0:32], r.Bytes())
 		copy(sig[32:64], s.Bytes())
 
-		err = signature.ValidateSecp256r1(pubKeyHex, digest, sig)
+		err = signature.ValidateSecp256r1(pubKeyHex, message, sig)
 		require.NoError(t, err)
 	})
 }

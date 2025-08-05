@@ -16,10 +16,10 @@ import (
 func TestValidateSecp256k1(t *testing.T) {
 	t.Run("InvalidPublicKey", func(t *testing.T) {
 		invalidPubKey := "0xdeadbeef"
-		digest := []byte("test message")
+		message := []byte("test message")
 		sig := make([]byte, 65) // dummy signature
 
-		err := signature.ValidateSecp256k1(invalidPubKey, digest, sig)
+		err := signature.ValidateSecp256k1(invalidPubKey, message, sig)
 		require.Error(t, err)
 	})
 
@@ -29,11 +29,11 @@ func TestValidateSecp256k1(t *testing.T) {
 
 		address := crypto.PubkeyToAddress(priv.PublicKey).Hex()
 
-		digest := []byte("test message")
+		message := []byte("test message")
 		sig := make([]byte, 65)
 		copy(sig, []byte("thisisnotavalidsignaturethisisnotavalidsignature123456"))
 
-		err = signature.ValidateSecp256k1(address, digest, sig)
+		err = signature.ValidateSecp256k1(address, message, sig)
 		require.Error(t, err)
 	})
 
@@ -43,13 +43,14 @@ func TestValidateSecp256k1(t *testing.T) {
 
 		address := crypto.PubkeyToAddress(priv.PublicKey).Hex()
 
-		digest := crypto.Keccak256([]byte("message"))
+		message := []byte("message")
+		digest := crypto.Keccak256(message)
 		digestHex := hexutil.Encode(digest)
 		prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
 		sig, err := crypto.Sign(prefixedHash, priv)
 		require.NoError(t, err)
 
-		err = signature.ValidateSecp256k1(address, digest, sig)
+		err = signature.ValidateSecp256k1(address, message, sig)
 		require.NoError(t, err)
 	})
 }

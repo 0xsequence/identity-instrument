@@ -17,6 +17,7 @@ import (
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc"
+	"github.com/gowebpki/jcs"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/localstack"
@@ -208,7 +209,10 @@ func signRequest(t *testing.T, authKey *ecdsa.PrivateKey, params any) string {
 	jsonParams, err := json.Marshal(params)
 	require.NoError(t, err)
 
-	digest := crypto.Keccak256(jsonParams)
+	canonical, err := jcs.Transform(jsonParams)
+	require.NoError(t, err)
+
+	digest := crypto.Keccak256(canonical)
 	digestHex := hexutil.Encode(digest)
 	prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
 	sig, err := crypto.Sign(prefixedHash, authKey)

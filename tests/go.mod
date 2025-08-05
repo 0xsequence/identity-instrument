@@ -84,6 +84,7 @@ require (
 	github.com/goware/cachestore v0.10.0 // indirect
 	github.com/goware/rerun v0.0.9 // indirect
 	github.com/goware/singleflight v0.2.0 // indirect
+	github.com/gowebpki/jcs v1.0.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
