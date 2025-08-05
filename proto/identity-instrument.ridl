@@ -28,6 +28,7 @@ struct SignParams
     + go.field.type = Scope
   - signer: Key
     + go.field.type = Key
+  - nonce: string
   - digest: string
 
 struct Identity
