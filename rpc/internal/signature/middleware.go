@@ -17,7 +17,7 @@ import (
 // It expects the request body to be a JSON object with the following fields:
 // - params: the parameters of the request
 // - authKey: public key (or address) of the auth keypair (secp256k1 or secp256r1)
-// - signature: the signature of the params using the auth key
+// - signature: the signature of the params (canonicalized with JCS [RFC 8785]) using the auth key
 func Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
