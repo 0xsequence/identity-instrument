@@ -10,7 +10,7 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 )
 
-func ValidateSecp256r1(pubKey string, digestBytes []byte, sigBytes []byte) error {
+func ValidateSecp256r1(pubKey string, message []byte, sigBytes []byte) error {
 	pubKeyBytes := common.FromHex(pubKey)
 
 	if len(pubKeyBytes) == 0 || pubKeyBytes[0] != 0x04 {
@@ -32,7 +32,7 @@ func ValidateSecp256r1(pubKey string, digestBytes []byte, sigBytes []byte) error
 		Y:     y,
 	}
 
-	digestHash := sha256.Sum256(digestBytes)
+	digestHash := sha256.Sum256(message)
 	r := new(big.Int).SetBytes(sigBytes[:32])
 	s := new(big.Int).SetBytes(sigBytes[32:64])
 	if !ecdsa.Verify(&pub, digestHash[:], r, s) {

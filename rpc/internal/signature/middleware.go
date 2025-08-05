@@ -7,8 +7,8 @@ import (
 	"net/http"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common"
-	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/proto"
+	"github.com/gowebpki/jcs"
 )
 
 // Middleware validates that the request params were signed by the given auth key.
@@ -54,17 +54,21 @@ func Middleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			digest := crypto.Keccak256(req.Params)
 			sigBytes := common.FromHex(req.Signature)
+			canonical, err := jcs.Transform(req.Params)
+			if err != nil {
+				proto.RespondWithError(w, proto.ErrInvalidRequest.WithCausef("failed to canonicalize params: %w", err))
+				return
+			}
 
 			switch req.AuthKey.KeyType {
 			case proto.KeyType_Secp256k1:
-				if err := ValidateSecp256k1(req.AuthKey.Address, digest, sigBytes); err != nil {
+				if err := ValidateSecp256k1(req.AuthKey.Address, canonical, sigBytes); err != nil {
 					proto.RespondWithError(w, proto.ErrInvalidSignature.WithCause(err))
 					return
 				}
 			case proto.KeyType_Secp256r1:
-				if err := ValidateSecp256r1(req.AuthKey.Address, digest, sigBytes); err != nil {
+				if err := ValidateSecp256r1(req.AuthKey.Address, canonical, sigBytes); err != nil {
 					proto.RespondWithError(w, proto.ErrInvalidSignature.WithCause(err))
 					return
 				}

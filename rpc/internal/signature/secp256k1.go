@@ -10,9 +10,11 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 )
 
-func ValidateSecp256k1(address string, digest []byte, sigBytes []byte) error {
+func ValidateSecp256k1(address string, message []byte, sigBytes []byte) error {
+	// Calculate the digest of the message
+	digestHex := hexutil.Encode(crypto.Keccak256(message))
+
 	// Add Ethereum prefix to the hash
-	digestHex := hexutil.Encode(digest)
 	prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
 
 	if len(sigBytes) != 65 {
