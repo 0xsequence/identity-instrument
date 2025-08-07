@@ -148,9 +148,9 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		return nil, nil, proto.ErrInvalidRequest.WithCausef("auth key is required")
 	}
 
-	// Currently we only support secp256k1 signers
-	if !params.SignerType.Is(proto.KeyType_Secp256k1) {
-		return nil, nil, proto.ErrInvalidRequest.WithCausef("signer key type must be secp256k1")
+	// Currently we only support Ethereum_Secp256k1 signers
+	if !params.SignerType.Is(proto.KeyType_Ethereum_Secp256k1) {
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("signer key type must be Ethereum_Secp256k1")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
@@ -359,12 +359,12 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		return nil, err
 	}
 
-	builderClient := builder.NewBuilderClient(
+	managerClient := builder.NewEcosystemManagerClient(
 		cfg.Builder.BaseURL,
 		builder.NewAuthenticatedClient(s.HTTPClient, s.Secrets, cfg.Builder.SecretID),
 	)
 	otpHandler := otp.NewAuthHandler(randomProvider, map[proto.IdentityType]otp.Sender{
-		proto.IdentityType_Email: email.NewSender(builderClient, awsCfg, cfg.SES),
+		proto.IdentityType_Email: email.NewSender(managerClient, awsCfg, cfg.SES),
 	})
 
 	handlers := map[proto.AuthMode]auth.Handler{
