@@ -7,18 +7,16 @@ import (
 
 type Mock struct{}
 
-func NewMock() Builder {
+func NewMock() EcosystemManager {
 	return Mock{}
 }
 
-func (m Mock) GetEmailTemplate(ctx context.Context, projectID uint64, templateType *EmailTemplateType) (*EmailTemplate, error) {
-	template := "Your login code: {auth_code}"
-	return &EmailTemplate{
-		TemplateType: templateType,
-		IntroText:    "Your login code",
-		Subject:      fmt.Sprintf("Login code for %d", projectID),
-		Template:     &template,
+func (m Mock) GetTemplate(ctx context.Context, projectID uint64, templateType TemplateType) (*EcosystemTemplate, error) {
+	return &EcosystemTemplate{
+		Subject:   fmt.Sprintf("Login code for %d", projectID),
+		IntroText: "Your login code",
+		Content:   "Your login code: {auth_code}",
 	}, nil
 }
 
-var _ Builder = (*Mock)(nil)
+var _ EcosystemManager = (*Mock)(nil)
