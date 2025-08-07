@@ -128,7 +128,7 @@ func TestEmail(t *testing.T) {
 				signer := insertSigner(t, p.svc, "123", "Email:"+p.email, p.email)
 				cp.Handle = ""
 				cp.Signer = &proto.Key{
-					KeyType: proto.KeyType_Secp256k1,
+					KeyType: proto.KeyType_Ethereum_Secp256k1,
 					Address: signer.Address,
 				}
 			},
@@ -139,7 +139,7 @@ func TestEmail(t *testing.T) {
 				require.NotEmpty(t, p.verifier)
 				require.NotEmpty(t, p.challenge)
 				assert.Equal(t, p.email, p.loginHint)
-				assert.Equal(t, "Secp256k1:"+signerAddr, p.verifier)
+				assert.Equal(t, "Ethereum_Secp256k1:"+signerAddr, p.verifier)
 				return true
 			},
 			extractAnswer: func(t *testing.T, p assertionParams) string {
@@ -154,7 +154,7 @@ func TestEmail(t *testing.T) {
 				signerAddr := strings.ToLower(crypto.PubkeyToAddress(signer.PublicKey).Hex())
 				require.NoError(t, err)
 				require.NotEmpty(t, p.signer)
-				assert.Equal(t, "Secp256k1:"+signerAddr, p.signer.String())
+				assert.Equal(t, "Ethereum_Secp256k1:"+signerAddr, p.signer.String())
 				return true
 			},
 		},
@@ -164,7 +164,7 @@ func TestEmail(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			ctx := context.Background()
 
-			builderServer := httptest.NewServer(builder.NewBuilderServer(builder.NewMock()))
+			builderServer := httptest.NewServer(builder.NewEcosystemManagerServer(builder.NewMock()))
 			defer builderServer.Close()
 
 			svc := initRPC(t, nil, func(cfg *config.Config) {
@@ -190,7 +190,7 @@ func TestEmail(t *testing.T) {
 			}
 
 			protoAuthKey := &proto.Key{
-				KeyType: proto.KeyType_Secp256k1,
+				KeyType: proto.KeyType_Ethereum_Secp256k1,
 				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 			}
 			commitParams := &proto.CommitVerifierParams{
@@ -221,7 +221,7 @@ func TestEmail(t *testing.T) {
 					Scope:        proto.Scope("@123"),
 					AuthMode:     proto.AuthMode_OTP,
 					IdentityType: proto.IdentityType_Email,
-					SignerType:   proto.KeyType_Secp256k1,
+					SignerType:   proto.KeyType_Ethereum_Secp256k1,
 					Verifier:     p.verifier,
 					Answer:       answer,
 				}
@@ -253,7 +253,7 @@ func TestEmail(t *testing.T) {
 			pub, err := crypto.Ecrecover(digest, sigBytes)
 			require.NoError(t, err)
 			addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-			assert.Equal(t, "Secp256k1:"+strings.ToLower(addr.Hex()), p.signer.String())
+			assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), p.signer.String())
 		})
 	}
 }

@@ -61,7 +61,7 @@ func TestOIDC(t *testing.T) {
 		hashedToken := hexutil.Encode(crypto.Keccak256([]byte(tok)))
 
 		protoAuthKey := &proto.Key{
-			KeyType: proto.KeyType_Secp256k1,
+			KeyType: proto.KeyType_Ethereum_Secp256k1,
 			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 		}
 		initiateParams := &proto.CommitVerifierParams{
@@ -86,7 +86,7 @@ func TestOIDC(t *testing.T) {
 			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_IDToken,
 			IdentityType: proto.IdentityType_OIDC,
-			SignerType:   proto.KeyType_Secp256k1,
+			SignerType:   proto.KeyType_Ethereum_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       tok,
 		}
@@ -119,7 +119,7 @@ func TestOIDC(t *testing.T) {
 		pub, err := crypto.Ecrecover(digest, sigBytes)
 		require.NoError(t, err)
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-		assert.Equal(t, "Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
+		assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
 
 	t.Run("AuthMode_AuthCode", func(t *testing.T) {
@@ -155,7 +155,7 @@ func TestOIDC(t *testing.T) {
 		codeHash := hexutil.Encode(crypto.Keccak256([]byte(code)))
 
 		protoAuthKey := &proto.Key{
-			KeyType: proto.KeyType_Secp256k1,
+			KeyType: proto.KeyType_Ethereum_Secp256k1,
 			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 		}
 		initiateParams := &proto.CommitVerifierParams{
@@ -179,7 +179,7 @@ func TestOIDC(t *testing.T) {
 			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_AuthCode,
 			IdentityType: proto.IdentityType_OIDC,
-			SignerType:   proto.KeyType_Secp256k1,
+			SignerType:   proto.KeyType_Ethereum_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
@@ -212,7 +212,7 @@ func TestOIDC(t *testing.T) {
 		pub, err := crypto.Ecrecover(digest, sigBytes)
 		require.NoError(t, err)
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-		assert.Equal(t, "Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
+		assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
 
 	t.Run("AuthMode_AuthCodePKCE", func(t *testing.T) {
@@ -240,7 +240,7 @@ func TestOIDC(t *testing.T) {
 		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
 
 		protoAuthKey := &proto.Key{
-			KeyType: proto.KeyType_Secp256k1,
+			KeyType: proto.KeyType_Ethereum_Secp256k1,
 			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
 		}
 		initiateParams := &proto.CommitVerifierParams{
@@ -271,7 +271,7 @@ func TestOIDC(t *testing.T) {
 			Scope:        proto.Scope("@123"),
 			AuthMode:     proto.AuthMode_AuthCodePKCE,
 			IdentityType: proto.IdentityType_OIDC,
-			SignerType:   proto.KeyType_Secp256k1,
+			SignerType:   proto.KeyType_Ethereum_Secp256k1,
 			Verifier:     resVerifier,
 			Answer:       code,
 		}
@@ -304,7 +304,7 @@ func TestOIDC(t *testing.T) {
 		pub, err := crypto.Ecrecover(digest, sigBytes)
 		require.NoError(t, err)
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
-		assert.Equal(t, "Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
+		assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
 }
 
