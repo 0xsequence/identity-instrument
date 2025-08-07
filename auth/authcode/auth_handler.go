@@ -6,7 +6,6 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -255,12 +254,7 @@ func generateClientSecretJWT(config *GenerateJWT) (string, error) {
 		return "", fmt.Errorf("build token: %w", err)
 	}
 
-	block, _ := pem.Decode([]byte(config.SigningKey.PrivateKey))
-	if block == nil {
-		return "", fmt.Errorf("invalid private key")
-	}
-
-	rawKey, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	rawKey, err := x509.ParsePKCS8PrivateKey(config.SigningKey.PrivateKey)
 	if err != nil {
 		return "", fmt.Errorf("parse private key: %w", err)
 	}
