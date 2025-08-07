@@ -19,7 +19,7 @@ func NewKey(keyType KeyType, address string) (Key, error) {
 
 func NewKeyFromPrivateKey(keyType KeyType, privateKey any) (Key, error) {
 	switch keyType {
-	case KeyType_Secp256k1:
+	case KeyType_Ethereum_Secp256k1:
 		ecdsaKey, ok := privateKey.(*ecdsa.PrivateKey)
 		if !ok {
 			return Key{}, fmt.Errorf("invalid private key type: %T", privateKey)
@@ -27,6 +27,16 @@ func NewKeyFromPrivateKey(keyType KeyType, privateKey any) (Key, error) {
 		return Key{
 			KeyType: keyType,
 			Address: strings.ToLower(crypto.PubkeyToAddress(ecdsaKey.PublicKey).Hex()),
+		}, nil
+
+	case KeyType_WebCrypto_Secp256r1:
+		ecdsaKey, ok := privateKey.(*ecdsa.PrivateKey)
+		if !ok {
+			return Key{}, fmt.Errorf("invalid private key type: %T", privateKey)
+		}
+		return Key{
+			KeyType: keyType,
+			Address: ecdsaKey.PublicKey.X.String() + ecdsaKey.PublicKey.Y.String(),
 		}, nil
 	}
 
@@ -42,7 +52,7 @@ func (k *Key) IsValid() bool {
 }
 
 func (k *Key) HasValidKeyType() bool {
-	return k != nil && k.KeyType.Is(KeyType_Secp256k1, KeyType_Secp256r1)
+	return k != nil && k.KeyType.Is(KeyType_Ethereum_Secp256k1, KeyType_WebCrypto_Secp256r1)
 }
 
 func (k *Key) Hash() string {
