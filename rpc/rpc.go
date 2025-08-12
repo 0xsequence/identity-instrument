@@ -19,6 +19,7 @@ import (
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
 	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
+	"github.com/0xsequence/identity-instrument/rpc/internal/signature"
 	"github.com/0xsequence/nitrocontrol/enclave"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -228,6 +229,9 @@ func (s *RPC) Handler() http.Handler {
 
 		// Generate attestation document
 		r.Use(attestation.Middleware(s.Enclave))
+
+		// Signature middleware
+		r.Use(signature.Middleware())
 
 		srv := proto.NewIdentityInstrumentServer(s)
 		r.Handle("/rpc/IdentityInstrument/CommitVerifier", srv)

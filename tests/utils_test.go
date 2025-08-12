@@ -17,6 +17,7 @@ import (
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/rpc"
+	"github.com/gowebpki/jcs"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/localstack"
@@ -202,4 +203,20 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 		KeyType: proto.KeyType_Secp256k1,
 		Address: crypto.PubkeyToAddress(signer.PublicKey).Hex(),
 	}
+}
+
+func signRequest(t *testing.T, authKey *ecdsa.PrivateKey, params any) string {
+	jsonParams, err := json.Marshal(params)
+	require.NoError(t, err)
+
+	canonical, err := jcs.Transform(jsonParams)
+	require.NoError(t, err)
+
+	digest := crypto.Keccak256(canonical)
+	digestHex := hexutil.Encode(digest)
+	prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
+	sig, err := crypto.Sign(prefixedHash, authKey)
+	require.NoError(t, err)
+
+	return hexutil.Encode(sig)
 }

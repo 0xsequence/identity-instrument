@@ -6,8 +6,6 @@ version = v0.1.0
 struct CommitVerifierParams
   - scope?: string
     + go.field.type = Scope
-  - authKey: Key
-    + go.field.type = Key
   - identityType: IdentityType
   - authMode: AuthMode
   - metadata: map<string, string>
@@ -18,8 +16,6 @@ struct CommitVerifierParams
 struct CompleteAuthParams
   - scope?: string
     + go.field.type = Scope
-  - authKey: Key
-    + go.field.type = Key
   - identityType: IdentityType
   - signerType: KeyType
   - authMode: AuthMode
@@ -32,10 +28,8 @@ struct SignParams
     + go.field.type = Scope
   - signer: Key
     + go.field.type = Key
+  - nonce: string
   - digest: string
-  - authKey: Key
-    + go.field.type = Key
-  - signature: string
 
 struct Identity
   - type: IdentityType
@@ -149,14 +143,15 @@ error 7003 AnswerIncorrect "The provided answer is incorrect" HTTP 400
 error 7004 ChallengeExpired "The challenge has expired" HTTP 400
 error 7005 TooManyAttempts "Too many attempts" HTTP 400
 error 7006 OAuthError "Failed to exchange OAuth credentials" HTTP 400
+error 7007 AccessError "Access error" HTTP 401
 
 ##
 ## Services
 ##
 
 service IdentityInstrument
-  - CommitVerifier(params: CommitVerifierParams) => (verifier: string, loginHint: string, challenge: string)
-  - CompleteAuth(params: CompleteAuthParams) => (signer: Key, identity: Identity)
+  - CommitVerifier(params: CommitVerifierParams, authKey: Key, signature: string) => (verifier: string, loginHint: string, challenge: string)
+  - CompleteAuth(params: CompleteAuthParams, authKey: Key, signature: string) => (signer: Key, identity: Identity)
 
-  - Sign(params: SignParams) => (signature: string)
+  - Sign(params: SignParams, authKey: Key, signature: string) => (signature: string)
 

@@ -29,6 +29,7 @@ require (
 	github.com/go-chi/transport v0.5.0
 	github.com/goware/cachestore v0.10.0
 	github.com/goware/rerun v0.0.9
+	github.com/gowebpki/jcs v1.0.1
 	github.com/lestrrat-go/jwx/v2 v2.1.3
 	github.com/mdlayher/vsock v1.2.1
 	github.com/prometheus/client_golang v1.22.0

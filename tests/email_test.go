@@ -189,12 +189,12 @@ func TestEmail(t *testing.T) {
 				p.email = fmt.Sprintf("user+%s@example.com", unique)
 			}
 
+			protoAuthKey := &proto.Key{
+				KeyType: proto.KeyType_Secp256k1,
+				Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+			}
 			commitParams := &proto.CommitVerifierParams{
-				Scope: proto.Scope("@123"),
-				AuthKey: proto.Key{
-					KeyType: proto.KeyType_Secp256k1,
-					Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-				},
+				Scope:        proto.Scope("@123"),
 				AuthMode:     proto.AuthMode_OTP,
 				IdentityType: proto.IdentityType_Email,
 				Handle:       p.email,
@@ -202,7 +202,8 @@ func TestEmail(t *testing.T) {
 			if testCase.prepareCommitParams != nil {
 				testCase.prepareCommitParams(t, p, commitParams)
 			}
-			p.verifier, p.loginHint, p.challenge, err = c.CommitVerifier(ctx, commitParams)
+			sig := signRequest(t, authKey, commitParams)
+			p.verifier, p.loginHint, p.challenge, err = c.CommitVerifier(ctx, commitParams, protoAuthKey, sig)
 			if testCase.assertCommitVerifier != nil {
 				if proceed := testCase.assertCommitVerifier(t, p, err); !proceed {
 					return
@@ -217,18 +218,15 @@ func TestEmail(t *testing.T) {
 				answer := hexutil.Encode(crypto.Keccak256([]byte(p.challenge + code)))
 
 				completeParams := &proto.CompleteAuthParams{
-					Scope: proto.Scope("@123"),
-					AuthKey: proto.Key{
-						KeyType: proto.KeyType_Secp256k1,
-						Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-					},
+					Scope:        proto.Scope("@123"),
 					AuthMode:     proto.AuthMode_OTP,
 					IdentityType: proto.IdentityType_Email,
 					SignerType:   proto.KeyType_Secp256k1,
 					Verifier:     p.verifier,
 					Answer:       answer,
 				}
-				p.signer, p.identity, err = c.CompleteAuth(ctx, completeParams)
+				sig = signRequest(t, authKey, completeParams)
+				p.signer, p.identity, err = c.CompleteAuth(ctx, completeParams, protoAuthKey, sig)
 				if testCase.assertCompleteAuth != nil {
 					proceed = testCase.assertCompleteAuth(t, p, err)
 				}
@@ -238,22 +236,13 @@ func TestEmail(t *testing.T) {
 			}
 
 			digest := crypto.Keccak256([]byte("message"))
-			digestHex := hexutil.Encode(digest)
-			prefixedHash := crypto.Keccak256([]byte(fmt.Sprintf("\x19Ethereum Signed Message:\n%d%s", len(digestHex), digestHex)))
-			sig, err := crypto.Sign(prefixedHash, authKey)
-			require.NoError(t, err)
-
 			signParams := &proto.SignParams{
-				Scope: proto.Scope("@123"),
-				AuthKey: proto.Key{
-					KeyType: proto.KeyType_Secp256k1,
-					Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
-				},
-				Signer:    *p.signer,
-				Digest:    digestHex,
-				Signature: hexutil.Encode(sig),
+				Scope:  proto.Scope("@123"),
+				Signer: *p.signer,
+				Digest: hexutil.Encode(digest),
 			}
-			resSignature, err := c.Sign(ctx, signParams)
+			sig = signRequest(t, authKey, signParams)
+			resSignature, err := c.Sign(ctx, signParams, protoAuthKey, sig)
 			require.NoError(t, err)
 
 			sigBytes := common.FromHex(resSignature)

@@ -28,7 +28,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 )
 
-func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams) (string, string, string, error) {
+func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams, authKey *proto.Key, signature string) (string, string, string, error) {
 	att := attestation.FromContext(ctx)
 	log := o11y.LoggerFromContext(ctx)
 
@@ -40,8 +40,9 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	if params == nil {
 		return "", "", "", proto.ErrInvalidRequest.WithCausef("params is required")
 	}
-	if !params.AuthKey.IsValid() {
-		return "", "", "", proto.ErrInvalidRequest.WithCausef("valid auth key is required")
+
+	if authKey == nil {
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("auth key is required")
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
@@ -128,10 +129,10 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		return nil
 	}
 
-	return authHandler.Commit(ctx, authID, commitment, signer, params.AuthKey, params.Metadata, storeFn)
+	return authHandler.Commit(ctx, authID, commitment, signer, *authKey, params.Metadata, storeFn)
 }
 
-func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams) (*proto.Key, *proto.Identity, error) {
+func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams, authKey *proto.Key, signature string) (*proto.Key, *proto.Identity, error) {
 	att := attestation.FromContext(ctx)
 	log := o11y.LoggerFromContext(ctx)
 
@@ -143,8 +144,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	if params == nil {
 		return nil, nil, proto.ErrInvalidRequest.WithCausef("params is required")
 	}
-	if !params.AuthKey.IsValid() {
-		return nil, nil, proto.ErrInvalidRequest.WithCausef("valid auth key is required")
+	if authKey == nil {
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("auth key is required")
 	}
 
 	// Currently we only support secp256k1 signers
@@ -190,7 +191,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		}
 	}
 
-	ident, err := authHandler.Verify(ctx, commitment, params.AuthKey, params.Answer)
+	ident, err := authHandler.Verify(ctx, commitment, *authKey, params.Answer)
 	if err != nil {
 		if commitment != nil {
 			commitment.Attempts += 1
@@ -272,7 +273,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	authKeyData := &proto.AuthKeyData{
 		Scope:   scope,
 		Signer:  dbSigner.Key(),
-		AuthKey: params.AuthKey,
+		AuthKey: *authKey,
 		Expiry:  time.Now().Add(ttl),
 	}
 
@@ -284,7 +285,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 
 	dbAuthKey := &data.AuthKey{
 		Scope:         scope,
-		Key:           &params.AuthKey,
+		Key:           authKey,
 		ExpiresAt:     authKeyData.Expiry,
 		EncryptedData: encData,
 	}
