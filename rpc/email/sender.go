@@ -18,14 +18,14 @@ import (
 )
 
 type Sender struct {
-	builder builder.Builder
+	manager builder.EcosystemManager
 	awsCfg  aws.Config
 	cfg     config.SESConfig
 }
 
-func NewSender(builder builder.Builder, awsCfg aws.Config, cfg config.SESConfig) *Sender {
+func NewSender(manager builder.EcosystemManager, awsCfg aws.Config, cfg config.SESConfig) *Sender {
 	return &Sender{
-		builder: builder,
+		manager: manager,
 		awsCfg:  awsCfg,
 		cfg:     cfg,
 	}
@@ -53,41 +53,41 @@ func (s *Sender) SendOTP(ctx context.Context, scope proto.Scope, recipient strin
 	if err != nil {
 		return fmt.Errorf("failed to parse ecosystem ID: %w", err)
 	}
-	tplType := builder.EmailTemplateType_LOGIN
-	tpl, err := s.builder.GetEmailTemplate(ctx, ecoID, &tplType)
+	tplType := builder.TemplateType_LOGIN
+	tpl, err := s.manager.GetTemplate(ctx, ecoID, tplType)
 	if err != nil {
 		return fmt.Errorf("failed to build email template: %w", err)
 	}
 
 	// Build the email message from templates.
 	subject := strings.Replace(tpl.Subject, "{auth_code}", code, 1)
-	html := strings.Replace(*tpl.Template, "{auth_code}", code, 1)
+	html := strings.Replace(tpl.Content, "{auth_code}", code, 1)
 	text := tpl.IntroText + "\n\n" + code
 
 	awsCfg := s.awsCfg // make a copy
 	accessRoleARN := s.cfg.AccessRoleARN
-	if tpl.SesConfig != nil && tpl.SesConfig.AccessRoleARN != "" {
-		accessRoleARN = tpl.SesConfig.AccessRoleARN
+	if tpl.SESSettings != nil && tpl.SESSettings.AccessRoleARN != "" {
+		accessRoleARN = tpl.SESSettings.AccessRoleARN
 	}
 	if accessRoleARN != "" {
 		stsClient := sts.NewFromConfig(awsCfg)
 		creds := stscreds.NewAssumeRoleProvider(stsClient, accessRoleARN)
 		awsCfg.Credentials = aws.NewCredentialsCache(creds)
 	}
-	if tpl.SesConfig != nil && tpl.SesConfig.Region != "" {
-		awsCfg.Region = tpl.SesConfig.Region
+	if tpl.SESSettings != nil && tpl.SESSettings.Region != "" {
+		awsCfg.Region = tpl.SESSettings.Region
 	} else if s.cfg.Region != "" {
 		awsCfg.Region = s.cfg.Region
 	}
 
 	source := &s.cfg.Source
-	if tpl.FromEmail != nil && *tpl.FromEmail != "" {
-		source = tpl.FromEmail
+	if tpl.FromEmail != "" {
+		source = &tpl.FromEmail
 	}
 
 	sourceARN := &s.cfg.SourceARN
-	if tpl.SesConfig != nil && tpl.SesConfig.SourceARN != "" {
-		sourceARN = &tpl.SesConfig.SourceARN
+	if tpl.SESSettings != nil && tpl.SESSettings.SourceARN != "" {
+		sourceARN = &tpl.SESSettings.SourceARN
 	}
 
 	client := ses.NewFromConfig(awsCfg)

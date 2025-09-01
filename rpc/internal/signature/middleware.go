@@ -16,7 +16,7 @@ import (
 //
 // It expects the request body to be a JSON object with the following fields:
 // - params: the parameters of the request
-// - authKey: public key (or address) of the auth keypair (secp256k1 or secp256r1)
+// - authKey: public key (or address) of the auth keypair (Ethereum_Secp256k1 or WebCrypto_Secp256r1)
 // - signature: the signature of the params (canonicalized with JCS [RFC 8785]) using the auth key
 func Middleware() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -62,18 +62,18 @@ func Middleware() func(http.Handler) http.Handler {
 			}
 
 			switch req.AuthKey.KeyType {
-			case proto.KeyType_Secp256k1:
-				if err := ValidateSecp256k1(req.AuthKey.Address, canonical, sigBytes); err != nil {
+			case proto.KeyType_Ethereum_Secp256k1:
+				if err := ValidateEthereumPersonalMessageSignature(req.AuthKey.Address, canonical, sigBytes); err != nil {
 					proto.RespondWithError(w, proto.ErrInvalidSignature.WithCause(err))
 					return
 				}
-			case proto.KeyType_Secp256r1:
-				if err := ValidateSecp256r1(req.AuthKey.Address, canonical, sigBytes); err != nil {
+			case proto.KeyType_WebCrypto_Secp256r1:
+				if err := ValidateWebCryptoSignature(req.AuthKey.Address, canonical, sigBytes); err != nil {
 					proto.RespondWithError(w, proto.ErrInvalidSignature.WithCause(err))
 					return
 				}
 			default:
-				proto.RespondWithError(w, proto.ErrInvalidRequest.WithCausef("unknown key type"))
+				proto.RespondWithError(w, proto.ErrInvalidRequest.WithCausef("unknown or unsupported key type"))
 				return
 			}
 

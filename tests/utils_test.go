@@ -179,7 +179,7 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 
 	signerData := &proto.SignerData{
 		Scope:      proto.Scope("@" + ecosystem),
-		KeyType:    proto.KeyType_Secp256k1,
+		KeyType:    proto.KeyType_Ethereum_Secp256k1,
 		Identity:   &ident,
 		PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
 	}
@@ -192,7 +192,7 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 		Identity: &ident,
 		ScopedKeyType: data.ScopedKeyType{
 			Scope:   proto.Scope("@" + ecosystem),
-			KeyType: proto.KeyType_Secp256k1,
+			KeyType: proto.KeyType_Ethereum_Secp256k1,
 		},
 		EncryptedData: encData,
 	}
@@ -200,7 +200,7 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 		t.Fatal(err)
 	}
 	return proto.Key{
-		KeyType: proto.KeyType_Secp256k1,
+		KeyType: proto.KeyType_Ethereum_Secp256k1,
 		Address: crypto.PubkeyToAddress(signer.PublicKey).Hex(),
 	}
 }

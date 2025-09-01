@@ -10,7 +10,7 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common"
 )
 
-func ValidateSecp256r1(pubKey string, message []byte, sigBytes []byte) error {
+func ValidateWebCryptoSignature(pubKey string, message []byte, sigBytes []byte) error {
 	pubKeyBytes := common.FromHex(pubKey)
 
 	if len(pubKeyBytes) == 0 || pubKeyBytes[0] != 0x04 {

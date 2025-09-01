@@ -10,7 +10,7 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 )
 
-func ValidateSecp256k1(address string, message []byte, sigBytes []byte) error {
+func ValidateEthereumPersonalMessageSignature(address string, message []byte, sigBytes []byte) error {
 	// Calculate the digest of the message
 	digestHex := hexutil.Encode(crypto.Keccak256(message))
 

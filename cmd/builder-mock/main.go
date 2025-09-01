@@ -7,6 +7,6 @@ import (
 )
 
 func main() {
-	svc := builder.NewBuilderServer(builder.NewMock())
+	svc := builder.NewEcosystemManagerServer(builder.NewMock())
 	http.ListenAndServe(":9999", svc)
 }

@@ -12,13 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateSecp256r1(t *testing.T) {
+func TestValidateWebCryptoSignature(t *testing.T) {
 	t.Run("InvalidPublicKey", func(t *testing.T) {
 		invalidPubKey := "0xdeadbeef"
 		message := []byte("test message")
 		sig := make([]byte, 64) // dummy signature
 
-		err := signature.ValidateSecp256r1(invalidPubKey, message, sig)
+		err := signature.ValidateWebCryptoSignature(invalidPubKey, message, sig)
 		require.Error(t, err)
 	})
 
@@ -34,7 +34,7 @@ func TestValidateSecp256r1(t *testing.T) {
 		sig := make([]byte, 64)
 		copy(sig, []byte("thisisnotavalidsignaturethisisnotavalidsignature123456"))
 
-		err = signature.ValidateSecp256r1(pubKeyHex, message, sig)
+		err = signature.ValidateWebCryptoSignature(pubKeyHex, message, sig)
 		require.Error(t, err)
 	})
 
@@ -53,7 +53,7 @@ func TestValidateSecp256r1(t *testing.T) {
 		copy(sig[0:32], r.Bytes())
 		copy(sig[32:64], s.Bytes())
 
-		err = signature.ValidateSecp256r1(pubKeyHex, message, sig)
+		err = signature.ValidateWebCryptoSignature(pubKeyHex, message, sig)
 		require.NoError(t, err)
 	})
 }

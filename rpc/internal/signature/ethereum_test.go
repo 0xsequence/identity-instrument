@@ -13,13 +13,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestValidateSecp256k1(t *testing.T) {
+func TestValidateEthereumPersonalMessageSignature(t *testing.T) {
 	t.Run("InvalidPublicKey", func(t *testing.T) {
 		invalidPubKey := "0xdeadbeef"
 		message := []byte("test message")
 		sig := make([]byte, 65) // dummy signature
 
-		err := signature.ValidateSecp256k1(invalidPubKey, message, sig)
+		err := signature.ValidateEthereumPersonalMessageSignature(invalidPubKey, message, sig)
 		require.Error(t, err)
 	})
 
@@ -33,7 +33,7 @@ func TestValidateSecp256k1(t *testing.T) {
 		sig := make([]byte, 65)
 		copy(sig, []byte("thisisnotavalidsignaturethisisnotavalidsignature123456"))
 
-		err = signature.ValidateSecp256k1(address, message, sig)
+		err = signature.ValidateEthereumPersonalMessageSignature(address, message, sig)
 		require.Error(t, err)
 	})
 
@@ -50,7 +50,7 @@ func TestValidateSecp256k1(t *testing.T) {
 		sig, err := crypto.Sign(prefixedHash, priv)
 		require.NoError(t, err)
 
-		err = signature.ValidateSecp256k1(address, message, sig)
+		err = signature.ValidateEthereumPersonalMessageSignature(address, message, sig)
 		require.NoError(t, err)
 	})
 }

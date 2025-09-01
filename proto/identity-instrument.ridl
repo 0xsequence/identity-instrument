@@ -46,16 +46,14 @@ struct Key
   - address: string
 
 enum KeyType: string
-  - Secp256k1
-  - Secp256r1
+  - WebCrypto_Secp256r1
+  - Ethereum_Secp256k1
 
 enum IdentityType: string
-  - Guest
   - Email
   - OIDC
 
 enum AuthMode: string
-  - Guest
   - OTP
   - IDToken
   - AccessToken

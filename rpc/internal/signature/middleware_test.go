@@ -33,7 +33,7 @@ func TestMiddleware(t *testing.T) {
 		wantStatus  int
 		wantErrText string
 	}{
-		"ValidSecp256k1": {
+		"ValidEthereumSecp256k1": {
 			wantStatus: http.StatusOK,
 			body: func() []byte {
 				priv, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
@@ -50,12 +50,12 @@ func TestMiddleware(t *testing.T) {
 
 				authKey := &proto.Key{
 					Address: address,
-					KeyType: proto.KeyType_Secp256k1,
+					KeyType: proto.KeyType_Ethereum_Secp256k1,
 				}
 				return makeBody(params, authKey, hexutil.Encode(sig))
 			},
 		},
-		"ValidSecp256r1": {
+		"ValidWebCryptoSecp256r1": {
 			wantStatus: http.StatusOK,
 			body: func() []byte {
 				priv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -74,7 +74,7 @@ func TestMiddleware(t *testing.T) {
 
 				authKey := &proto.Key{
 					Address: pubKeyHex,
-					KeyType: proto.KeyType_Secp256r1,
+					KeyType: proto.KeyType_WebCrypto_Secp256r1,
 				}
 				return makeBody(params, authKey, hexutil.Encode(sig))
 			},
@@ -96,7 +96,7 @@ func TestMiddleware(t *testing.T) {
 
 				authKey := &proto.Key{
 					Address: address,
-					KeyType: proto.KeyType_Secp256k1,
+					KeyType: proto.KeyType_Ethereum_Secp256k1,
 				}
 				sig := make([]byte, 65)
 				return makeBody("", authKey, hexutil.Encode(sig))
@@ -128,7 +128,7 @@ func TestMiddleware(t *testing.T) {
 
 				authKey := &proto.Key{
 					Address: address,
-					KeyType: proto.KeyType_Secp256k1,
+					KeyType: proto.KeyType_Ethereum_Secp256k1,
 				}
 				return makeBody("{}", authKey, "")
 			},
