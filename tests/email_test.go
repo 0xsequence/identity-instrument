@@ -75,7 +75,7 @@ func TestEmail(t *testing.T) {
 				return "Wrong"
 			},
 			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
-				require.ErrorContains(t, err, "incorrect answer")
+				require.ErrorContains(t, err, "answer is incorrect")
 				return false
 			},
 		},
@@ -94,7 +94,7 @@ func TestEmail(t *testing.T) {
 			},
 			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
 				if p.attempt < 2 {
-					require.ErrorContains(t, err, "incorrect answer")
+					require.ErrorContains(t, err, "answer is incorrect")
 					return false
 				}
 				require.NoError(t, err)
@@ -116,7 +116,7 @@ func TestEmail(t *testing.T) {
 			},
 			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
 				if p.attempt < 3 {
-					require.ErrorContains(t, err, "incorrect answer")
+					require.ErrorContains(t, err, "answer is incorrect")
 				} else {
 					require.ErrorContains(t, err, "Too many attempts")
 				}
