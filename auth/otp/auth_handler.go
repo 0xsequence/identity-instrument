@@ -146,7 +146,7 @@ func (h *AuthHandler) Verify(
 	// challenge here is the server salt; combined with the client's answer and hashed it produces the serverAnswer
 	serverAnswer := hexutil.Encode(ethcrypto.Keccak256([]byte(commitment.Challenge + answer)))
 	if serverAnswer != commitment.Answer {
-		return proto.Identity{}, proto.ErrProofVerificationFailed.WithCausef("incorrect answer")
+		return proto.Identity{}, proto.ErrAnswerIncorrect
 	}
 	identity := proto.Identity{
 		Type:    commitment.IdentityType,
