@@ -115,7 +115,7 @@ func TestEmail(t *testing.T) {
 				return strings.TrimPrefix(message, "Your login code: ")
 			},
 			assertCompleteAuth: func(t *testing.T, p assertionParams, err error) bool {
-				if p.attempt < 3 {
+				if p.attempt < 2 {
 					require.ErrorContains(t, err, "answer is incorrect")
 				} else {
 					require.ErrorContains(t, err, "Too many attempts")

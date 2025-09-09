@@ -146,6 +146,10 @@ func (h *AuthHandler) Verify(
 	// challenge here is the server salt; combined with the client's answer and hashed it produces the serverAnswer
 	serverAnswer := hexutil.Encode(ethcrypto.Keccak256([]byte(commitment.Challenge + answer)))
 	if serverAnswer != commitment.Answer {
+		if commitment.Attempts == 2 {
+			// short circuit the error if this is the third attempt
+			return proto.Identity{}, proto.ErrTooManyAttempts
+		}
 		return proto.Identity{}, proto.ErrAnswerIncorrect
 	}
 	identity := proto.Identity{
