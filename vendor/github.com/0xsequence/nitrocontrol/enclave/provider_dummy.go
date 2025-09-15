@@ -70,28 +70,34 @@ vMVH5ygi1fMeQPNg8oWDD+3gP1GmLGMP14kHT/aPyDAHHUMrq7nSgA8SXTC9fihO
 sygULgtpiSjKgeg9cTvK9yhz7T0c2CxFgyhUnz4v6uZtQTJK2Q==
 -----END CERTIFICATE-----`
 
-func DummyProvider() (Session, error) {
-	block, _ := pem.Decode([]byte(dummyPrivKey))
-	if block == nil || block.Type != "RSA PRIVATE KEY" {
-		return nil, fmt.Errorf("invalid PEM block")
-	}
-	key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse dummy private key: %v", err)
-	}
+func DummyProvider(random io.Reader) func() (Session, error) {
+	return func() (Session, error) {
+		block, _ := pem.Decode([]byte(dummyPrivKey))
+		if block == nil || block.Type != "RSA PRIVATE KEY" {
+			return nil, fmt.Errorf("invalid PEM block")
+		}
+		key, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse dummy private key: %v", err)
+		}
 
-	certBlock, _ := pem.Decode([]byte(dummyCert))
-	caCert, err := x509.ParseCertificate(certBlock.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse CA certificate: %v", err)
-	}
+		certBlock, _ := pem.Decode([]byte(dummyCert))
+		caCert, err := x509.ParseCertificate(certBlock.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse CA certificate: %v", err)
+		}
 
-	return &dummySession{
-		random:     rand.Reader,
-		privateKey: key,
-		caCert:     caCert,
-		caCertDER:  certBlock.Bytes,
-	}, nil
+		if random == nil {
+			random = rand.Reader
+		}
+
+		return &dummySession{
+			random:     random,
+			privateKey: key,
+			caCert:     caCert,
+			caCertDER:  certBlock.Bytes,
+		}, nil
+	}
 }
 
 type dummySession struct {
