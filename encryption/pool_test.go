@@ -1,0 +1,585 @@
+package encryption_test
+
+import (
+	"context"
+	"crypto/x509"
+	"encoding/pem"
+	"errors"
+	"testing"
+
+	"github.com/0xsequence/identity-instrument/data"
+	"github.com/0xsequence/identity-instrument/encryption"
+	"github.com/0xsequence/identity-instrument/encryption/shamir"
+	"github.com/0xsequence/nitrocontrol/enclave"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+)
+
+var dummyPrivKey = `-----BEGIN RSA PRIVATE KEY-----
+MIIEpAIBAAKCAQEAujDWnWEKVYoHUwieLegkzR2K+4z2Fg3uVEwmZ16iRJiYm5TO
+ltLN6BSHaLCqreA1bYXXTFlIG10z2+h16fhkCNKzy4yKwjwUdXJlbBivypQers8h
+Pwy1l4c+uID/VX5zXG4y7g7aNc0Ude+lzBvydh9vFz5PwupFzY6ok3czI95ODni7
+hn/X/8TBGTyh0eYZu8ehfKy6W9AHbX7D+yL2qebSWWkJBEribptpCcaJi8QPUx9M
+HWz8j1j83+M6rnG1FQpLl8VNOO6BXmzb5FNr+6lwEfvwHbht0Azhk0ArMQZ/r0lO
+ObAvVDmE2AuudXyWWh5sRrXnXlVitDjTQybQAQIDAQABAoIBAQCYf9Poh0jdkvY4
+zkAwvYkW73GcY3JT0gk4xj5WQC6MHKgyFgm3guXfhqD54GmLjK52DD+xaxciQo5t
+OdMKVcYpa9qTh4NHX8oqAA6OIRIqzHLtHv3OFGzPtZhrqkx4C+AU/rV8QnH7ywNN
+LYIQ0XsfwNNOqFzP+u49VPFCB0m9v7r7mJxeUXp8PDfdhquFT69hpKwNdpzuIDA7
+kVOG4ATkkPTGp3AmJj9Vrit9ffi+xlbhrNIuBui9Fxo1v5G6VT2uBhXJU22zl1hS
+uYWT4rCOwVQaV/TBDj4T8diDxYpnAXvpO8U+WdqLddhUNaYeDym/HPq2cFsN9VdY
+9FYiVl4ZAoGBAOWVsrRAWgFTmx99nUwy6XhobSWgZDrCQiSK50VGzblBdVnmMvyW
+Q3LmdqtVQUkZLETx7PZXYkvIzMRP4oWGcViBPaSZ/IqX/kF5WJeXWW7Zgl5HEXTk
+GaN26xl7yFjQ5l0f++HAwSW485B2GXvMcdp+6n7OfG6Xo1cg8CgWck5TAoGBAM+c
+/h03pASGVvUDNNfeDulyxcXR/PZZTt1YMTqeYLmkbkJcIJVa2uTdDmzcEbGDA0eq
+ezMDA+omGB+WR7HRe9+vgmz7Ww4BZRhKjvnxRgHlTGYHBsHhYr21fgPteGv/aDi2
+xhAGqyOj1jua8ooqpw8TviYXk6ZbxMNF7eV9KxXbAoGAasEjKaHKuFcyCICWhfoe
+ifi02AwuzwvJSci1JYd43a3MbZMXHlCY6HK1t5GbG+xyo1SDRUD42hhy7s3enQwY
+5HikO0fHIILwnW1ZfpPH6D2H22LcgSgXq+T+CQl/7ZyloaPfsee5aFsKFqBz1RcJ
+0fm1/GTzg1FLiJYuVdWqLTUCgYAaOURHwH1xLN7S9+K22Y+coSimAg4nt8QkZT1i
+oBqrmD9tFmHvO5imi92Elo+NknTZmokROnJGIyWs57iKl2FEMdERnvYzYK26UcCZ
+hYZIOwRZZs3Ns4BbYg9Ww6oQSiSJ9VwzLgRz7f/ja4DzPsv3NZExEo1N2A2UdMLF
+1/eXPQKBgQDSCJ1tWQYVLvjrzJBC5gute7kHf1AhMoIEqpsEvk51JXu7+xN8BMnb
+zSwIPR3fSngqLJqGw+Tz5LT3iSsDNVj7EnaHoYvTrxsd2yFYtVmz2fHgnHXBjZmj
+AzDn4G6VZ+F11K/sdfuo+1vfgxPendYDkjp0ZtgJc97iBq49Devv1A==
+-----END RSA PRIVATE KEY-----`
+
+func TestPool_Encrypt(t *testing.T) {
+	block, _ := pem.Decode([]byte(dummyPrivKey))
+	privKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	require.NoError(t, err)
+
+	t.Run("encrypts plaintext successfully with existing key", func(t *testing.T) {
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		cipherKey, privateKey := newCipherKey(t, enc)
+
+		shares, err := shamir.Split(privateKey, 2, 2)
+		require.NoError(t, err)
+
+		// 0 is the generation
+		// 4 is the key index (constant due to mocked randomness)
+		keysTable.On("Get", mock.Anything, 0, 4, false).Return(cipherKey, true, nil)
+		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
+		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
+		require.NoError(t, err)
+		require.Equal(t, "cipherKey4", keyRef)
+
+		// TODO: instead of hardcoding the ciphertext, decrypt it and compare the plaintext
+		require.Equal(t, "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU", ciphertext)
+	})
+
+	t.Run("encrypts plaintext successfully with new key generation", func(t *testing.T) {
+		// Test: Encrypt with valid attestation and plaintext when key doesn't exist
+		// Verify: Generates new key, stores it, returns keyRef and ciphertext
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		// 0 is the generation
+		// 4 is the key index (constant due to mocked randomness)
+		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, nil)
+		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
+		remoteKey2.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare2", nil)
+
+		createMatcher := func(key *data.CipherKey) bool {
+			return key.Generation == 0 &&
+				key.KeyIndex == 4 &&
+				key.KeyRef == "QkJCQkJCQkJCQkJCQkJCQg" && // 0x42 repeated
+				key.EncryptedShares["remoteKey1"] == "encryptedShare1" &&
+				key.EncryptedShares["remoteKey2"] == "encryptedShare2"
+		}
+		keysTable.On("Create", mock.Anything, mock.MatchedBy(createMatcher)).Return(false, nil)
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
+		require.NoError(t, err)
+		require.Equal(t, "QkJCQkJCQkJCQkJCQkJCQg", keyRef)
+
+		// TODO: instead of hardcoding the ciphertext, decrypt it and compare the plaintext
+		require.Equal(t, "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU", ciphertext)
+	})
+
+	t.Run("handles key table get error", func(t *testing.T) {
+		// Test: Encrypt when keysTable.Get returns error
+		// Verify: Returns appropriate error
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		// 0 is the generation
+		// 4 is the key index (constant due to mocked randomness)
+		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, errors.New("mock error"))
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
+		require.Equal(t, "", keyRef)
+		require.Equal(t, "", ciphertext)
+		require.ErrorContains(t, err, "get key: mock error")
+	})
+
+	t.Run("handles key share encryption error", func(t *testing.T) {
+		// Test: Encrypt when key share encryption fails
+		// Verify: Returns appropriate error
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, nil)
+		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
+		remoteKey2.On("Encrypt", mock.Anything, att, mock.Anything).Return("", errors.New("mock error"))
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
+		require.Equal(t, "", keyRef)
+		require.Equal(t, "", ciphertext)
+		require.ErrorContains(t, err, "generate key: encrypt share")
+		require.ErrorContains(t, err, "mock error")
+	})
+
+	t.Run("handles key creation error", func(t *testing.T) {
+		// Test: Encrypt when key creation fails
+		// Verify: Returns appropriate error
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		// 0 is the generation
+		// 4 is the key index (constant due to mocked randomness)
+		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, nil)
+		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
+		remoteKey2.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare2", nil)
+
+		keysTable.On("Create", mock.Anything, mock.Anything).Return(false, errors.New("mock error"))
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
+		require.Equal(t, "", keyRef)
+		require.Equal(t, "", ciphertext)
+		require.ErrorContains(t, err, "create key: mock error")
+	})
+
+	t.Run("handles concurrent key creation", func(t *testing.T) {
+		// Test: Multiple concurrent encrypt calls that would create the same key
+		// Verify: Only one key is created, others use the existing one
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		cipherKey, _ := newCipherKey(t, enc)
+
+		// 0 is the generation
+		// 4 is the key index (constant due to mocked randomness)
+		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, nil)
+		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
+		remoteKey2.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare2", nil)
+
+		// true in return = key already exists, e.g. another instance was faster
+		keysTable.On("Create", mock.Anything, mock.Anything).Return(true, nil)
+		// true in args = use a strongly consistent read
+		keysTable.On("Get", mock.Anything, 0, 4, true).Return(cipherKey, true, nil)
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
+		require.NoError(t, err)
+		require.Equal(t, "cipherKey4", keyRef)
+
+		// TODO: instead of hardcoding the ciphertext, decrypt it and compare the plaintext
+		require.Equal(t, "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU", ciphertext)
+	})
+}
+
+func TestPool_Decrypt(t *testing.T) {
+	block, _ := pem.Decode([]byte(dummyPrivKey))
+	privKey, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+	require.NoError(t, err)
+
+	t.Run("decrypts ciphertext successfully", func(t *testing.T) {
+		// Test: Decrypt with valid keyRef and ciphertext
+		// Verify: Returns original plaintext, no error
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		cipherKey, privateKey := newCipherKey(t, enc)
+
+		shares, err := shamir.Split(privateKey, 2, 2)
+		require.NoError(t, err)
+
+		keysTable.On("GetLatestByKeyRef", mock.Anything, "cipherKey4", false).Return(cipherKey, true, nil)
+		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
+		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU")
+		require.NoError(t, err)
+		require.Equal(t, "test", string(plaintext))
+	})
+
+	t.Run("decrypts successfully with 2/3 shares available", func(t *testing.T) {
+		// Test: Decrypt with 2/3 shares available
+		// Verify: Returns original plaintext, no error
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		remoteKey3 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+					"remoteKey3": remoteKey3,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		cipherKey, privateKey := newCipherKey(t, enc, func(key *data.CipherKey) {
+			key.EncryptedShares["remoteKey3"] = "encryptedShare3"
+		})
+
+		shares, err := shamir.Split(privateKey, 3, 2)
+		require.NoError(t, err)
+
+		keysTable.On("GetLatestByKeyRef", mock.Anything, "cipherKey4", false).Return(cipherKey, true, nil)
+		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
+		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
+		remoteKey3.On("Decrypt", mock.Anything, att, "encryptedShare3").Return(nil, errors.New("mock error"))
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU")
+		require.NoError(t, err)
+		require.Equal(t, "test", string(plaintext))
+	})
+
+	t.Run("handles insufficient shares", func(t *testing.T) {
+		// Test: Decrypt with not enough shares available
+		// Verify: Returns appropriate error
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		remoteKey3 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+					"remoteKey3": remoteKey3,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		cipherKey, privateKey := newCipherKey(t, enc, func(key *data.CipherKey) {
+			key.EncryptedShares["remoteKey3"] = "encryptedShare3"
+		})
+
+		shares, err := shamir.Split(privateKey, 3, 2)
+		require.NoError(t, err)
+
+		keysTable.On("GetLatestByKeyRef", mock.Anything, "cipherKey4", false).Return(cipherKey, true, nil)
+		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
+		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(nil, errors.New("mock error"))
+		remoteKey3.On("Decrypt", mock.Anything, att, "encryptedShare3").Return(nil, errors.New("mock error"))
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU")
+		require.Equal(t, "", string(plaintext))
+		require.ErrorContains(t, err, "combine shares: less than two parts cannot be used to reconstruct the secret")
+	})
+
+	t.Run("decrypts successfully and migrates key", func(t *testing.T) {
+		// Test: Decrypt with a key that needs migration
+		// Verify: Returns original plaintext, no error
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		remoteKey3 := &MockRemoteKey{}
+		remoteKey4 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			// generation 0
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+			// generation 1
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey3": remoteKey3,
+					"remoteKey4": remoteKey4,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		cipherKey, privateKey := newCipherKey(t, enc)
+
+		shares, err := shamir.Split(privateKey, 2, 2)
+		require.NoError(t, err)
+
+		// get and decrypt the original key (gen 0)
+		keysTable.On("GetLatestByKeyRef", mock.Anything, "cipherKey4", false).Return(cipherKey, true, nil)
+		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
+		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
+
+		// encrypt the new key (gen 1)
+		remoteKey3.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare3", nil)
+		remoteKey4.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare4", nil)
+
+		// create the new key (gen 1)
+		createMatcher := func(key *data.CipherKey) bool {
+			return key.Generation == 1 &&
+				key.KeyIndex == -4774451407313060418 && // constant due to mocked randomness
+				key.KeyRef == "cipherKey4" &&
+				key.EncryptedShares["remoteKey3"] == "encryptedShare3" &&
+				key.EncryptedShares["remoteKey4"] == "encryptedShare4"
+		}
+		keysTable.On("Create", mock.Anything, mock.MatchedBy(createMatcher)).Return(false, nil)
+
+		pool := encryption.NewPool(enc, configs, keysTable)
+		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU")
+		require.NoError(t, err)
+		require.Equal(t, "test", string(plaintext))
+	})
+
+	t.Run("handles migration error gracefully", func(t *testing.T) {
+		// Test: Decrypt when migrateKey fails (should not affect decryption)
+		// Verify: Decryption succeeds despite migration error
+		kms := &MockKMS{}
+		remoteKey1 := &MockRemoteKey{}
+		remoteKey2 := &MockRemoteKey{}
+		remoteKey3 := &MockRemoteKey{}
+		remoteKey4 := &MockRemoteKey{}
+		keysTable := &MockKeysTable{}
+
+		random := &constantReader{value: 0x42}
+		enc, err := enclave.New(context.Background(), enclave.DummyProvider(random), kms, privKey)
+		require.NoError(t, err)
+
+		configs := []*encryption.Config{
+			// generation 0
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey1": remoteKey1,
+					"remoteKey2": remoteKey2,
+				},
+			},
+			// generation 1
+			{
+				PoolSize:  10,
+				Threshold: 2,
+				RemoteKeys: map[string]encryption.RemoteKey{
+					"remoteKey3": remoteKey3,
+					"remoteKey4": remoteKey4,
+				},
+			},
+		}
+
+		att, err := enc.GetAttestation(context.Background(), nil, nil)
+		require.NoError(t, err)
+		defer att.Close()
+
+		cipherKey, privateKey := newCipherKey(t, enc)
+
+		shares, err := shamir.Split(privateKey, 2, 2)
+		require.NoError(t, err)
+
+		// get and decrypt the original key (gen 0)
+		keysTable.On("GetLatestByKeyRef", mock.Anything, "cipherKey4", false).Return(cipherKey, true, nil)
+		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
+		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
+
+		// encrypt the new key (gen 1) - with an error
+		remoteKey3.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare3", nil)
+		remoteKey4.On("Encrypt", mock.Anything, att, mock.Anything).Return("", errors.New("mock error"))
+
+		// decryption succeeds despite the migration error
+		pool := encryption.NewPool(enc, configs, keysTable)
+		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU")
+		require.NoError(t, err)
+		require.Equal(t, "test", string(plaintext))
+	})
+}
