@@ -3,8 +3,10 @@ package encryption
 import (
 	"context"
 	"encoding/base64"
+	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -17,15 +19,25 @@ import (
 	"github.com/0xsequence/tee-verifier/nitro"
 )
 
-type Pool struct {
-	enclave   *enclave.Enclave
-	configs   []*Config
-	keysTable *data.CipherKeyTable
+type KeysTable interface {
+	Get(ctx context.Context, generation int, keyIndex int, consistentRead bool) (*data.CipherKey, bool, error)
+	GetLatestByKeyRef(ctx context.Context, keyRef string, consistentRead bool) (*data.CipherKey, bool, error)
+	Create(ctx context.Context, key *data.CipherKey) (bool, error)
 }
 
-func NewPool(enc *enclave.Enclave, configs []*Config, keysTable *data.CipherKeyTable) *Pool {
+type Attester interface {
+	GetAttestation(ctx context.Context, nonce []byte, userData []byte) (*enclave.Attestation, error)
+}
+
+type Pool struct {
+	attester  Attester
+	configs   []*Config
+	keysTable KeysTable
+}
+
+func NewPool(attester Attester, configs []*Config, keysTable KeysTable) *Pool {
 	return &Pool{
-		enclave:   enc,
+		attester:  attester,
 		configs:   configs,
 		keysTable: keysTable,
 	}
@@ -120,8 +132,6 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 	span.SetAnnotation("generation", strconv.Itoa(key.Generation))
 	span.SetAnnotation("key_index", strconv.Itoa(key.KeyIndex))
 
-	// TODO: verify attestation
-
 	config, err := p.getConfig(key.Generation)
 	if err != nil {
 		return nil, fmt.Errorf("get config: %w", err)
@@ -140,7 +150,9 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 		return nil, fmt.Errorf("decrypt: %w", err)
 	}
 
-	// TODO: rotate key if needed
+	if p.keyNeedsMigration(key) {
+		_ = p.migrateKey(ctx, att, key, privateKey)
+	}
 
 	return decrypted, nil
 }
@@ -211,7 +223,7 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 		return nil, nil, fmt.Errorf("hash key: %w", err)
 	}
 
-	keyAtt, err := p.enclave.GetAttestation(ctx, nil, hash)
+	keyAtt, err := p.attester.GetAttestation(ctx, nil, hash)
 	if err != nil {
 		return nil, nil, fmt.Errorf("get attestation: %w", err)
 	}
@@ -227,7 +239,7 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 
 		// The key was created by another instance. We need to get the latest key from the database.
 		// This time, use a strongly consistent read.
-		key, found, err := p.keysTable.GetLatestByKeyRef(ctx, keyRef, true)
+		key, found, err := p.keysTable.Get(ctx, generation, keyIndex, true)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get latest key: %w", err)
 		}
@@ -277,6 +289,89 @@ func (p *Pool) verifyKey(ctx context.Context, att *enclave.Attestation, key *dat
 
 	if err := keyAtt.Verify(); err != nil {
 		return fmt.Errorf("verify attestation: %w", err)
+	}
+
+	return nil
+}
+
+func (p *Pool) keyNeedsMigration(key *data.CipherKey) bool {
+	generation, _ := p.currentConfig()
+	return key.Generation < generation
+}
+
+func (p *Pool) migrateKey(ctx context.Context, att *enclave.Attestation, key *data.CipherKey, privateKey []byte) (err error) {
+	log := o11y.LoggerFromContext(ctx)
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.migrateKey")
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
+	generation, config := p.currentConfig()
+	span.SetAnnotation("generation", strconv.Itoa(generation))
+
+	log.Info("migrating key", "key_ref", key.KeyRef, "generation", key.Generation, "key_index", key.KeyIndex, "new_generation", generation)
+
+	shares, err := shamir.Split(privateKey, len(config.RemoteKeys), config.Threshold)
+	if err != nil {
+		return fmt.Errorf("split private key: %w", err)
+	}
+
+	i := 0
+	encryptedShares := make(map[string]string)
+	for remoteKeyID, remoteKey := range config.RemoteKeys {
+		encryptedShare, err := remoteKey.Encrypt(ctx, att, shares[i])
+		if err != nil {
+			return fmt.Errorf("encrypt share %d: %w", i, err)
+		}
+		encryptedShares[remoteKeyID] = encryptedShare
+		i++
+	}
+
+	// Generate a random negative key index (to avoid collision with positive indices).
+	var keyIndex int
+	{
+		var b [8]byte
+		_, err := io.ReadFull(att, b[:])
+		if err != nil {
+			return fmt.Errorf("read random bytes for keyIndex: %w", err)
+		}
+		// Convert bytes to uint64, then to int and make negative
+		// Use modulo to ensure the value fits in int64 range before conversion
+		randomUint64 := binary.BigEndian.Uint64(b[:])
+		keyIndex = -int(randomUint64 % math.MaxInt64)
+	}
+
+	migratedKey := &data.CipherKey{
+		Generation:      generation,
+		KeyIndex:        keyIndex,
+		KeyRef:          key.KeyRef,
+		EncryptedShares: encryptedShares,
+		CreatedAt:       key.CreatedAt,
+	}
+
+	hash, err := key.Hash()
+	if err != nil {
+		return fmt.Errorf("hash key: %w", err)
+	}
+
+	keyAtt, err := p.attester.GetAttestation(ctx, nil, hash)
+	if err != nil {
+		return fmt.Errorf("get attestation: %w", err)
+	}
+	key.Attestation = keyAtt.Document()
+	keyAtt.Close()
+
+	alreadyExists, err := p.keysTable.Create(ctx, migratedKey)
+	if err != nil {
+		return fmt.Errorf("create key: %w", err)
+	}
+
+	// We don't care if we encounter an index collision.
+	// Either the random key index is already taken (unlikely) or the key was already migrated by another instance.
+	// In either case, we bail here. If migration is still needed, it will be attempted again in the future.
+	if alreadyExists {
+		log.Info("attempted to migrate key that already exists", "key_ref", key.KeyRef, "generation", generation, "key_index", keyIndex)
 	}
 
 	return nil
