@@ -350,7 +350,7 @@ func (p *Pool) migrateKey(ctx context.Context, att *enclave.Attestation, key *da
 		CreatedAt:       key.CreatedAt,
 	}
 
-	hash, err := key.Hash()
+	hash, err := migratedKey.Hash()
 	if err != nil {
 		return fmt.Errorf("hash key: %w", err)
 	}
@@ -359,7 +359,7 @@ func (p *Pool) migrateKey(ctx context.Context, att *enclave.Attestation, key *da
 	if err != nil {
 		return fmt.Errorf("get attestation: %w", err)
 	}
-	key.Attestation = keyAtt.Document()
+	migratedKey.Attestation = keyAtt.Document()
 	keyAtt.Close()
 
 	alreadyExists, err := p.keysTable.Create(ctx, migratedKey)

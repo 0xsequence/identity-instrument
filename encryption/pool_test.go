@@ -499,26 +499,40 @@ func TestPool_Decrypt(t *testing.T) {
 		require.NoError(t, err)
 
 		// get and decrypt the original key (gen 0)
-		keysTable.On("GetLatestByKeyRef", mock.Anything, "cipherKey4", false).Return(cipherKey, true, nil)
-		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
-		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
+		keysTable.On("GetLatestByKeyRef", mock.Anything, "cipherKey4", false).Once().Return(cipherKey, true, nil)
+		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Once().Return(shares[0], nil)
+		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Once().Return(shares[1], nil)
 
 		// encrypt the new key (gen 1)
-		remoteKey3.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare3", nil)
-		remoteKey4.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare4", nil)
+		remoteKey3.On("Encrypt", mock.Anything, att, mock.Anything).Once().Return("encryptedShare3", nil)
+		remoteKey4.On("Encrypt", mock.Anything, att, mock.Anything).Once().Return("encryptedShare4", nil)
 
 		// create the new key (gen 1)
+		var migratedKey *data.CipherKey
 		createMatcher := func(key *data.CipherKey) bool {
 			return key.Generation == 1 &&
 				key.KeyIndex == -4774451407313060418 && // constant due to mocked randomness
 				key.KeyRef == "cipherKey4" &&
 				key.EncryptedShares["remoteKey3"] == "encryptedShare3" &&
-				key.EncryptedShares["remoteKey4"] == "encryptedShare4"
+				key.EncryptedShares["remoteKey4"] == "encryptedShare4" &&
+				len(key.Attestation) > 0
 		}
-		keysTable.On("Create", mock.Anything, mock.MatchedBy(createMatcher)).Return(false, nil)
+		keysTable.On("Create", mock.Anything, mock.MatchedBy(createMatcher)).Once().Return(false, nil).Run(func(args mock.Arguments) {
+			migratedKey = args.Get(1).(*data.CipherKey)
+		})
 
 		pool := encryption.NewPool(enc, configs, keysTable)
 		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU")
+		require.NoError(t, err)
+		require.Equal(t, "test", string(plaintext))
+
+		// run Decrypt again to ensure the key is migrated
+
+		keysTable.On("GetLatestByKeyRef", mock.Anything, "cipherKey4", false).Once().Return(migratedKey, true, nil)
+		remoteKey3.On("Decrypt", mock.Anything, att, "encryptedShare3").Once().Return(shares[0], nil)
+		remoteKey4.On("Decrypt", mock.Anything, att, "encryptedShare4").Once().Return(shares[1], nil)
+
+		plaintext, err = pool.Decrypt(context.Background(), att, "cipherKey4", "v1.QkJCQkJCQkJCQkJCQkJCQqYwoAAbGuFCwp3GOD0p1WU")
 		require.NoError(t, err)
 		require.Equal(t, "test", string(plaintext))
 	})
