@@ -119,7 +119,7 @@ func newCipherKey(t *testing.T, enc *enclave.Enclave, options ...func(*data.Ciph
 
 	privateKey := [32]byte{}
 	for i := range privateKey {
-		privateKey[i] = 0x42
+		privateKey[i] = 0x55 // different from the mocked source of randomness
 	}
 
 	return key, privateKey[:]

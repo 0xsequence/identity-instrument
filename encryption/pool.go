@@ -99,6 +99,7 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 }
 
 func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef string, ciphertext string) (_ []byte, err error) {
+	log := o11y.LoggerFromContext(ctx)
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.Decrypt", o11y.WithAnnotation("key_ref", keyRef))
 	defer func() {
 		span.RecordError(err)
@@ -151,7 +152,11 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 	}
 
 	if p.keyNeedsMigration(key) {
-		_ = p.migrateKey(ctx, att, key, privateKey)
+		err := p.migrateKey(ctx, att, key, privateKey)
+		if err != nil {
+			// We don't want to fail the decryption if migration fails, log the error and continue
+			log.Error("migrating key failed", "error", err, "key_ref", key.KeyRef, "generation", key.Generation, "key_index", key.KeyIndex)
+		}
 	}
 
 	return decrypted, nil
@@ -239,7 +244,7 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 
 		// The key was created by another instance. We need to get the latest key from the database.
 		// This time, use a strongly consistent read.
-		key, found, err := p.keysTable.Get(ctx, generation, keyIndex, true)
+		existingKey, found, err := p.keysTable.Get(ctx, generation, keyIndex, true)
 		if err != nil {
 			return nil, nil, fmt.Errorf("get latest key: %w", err)
 		}
@@ -249,7 +254,9 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 		if err := p.verifyKey(ctx, att, key); err != nil {
 			return nil, nil, fmt.Errorf("verify key: %w", err)
 		}
-		return key, privateKey, nil
+
+		// Return nil private key so that the caller decrypts the existingKey shares
+		return existingKey, nil, nil
 	}
 
 	return key, privateKey, nil
