@@ -95,7 +95,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 	}
 
 	kmsClient := kms.NewFromConfig(awsCfg)
-	enclaveProvider := enclave.DummyProvider
+	enclaveProvider := enclave.DummyProvider(nil)
 	if cfg.Service.UseNSM {
 		enclaveProvider = enclave.NitroProvider
 	}

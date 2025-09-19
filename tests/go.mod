@@ -11,6 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.32.3
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0
 	github.com/google/uuid v1.6.0
+	github.com/gowebpki/jcs v1.0.1
 	github.com/lestrrat-go/jwx/v2 v2.1.3
 	github.com/stretchr/testify v1.10.0
 	github.com/testcontainers/testcontainers-go v0.35.0
@@ -19,7 +20,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.1 // indirect
-	github.com/0xsequence/nitrocontrol v0.5.0 // indirect
+	github.com/0xsequence/nitrocontrol v0.6.0 // indirect
 	github.com/0xsequence/nsm v0.1.0 // indirect
 	github.com/0xsequence/tee-verifier v0.1.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
@@ -84,7 +85,6 @@ require (
 	github.com/goware/cachestore v0.10.0 // indirect
 	github.com/goware/rerun v0.0.9 // indirect
 	github.com/goware/singleflight v0.2.0 // indirect
-	github.com/gowebpki/jcs v1.0.1 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect

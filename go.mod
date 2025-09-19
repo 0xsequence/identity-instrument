@@ -7,7 +7,7 @@ replace github.com/imdario/mergo => dario.cat/mergo v1.0.0
 
 require (
 	github.com/0xsequence/ethkit v1.30.6
-	github.com/0xsequence/nitrocontrol v0.5.0
+	github.com/0xsequence/nitrocontrol v0.6.0
 	github.com/0xsequence/nsm v0.1.0
 	github.com/0xsequence/tee-verifier v0.1.0
 	github.com/BurntSushi/toml v1.4.0
@@ -106,6 +106,7 @@ require (
 	github.com/shurcooL/httpfs v0.0.0-20230704072500-f1e31cf0ba5c // indirect
 	github.com/skeema/knownhosts v1.3.1 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
+	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/webrpc/gen-dart v0.1.1 // indirect
 	github.com/webrpc/gen-golang v0.17.0 // indirect
 	github.com/webrpc/gen-javascript v0.13.0 // indirect
