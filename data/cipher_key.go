@@ -134,7 +134,7 @@ func (t *CipherKeyTable) Create(ctx context.Context, key *CipherKey) (alreadyExi
 	_, err = t.db.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName:           &t.tableARN,
 		Item:                av,
-		ConditionExpression: aws.String("attribute_not_exists(Generation) AND attribute_not_exists(KeyIndex)"),
+		ConditionExpression: aws.String("attribute_not_exists(KeyRef) AND attribute_not_exists(Generation)"),
 	})
 	if err != nil {
 		var ccf *types.ConditionalCheckFailedException
@@ -148,14 +148,19 @@ func (t *CipherKeyTable) Create(ctx context.Context, key *CipherKey) (alreadyExi
 
 func (t *CipherKeyTable) ListGenerationKeys(ctx context.Context, generation int, active *bool, cursor *int) ([]*CipherKey, *int, error) {
 	var keys []*CipherKey
-	var filter *string
 	var startKey map[string]types.AttributeValue
 
+	conditionExpression := "Generation = :generation"
+	expressionAttributeValues := map[string]types.AttributeValue{
+		":generation": &types.AttributeValueMemberN{Value: strconv.Itoa(generation)},
+	}
+
 	if active != nil {
+		expressionAttributeValues[":zero"] = &types.AttributeValueMemberN{Value: "0"}
 		if *active {
-			filter = aws.String("KeyIndex = :keyIndex AND KeyIndex >= 0")
+			conditionExpression += " AND KeyIndex >= :zero"
 		} else {
-			filter = aws.String("KeyIndex = :keyIndex AND KeyIndex < 0")
+			conditionExpression += " AND KeyIndex < :zero"
 		}
 	}
 
@@ -167,14 +172,20 @@ func (t *CipherKeyTable) ListGenerationKeys(ctx context.Context, generation int,
 	}
 
 	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
-		TableName:              &t.tableARN,
-		IndexName:              &t.indices.ByGenerationAndKeyIndex,
-		KeyConditionExpression: aws.String("Generation = :generation"),
-		FilterExpression:       filter,
-		ExclusiveStartKey:      startKey,
+		TableName:                 &t.tableARN,
+		IndexName:                 &t.indices.ByGenerationAndKeyIndex,
+		KeyConditionExpression:    aws.String(conditionExpression),
+		ExclusiveStartKey:         startKey,
+		ExpressionAttributeValues: expressionAttributeValues,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("Query: %w", err)
+	}
+
+	if len(out.Items) > 0 {
+		if err := attributevalue.UnmarshalListOfMaps(out.Items, &keys); err != nil {
+			return nil, nil, fmt.Errorf("unmarshal query results: %w", err)
+		}
 	}
 
 	var nextCursor *int
