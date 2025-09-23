@@ -257,6 +257,7 @@ func (s *RPC) Handler() http.Handler {
 		srv := protoadmin.NewIdentityInstrumentAdminServer(s)
 		r.Handle("/rpc/IdentityInstrumentAdmin/RotateCipherKey", srv)
 		r.Handle("/rpc/IdentityInstrumentAdmin/RefreshEncryptedData", srv)
+		r.Handle("/rpc/IdentityInstrumentAdmin/CleanupUnusedCipherKeys", srv)
 	})
 
 	return r

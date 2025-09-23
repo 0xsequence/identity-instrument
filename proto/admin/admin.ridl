@@ -11,3 +11,4 @@ enum Table: string
 service IdentityInstrumentAdmin
   - RotateCipherKey(keyRef: string)
   - RefreshEncryptedData(table: Table, keyRef: string, batch: int) => (done: bool)
+  - CleanupUnusedCipherKeys() => (deleted: int)

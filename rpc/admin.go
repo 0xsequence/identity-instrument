@@ -14,6 +14,10 @@ func (s *RPC) RotateCipherKey(ctx context.Context, keyRef string) error {
 	return s.EncryptionPool.RotateKey(ctx, att, keyRef)
 }
 
+func (s *RPC) CleanupUnusedCipherKeys(ctx context.Context) (int, error) {
+	return s.EncryptionPool.CleanupUnusedKeys(ctx)
+}
+
 func (s *RPC) RefreshEncryptedData(ctx context.Context, table protoadmin.Table, keyRef string, batch int) (bool, error) {
 	switch table {
 	case protoadmin.Table_Signers:
