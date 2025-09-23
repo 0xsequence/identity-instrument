@@ -246,19 +246,23 @@ func (p *Pool) CleanupUnusedKeys(ctx context.Context) (deleted int, err error) {
 				return deleted, fmt.Errorf("list generation key refs: %w", err)
 			}
 			for _, key := range keys {
+				isUsedAnywhere := false
 				for _, dataTable := range p.dataTables {
 					isUsed, err := dataTable.ReferencesCipherKeyRef(ctx, key.KeyRef)
 					if err != nil {
 						return deleted, fmt.Errorf("count by key ref in table %q: %w", dataTable.TableARN(), err)
 					}
-					if !isUsed {
-						log.Info("deleting unused cipher key", "key_ref", key.KeyRef, "generation", generation, "key_index", key.KeyIndex)
-						if err := p.keysTable.Delete(ctx, key.KeyRef, key.Generation); err != nil {
-							return deleted, fmt.Errorf("delete cipher key by ref %q: %w", key.KeyRef, err)
-						}
-						deleted++
+					if isUsed {
+						isUsedAnywhere = true
 						break
 					}
+				}
+				if !isUsedAnywhere {
+					log.Info("deleting unused cipher key", "key_ref", key.KeyRef, "generation", generation, "key_index", key.KeyIndex)
+					if err := p.keysTable.Delete(ctx, key.KeyRef, key.Generation); err != nil {
+						return deleted, fmt.Errorf("delete cipher key by ref %q: %w", key.KeyRef, err)
+					}
+					deleted++
 				}
 			}
 			if nextCursor == nil {
