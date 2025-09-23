@@ -30,35 +30,122 @@ awslocal secretsmanager create-secret \
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name SignersTable \
-  --attribute-definitions AttributeName=ScopedKeyType,AttributeType=S AttributeName=IdentityHash,AttributeType=S AttributeName=Address,AttributeType=S \
+  --attribute-definitions AttributeName=ScopedKeyType,AttributeType=S AttributeName=IdentityHash,AttributeType=S AttributeName=Address,AttributeType=S AttributeName=CipherKeyRef,AttributeType=S AttributeName=CiphertextHash,AttributeType=B \
   --key-schema AttributeName=IdentityHash,KeyType=HASH AttributeName=ScopedKeyType,KeyType=SORT \
   --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 \
   --global-secondary-indexes \
-  "IndexName=Address-Index,KeySchema=[{AttributeName=Address,KeyType=HASH},{AttributeName=ScopedKeyType,KeyType=SORT}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}"
+    '[
+    {
+      "IndexName": "Address-Index",
+      "KeySchema": [
+        {
+          "AttributeName": "Address",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "ScopedKeyType",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 10,
+        "WriteCapacityUnits": 10
+      }
+    },
+    {
+      "IndexName": "CipherKeyRef-Index",
+      "KeySchema": [
+        {
+          "AttributeName": "CipherKeyRef",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "CiphertextHash",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 10,
+        "WriteCapacityUnits": 10
+      }
+    }
+    ]'
 
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name AuthKeysTable \
-  --attribute-definitions AttributeName=Scope,AttributeType=S AttributeName=KeyHash,AttributeType=S\
+  --attribute-definitions AttributeName=Scope,AttributeType=S AttributeName=KeyHash,AttributeType=S AttributeName=CipherKeyRef,AttributeType=S AttributeName=CiphertextHash,AttributeType=B \
   --key-schema AttributeName=KeyHash,KeyType=HASH AttributeName=Scope,KeyType=SORT \
-  --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 
+  --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 \
+  --global-secondary-indexes \
+    '[
+    {
+      "IndexName": "CipherKeyRef-Index",
+      "KeySchema": [
+        {
+          "AttributeName": "CipherKeyRef",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "CiphertextHash",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 10,
+        "WriteCapacityUnits": 10
+      }
+    }
+    ]'
 awslocal dynamodb update-time-to-live --region us-east-1 --table-name AuthKeysTable --time-to-live-specification "AttributeName=ExpiresAt,Enabled=true"
 
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name AuthCommitmentsTable \
-  --attribute-definitions AttributeName=ID,AttributeType=S \
+  --attribute-definitions AttributeName=ID,AttributeType=S AttributeName=CipherKeyRef,AttributeType=S AttributeName=CiphertextHash,AttributeType=B \
   --key-schema AttributeName=ID,KeyType=HASH \
-  --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 
+  --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 \
+  --global-secondary-indexes \
+    '[
+    {
+      "IndexName": "CipherKeyRef-Index",
+      "KeySchema": [
+        {
+          "AttributeName": "CipherKeyRef",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "CiphertextHash",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 10,
+        "WriteCapacityUnits": 10
+      }
+    }
+    ]'
 awslocal dynamodb update-time-to-live --region us-east-1 --table-name AuthCommitmentsTable --time-to-live-specification "AttributeName=ExpiresAt,Enabled=true"
 
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name CipherKeysTable \
   --attribute-definitions AttributeName=KeyRef,AttributeType=S AttributeName=Generation,AttributeType=N AttributeName=KeyIndex,AttributeType=N \
-  --key-schema AttributeName=Generation,KeyType=HASH AttributeName=KeyIndex,KeyType=SORT \
+  --key-schema AttributeName=KeyRef,KeyType=HASH AttributeName=Generation,KeyType=SORT \
   --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 \
   --global-secondary-indexes \
-  "IndexName=KeyRef-Index,KeySchema=[{AttributeName=KeyRef,KeyType=HASH},{AttributeName=Generation,KeyType=SORT}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}"
+  "IndexName=Generation-KeyIndex-Index,KeySchema=[{AttributeName=Generation,KeyType=HASH},{AttributeName=KeyIndex,KeyType=SORT}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}"
 
 echo "Finished bootstrapping localstack resources!"
