@@ -57,6 +57,37 @@ func (m *MockKeysTable) Create(ctx context.Context, key *data.CipherKey) (bool, 
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockKeysTable) UpdateKeyIndex(ctx context.Context, keyRef string, generation int, newKeyIndex int, attestation []byte) error {
+	args := m.Called(ctx, keyRef, generation, newKeyIndex, attestation)
+	return args.Error(0)
+}
+
+func (m *MockKeysTable) Delete(ctx context.Context, keyRef string, generation int) error {
+	args := m.Called(ctx, keyRef, generation)
+	return args.Error(0)
+}
+
+func (m *MockKeysTable) ListGenerationKeys(ctx context.Context, generation int, active *bool, cursor *int) ([]*data.CipherKey, *int, error) {
+	args := m.Called(ctx, generation, active, cursor)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(*int), args.Error(2)
+	}
+	return args.Get(0).([]*data.CipherKey), args.Get(1).(*int), args.Error(2)
+}
+
+type MockEncryptedDataTable struct {
+	mock.Mock
+}
+
+func (m *MockEncryptedDataTable) TableARN() string {
+	return m.Called().String(0)
+}
+
+func (m *MockEncryptedDataTable) ReferencesCipherKeyRef(ctx context.Context, keyRef string) (bool, error) {
+	args := m.Called(ctx, keyRef)
+	return args.Bool(0), args.Error(1)
+}
+
 type MockRemoteKey struct {
 	mock.Mock
 }
