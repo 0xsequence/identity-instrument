@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
@@ -20,7 +21,9 @@ import (
 )
 
 func TestRotateCipherKey(t *testing.T) {
-	svc := initRPC(t, nil, func(cfg *config.Config) {
+	ep, terminate := initLocalstack()
+	defer terminate()
+	svc := initRPC(t, ep, nil, func(cfg *config.Config) {
 		cfg.Encryption[0].PoolSize = 1
 	})
 	att, err := svc.Enclave.GetAttestation(context.Background(), nil, nil)
@@ -56,9 +59,12 @@ func TestRotateCipherKey(t *testing.T) {
 }
 
 func TestRefreshEncryptedData(t *testing.T) {
-	svc := initRPC(t, nil, func(cfg *config.Config) {
+	ep, terminate := initLocalstack()
+	defer terminate()
+	svc := initRPC(t, ep, nil, func(cfg *config.Config) {
 		cfg.Encryption[0].PoolSize = 1
 	})
+
 	att, err := svc.Enclave.GetAttestation(context.Background(), nil, nil)
 	require.NoError(t, err)
 	defer att.Close()
@@ -70,8 +76,6 @@ func TestRefreshEncryptedData(t *testing.T) {
 
 	// Create a key that will be originally used to encrypt data, then rotated
 	oldKey, _, err := svc.EncryptionPool.GenerateKey(context.Background(), att, 0)
-	require.NoError(t, err)
-	svc.CipherKeys.Create(context.Background(), oldKey)
 	require.NoError(t, err)
 
 	// Generate a few signers
@@ -110,8 +114,6 @@ func TestRefreshEncryptedData(t *testing.T) {
 	// Generate a new key
 	newKey, _, err := svc.EncryptionPool.GenerateKey(context.Background(), att, 0)
 	require.NoError(t, err)
-	svc.CipherKeys.Create(context.Background(), newKey)
-	require.NoError(t, err)
 
 	done, err := c.RefreshEncryptedData(context.Background(), protoadmin.Table_Signers, oldKey.KeyRef, 50)
 	require.NoError(t, err)
@@ -134,4 +136,56 @@ func TestRefreshEncryptedData(t *testing.T) {
 	for _, signer := range signers {
 		assert.Equal(t, signer.EncryptedData.CipherKeyRef, newKey.KeyRef)
 	}
+}
+
+func TestCleanupUnusedCipherKeys(t *testing.T) {
+	ep, terminate := initLocalstack()
+	defer terminate()
+	svc := initRPC(t, ep, nil, func(cfg *config.Config) {
+		cfg.Encryption[0].PoolSize = 10
+	})
+
+	att, err := svc.Enclave.GetAttestation(context.Background(), nil, nil)
+	require.NoError(t, err)
+	defer att.Close()
+
+	srv := httptest.NewServer(svc.Handler())
+	defer srv.Close()
+
+	c := protoadmin.NewIdentityInstrumentAdminClient(srv.URL, http.DefaultClient)
+
+	keys := make([]*data.CipherKey, 10)
+	for i := 0; i < 10; i++ {
+		key, _, err := svc.EncryptionPool.GenerateKey(context.Background(), att, -i-1)
+		require.NoError(t, err)
+		keys[i] = key
+	}
+
+	for i := 0; i < 5; i++ {
+		err := svc.Signers.Put(context.Background(), &data.Signer{
+			ScopedKeyType: data.ScopedKeyType{
+				Scope:   proto.Scope("cleanup" + strconv.Itoa(i)),
+				KeyType: proto.KeyType_Ethereum_Secp256k1,
+			},
+			Identity: &proto.Identity{
+				Type:    proto.IdentityType_Email,
+				Subject: "cleanup" + strconv.Itoa(i) + "@test.com",
+			},
+			Address: "0x1234567890123456789012345678901234567890",
+			EncryptedData: data.EncryptedData[*proto.SignerData]{
+				CipherKeyRef:   keys[i].KeyRef,
+				Ciphertext:     "test",
+				CiphertextHash: crypto.Keccak256([]byte("test")),
+			},
+		})
+		require.NoError(t, err)
+	}
+
+	deleted, err := c.CleanupUnusedCipherKeys(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 5, deleted)
+
+	retrievedKeys, _, err := svc.CipherKeys.ListGenerationKeys(context.Background(), 0, nil, nil)
+	require.NoError(t, err)
+	assert.Len(t, retrievedKeys, 5)
 }
