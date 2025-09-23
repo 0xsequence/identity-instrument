@@ -21,9 +21,21 @@ type AuthCommitment struct {
 	EncryptedData[*proto.AuthCommitmentData]
 }
 
-func (c *AuthCommitment) Key() map[string]types.AttributeValue {
+func (c *AuthCommitment) DatabaseKey() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
 		"ID": &types.AttributeValueMemberS{Value: c.ID},
+	}
+}
+
+func (c *AuthCommitment) GetEncryptedData() EncryptedData[any] {
+	return c.EncryptedData.ToAny()
+}
+
+func (c *AuthCommitment) SetEncryptedData(data EncryptedData[any]) {
+	c.EncryptedData = EncryptedData[*proto.AuthCommitmentData]{
+		CipherKeyRef:   data.CipherKeyRef,
+		Ciphertext:     data.Ciphertext,
+		CiphertextHash: data.CiphertextHash,
 	}
 }
 
@@ -54,20 +66,28 @@ func (c *AuthCommitment) CorrespondsTo(data *proto.AuthCommitmentData) bool {
 	return true
 }
 
-type AuthCommitmentIndices struct{}
+type AuthCommitmentIndices struct {
+	ByCipherKeyRef string
+}
 
 type AuthCommitmentTable struct {
 	db       DB
 	tableARN string
 	indices  AuthCommitmentIndices
+	EncryptedDataTable[*AuthCommitment]
 }
 
 func NewAuthCommitmentTable(db DB, tableARN string, indices AuthCommitmentIndices) *AuthCommitmentTable {
 	return &AuthCommitmentTable{
-		db:       db,
-		tableARN: tableARN,
-		indices:  indices,
+		db:                 db,
+		tableARN:           tableARN,
+		indices:            indices,
+		EncryptedDataTable: NewEncryptedDataTable[*AuthCommitment](db, tableARN, indices.ByCipherKeyRef),
 	}
+}
+
+func (t *AuthCommitmentTable) TableARN() string {
+	return t.tableARN
 }
 
 func (t *AuthCommitmentTable) Get(ctx context.Context, authID proto.AuthID) (*AuthCommitment, bool, error) {
@@ -75,7 +95,7 @@ func (t *AuthCommitmentTable) Get(ctx context.Context, authID proto.AuthID) (*Au
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
-		Key:       commitment.Key(),
+		Key:       commitment.DatabaseKey(),
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("GetItem: %w", err)

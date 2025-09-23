@@ -34,8 +34,8 @@ type CipherKey struct {
 
 func (k *CipherKey) Key() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
+		"KeyRef":     &types.AttributeValueMemberS{Value: k.KeyRef},
 		"Generation": &types.AttributeValueMemberN{Value: strconv.Itoa(k.Generation)},
-		"KeyIndex":   &types.AttributeValueMemberN{Value: strconv.Itoa(k.KeyIndex)},
 	}
 }
 
@@ -55,7 +55,7 @@ func (k *CipherKey) Hash() ([]byte, error) {
 }
 
 type CipherKeyIndices struct {
-	KeyRefIndex string
+	ByGenerationAndKeyIndex string
 }
 
 type CipherKeyTable struct {
@@ -72,22 +72,31 @@ func NewCipherKeyTable(db DB, tableARN string, indices CipherKeyIndices) *Cipher
 	}
 }
 
-func (t *CipherKeyTable) Get(ctx context.Context, generation int, keyIndex int, consistentRead bool) (*CipherKey, bool, error) {
-	key := CipherKey{Generation: generation, KeyIndex: keyIndex}
+func (t *CipherKeyTable) TableARN() string {
+	return t.tableARN
+}
 
-	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName:      &t.tableARN,
-		Key:            key.Key(),
+func (t *CipherKeyTable) Get(ctx context.Context, generation int, keyIndex int, consistentRead bool) (*CipherKey, bool, error) {
+	var key CipherKey
+	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
+		TableName:              &t.tableARN,
+		IndexName:              &t.indices.ByGenerationAndKeyIndex,
+		KeyConditionExpression: aws.String("Generation = :generation AND KeyIndex = :keyIndex"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":generation": &types.AttributeValueMemberN{Value: strconv.Itoa(generation)},
+			":keyIndex":   &types.AttributeValueMemberN{Value: strconv.Itoa(keyIndex)},
+		},
 		ConsistentRead: &consistentRead,
+		Limit:          aws.Int32(1),
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("GetItem: %w", err)
 	}
-	if len(out.Item) == 0 {
+	if len(out.Items) == 0 || len(out.Items[0]) == 0 {
 		return nil, false, nil
 	}
 
-	if err := attributevalue.UnmarshalMap(out.Item, &key); err != nil {
+	if err := attributevalue.UnmarshalMap(out.Items[0], &key); err != nil {
 		return nil, false, fmt.Errorf("unmarshal result: %w", err)
 	}
 	return &key, true, nil
@@ -97,7 +106,6 @@ func (t *CipherKeyTable) GetLatestByKeyRef(ctx context.Context, keyRef string, c
 	var key CipherKey
 	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
 		TableName:              &t.tableARN,
-		IndexName:              &t.indices.KeyRefIndex,
 		KeyConditionExpression: aws.String("KeyRef = :keyRef"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":keyRef": &types.AttributeValueMemberS{Value: keyRef},
@@ -136,4 +144,80 @@ func (t *CipherKeyTable) Create(ctx context.Context, key *CipherKey) (alreadyExi
 		return false, fmt.Errorf("PutItem: %w", err)
 	}
 	return false, nil
+}
+
+func (t *CipherKeyTable) ListGenerationKeys(ctx context.Context, generation int, active *bool, cursor *int) ([]*CipherKey, *int, error) {
+	var keys []*CipherKey
+	var filter *string
+	var startKey map[string]types.AttributeValue
+
+	if active != nil {
+		if *active {
+			filter = aws.String("KeyIndex = :keyIndex AND KeyIndex >= 0")
+		} else {
+			filter = aws.String("KeyIndex = :keyIndex AND KeyIndex < 0")
+		}
+	}
+
+	if cursor != nil {
+		startKey = map[string]types.AttributeValue{
+			"Generation": &types.AttributeValueMemberN{Value: strconv.Itoa(generation)},
+			"KeyIndex":   &types.AttributeValueMemberN{Value: strconv.Itoa(*cursor)},
+		}
+	}
+
+	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
+		TableName:              &t.tableARN,
+		IndexName:              &t.indices.ByGenerationAndKeyIndex,
+		KeyConditionExpression: aws.String("Generation = :generation"),
+		FilterExpression:       filter,
+		ExclusiveStartKey:      startKey,
+	})
+	if err != nil {
+		return nil, nil, fmt.Errorf("Query: %w", err)
+	}
+
+	var nextCursor *int
+	if out.LastEvaluatedKey != nil {
+		attr, ok := out.LastEvaluatedKey["KeyIndex"].(*types.AttributeValueMemberN)
+		if !ok {
+			return nil, nil, fmt.Errorf("last evaluated key is not a number")
+		}
+		keyIndex, err := strconv.Atoi(attr.Value)
+		if err != nil {
+			return nil, nil, fmt.Errorf("convert last evaluated key to int: %w", err)
+		}
+		nextCursor = &keyIndex
+	}
+
+	return keys, nextCursor, nil
+}
+
+func (t *CipherKeyTable) Delete(ctx context.Context, keyRef string, generation int) error {
+	key := CipherKey{Generation: generation, KeyRef: keyRef}
+	_, err := t.db.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: &t.tableARN,
+		Key:       key.Key(),
+	})
+	if err != nil {
+		return fmt.Errorf("DeleteItem: %w", err)
+	}
+	return nil
+}
+
+func (t *CipherKeyTable) UpdateKeyIndex(ctx context.Context, keyRef string, generation int, newKeyIndex int, attestation []byte) error {
+	key := CipherKey{Generation: generation, KeyRef: keyRef}
+	_, err := t.db.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:        &t.tableARN,
+		Key:              key.Key(),
+		UpdateExpression: aws.String("SET KeyIndex = :newKeyIndex, Attestation = :attestation"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":newKeyIndex": &types.AttributeValueMemberN{Value: strconv.Itoa(newKeyIndex)},
+			":attestation": &types.AttributeValueMemberB{Value: attestation},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("UpdateItem: %w", err)
+	}
+	return nil
 }

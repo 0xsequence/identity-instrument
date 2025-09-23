@@ -28,6 +28,18 @@ func (k *AuthKey) DatabaseKey() map[string]types.AttributeValue {
 	}
 }
 
+func (k *AuthKey) GetEncryptedData() EncryptedData[any] {
+	return k.EncryptedData.ToAny()
+}
+
+func (k *AuthKey) SetEncryptedData(data EncryptedData[any]) {
+	k.EncryptedData = EncryptedData[*proto.AuthKeyData]{
+		CipherKeyRef:   data.CipherKeyRef,
+		Ciphertext:     data.Ciphertext,
+		CiphertextHash: data.CiphertextHash,
+	}
+}
+
 func (k *AuthKey) CorrespondsTo(data *proto.AuthKeyData) bool {
 	if k.Scope != data.Scope {
 		return false
@@ -41,20 +53,28 @@ func (k *AuthKey) CorrespondsTo(data *proto.AuthKeyData) bool {
 	return true
 }
 
-type AuthKeyIndices struct{}
+type AuthKeyIndices struct {
+	ByCipherKeyRef string
+}
 
 type AuthKeyTable struct {
 	db       DB
 	tableARN string
 	indices  AuthKeyIndices
+	EncryptedDataTable[*AuthKey]
 }
 
 func NewAuthKeyTable(db DB, tableARN string, indices AuthKeyIndices) *AuthKeyTable {
 	return &AuthKeyTable{
-		db:       db,
-		tableARN: tableARN,
-		indices:  indices,
+		db:                 db,
+		tableARN:           tableARN,
+		indices:            indices,
+		EncryptedDataTable: NewEncryptedDataTable[*AuthKey](db, tableARN, indices.ByCipherKeyRef),
 	}
+}
+
+func (t *AuthKeyTable) TableARN() string {
+	return t.tableARN
 }
 
 func (t *AuthKeyTable) Get(ctx context.Context, scope proto.Scope, key proto.Key) (*AuthKey, bool, error) {
