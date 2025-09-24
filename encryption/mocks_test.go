@@ -36,8 +36,8 @@ type MockKeysTable struct {
 	mock.Mock
 }
 
-func (m *MockKeysTable) Get(ctx context.Context, generation int, keyIndex int, consistentRead bool) (*data.CipherKey, bool, error) {
-	args := m.Called(ctx, generation, keyIndex, consistentRead)
+func (m *MockKeysTable) Get(ctx context.Context, generation int, keyIndex int) (*data.CipherKey, bool, error) {
+	args := m.Called(ctx, generation, keyIndex)
 	if args.Get(0) == nil {
 		return nil, args.Bool(1), args.Error(2)
 	}
@@ -57,8 +57,8 @@ func (m *MockKeysTable) Create(ctx context.Context, key *data.CipherKey) (bool, 
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockKeysTable) UpdateKeyIndex(ctx context.Context, keyRef string, generation int, newKeyIndex int, attestation []byte) error {
-	args := m.Called(ctx, keyRef, generation, newKeyIndex, attestation)
+func (m *MockKeysTable) Deactivate(ctx context.Context, keyRef string, generation int, now time.Time, attestation []byte) error {
+	args := m.Called(ctx, keyRef, generation, now, attestation)
 	return args.Error(0)
 }
 
@@ -67,12 +67,19 @@ func (m *MockKeysTable) Delete(ctx context.Context, keyRef string, generation in
 	return args.Error(0)
 }
 
-func (m *MockKeysTable) ListGenerationKeys(ctx context.Context, generation int, active *bool, cursor *int) ([]*data.CipherKey, *int, error) {
-	args := m.Called(ctx, generation, active, cursor)
-	if args.Get(0) == nil {
-		return nil, args.Get(1).(*int), args.Error(2)
+func (m *MockKeysTable) ScanInactive(ctx context.Context, cursor *string) ([]*data.CipherKey, *string, error) {
+	args := m.Called(ctx, cursor)
+	var (
+		keys       []*data.CipherKey
+		nextCursor *string
+	)
+	if args.Get(0) != nil {
+		keys = args.Get(0).([]*data.CipherKey)
 	}
-	return args.Get(0).([]*data.CipherKey), args.Get(1).(*int), args.Error(2)
+	if args.Get(1) != nil {
+		nextCursor = args.Get(1).(*string)
+	}
+	return keys, nextCursor, args.Error(2)
 }
 
 type MockEncryptedDataTable struct {
@@ -124,9 +131,10 @@ func (r *constantReader) Read(p []byte) (n int, err error) {
 }
 
 func newCipherKey(t *testing.T, enc *enclave.Enclave, options ...func(*data.CipherKey)) (*data.CipherKey, []byte) {
+	keyIndex := 4
 	key := &data.CipherKey{
 		Generation: 0,
-		KeyIndex:   4,
+		KeyIndex:   &keyIndex,
 		KeyRef:     "cipherKey4",
 		EncryptedShares: map[string]string{
 			"remoteKey1": "encryptedShare1",
