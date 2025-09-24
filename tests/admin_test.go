@@ -44,7 +44,7 @@ func TestRotateCipherKey(t *testing.T) {
 	err = c.RotateCipherKey(context.Background(), originalKey.KeyRef)
 	require.NoError(t, err)
 
-	key, found, err := svc.CipherKeys.Get(context.Background(), 0, 0, false)
+	key, found, err := svc.CipherKeys.Get(context.Background(), 0, 0)
 	require.NoError(t, err)
 	assert.False(t, found)
 	assert.Nil(t, key)
@@ -52,7 +52,7 @@ func TestRotateCipherKey(t *testing.T) {
 	key, found, err = svc.CipherKeys.GetLatestByKeyRef(context.Background(), originalKey.KeyRef, false)
 	require.NoError(t, err)
 	assert.True(t, found)
-	assert.True(t, key.KeyIndex < 0, "key index should be negative")
+	assert.True(t, key.KeyIndex == nil, "key index should be nil")
 
 	err = svc.EncryptionPool.VerifyKey(context.Background(), att, key)
 	require.NoError(t, err)
@@ -156,7 +156,13 @@ func TestCleanupUnusedCipherKeys(t *testing.T) {
 
 	keys := make([]*data.CipherKey, 10)
 	for i := 0; i < 10; i++ {
-		key, _, err := svc.EncryptionPool.GenerateKey(context.Background(), att, -i-1)
+		key, _, err := svc.EncryptionPool.GenerateKey(context.Background(), att, i)
+		require.NoError(t, err)
+
+		err = svc.EncryptionPool.RotateKey(context.Background(), att, key.KeyRef)
+		require.NoError(t, err)
+
+		key, _, err = svc.CipherKeys.GetLatestByKeyRef(context.Background(), key.KeyRef, true)
 		require.NoError(t, err)
 		keys[i] = key
 	}
@@ -181,11 +187,15 @@ func TestCleanupUnusedCipherKeys(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	retrievedKeys, _, err := svc.CipherKeys.ScanInactive(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Len(t, retrievedKeys, 10)
+
 	deleted, err := c.CleanupUnusedCipherKeys(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 5, deleted)
 
-	retrievedKeys, _, err := svc.CipherKeys.ListGenerationKeys(context.Background(), 0, nil, nil)
+	retrievedKeys, _, err = svc.CipherKeys.ScanInactive(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Len(t, retrievedKeys, 5)
 }
