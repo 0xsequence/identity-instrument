@@ -142,10 +142,51 @@ awslocal dynamodb update-time-to-live --region us-east-1 --table-name AuthCommit
 awslocal dynamodb create-table \
   --region us-east-1 \
   --table-name CipherKeysTable \
-  --attribute-definitions AttributeName=KeyRef,AttributeType=S AttributeName=Generation,AttributeType=N AttributeName=KeyIndex,AttributeType=N \
+  --attribute-definitions AttributeName=KeyRef,AttributeType=S AttributeName=Generation,AttributeType=N AttributeName=KeyIndex,AttributeType=N AttributeName=InactiveSince,AttributeType=S \
   --key-schema AttributeName=KeyRef,KeyType=HASH AttributeName=Generation,KeyType=SORT \
   --provisioned-throughput ReadCapacityUnits=10,WriteCapacityUnits=10 \
   --global-secondary-indexes \
-  "IndexName=Generation-KeyIndex-Index,KeySchema=[{AttributeName=Generation,KeyType=HASH},{AttributeName=KeyIndex,KeyType=SORT}],Projection={ProjectionType=ALL},ProvisionedThroughput={ReadCapacityUnits=10,WriteCapacityUnits=10}"
+    '[
+    {
+      "IndexName": "KeyIndex-Generation-Index",
+      "KeySchema": [
+        {
+          "AttributeName": "KeyIndex",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "Generation",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "ALL"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 10,
+        "WriteCapacityUnits": 10
+      }
+    },
+    {
+      "IndexName": "Inactive-Index",
+      "KeySchema": [
+        {
+          "AttributeName": "KeyRef",
+          "KeyType": "HASH"
+        },
+        {
+          "AttributeName": "InactiveSince",
+          "KeyType": "RANGE"
+        }
+      ],
+      "Projection": {
+        "ProjectionType": "KEYS_ONLY"
+      },
+      "ProvisionedThroughput": {
+        "ReadCapacityUnits": 10,
+        "WriteCapacityUnits": 10
+      }
+    }
+    ]'
 
 echo "Finished bootstrapping localstack resources!"
