@@ -108,7 +108,8 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 
 	db := dynamodb.NewFromConfig(awsCfg)
 	cipherKeyTable := data.NewCipherKeyTable(db, cfg.Database.CipherKeysTable, data.CipherKeyIndices{
-		ByGenerationAndKeyIndex: "Generation-KeyIndex-Index",
+		ByKeyIndexAndGeneration: "KeyIndex-Generation-Index",
+		Inactive:                "Inactive-Index",
 	})
 	encPoolConfigs := make([]*encryption.Config, len(cfg.Encryption))
 	for i, encCfg := range cfg.Encryption {
