@@ -72,6 +72,10 @@ func (h *AuthHandler) Commit(
 ) (resVerifier string, loginHint string, challenge string, err error) {
 	log := o11y.LoggerFromContext(ctx)
 
+	if _, err := ExtractMetadata(metadata); err != nil {
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("extract metadata: %w", err)
+	}
+
 	commitment := &proto.AuthCommitmentData{
 		Scope:        authID.Scope,
 		AuthKey:      authKey,
@@ -139,32 +143,36 @@ func (h *AuthHandler) Verify(
 		}
 	}
 
-	iss := commitment.Metadata["iss"]
-	aud := commitment.Metadata["aud"]
-
-	clientSecret, err := h.GetClientSecret(ctx, commitment.Scope, iss, aud)
+	// The metadata should have been validated at this point
+	m, err := ExtractMetadata(commitment.Metadata)
 	if err != nil {
-		log.Error("failed to get client secret", "issuer", iss, "audience", aud, "error", err)
+		log.Error("failed to extract metadata", "error", err)
+		return proto.Identity{}, proto.ErrInternalError
+	}
+
+	clientSecret, err := h.GetClientSecret(ctx, commitment.Scope, m.Issuer, m.Audience)
+	if err != nil {
+		log.Error("failed to get client secret", "issuer", m.Issuer, "audience", m.Audience, "error", err)
 		return proto.Identity{}, proto.ErrDatabaseError
 	}
 
-	openidConfig, err := h.idTokenHandler.GetOpenIDConfig(ctx, iss)
+	openidConfig, err := h.idTokenHandler.GetOpenIDConfig(ctx, m.Issuer)
 	if err != nil {
-		log.Error("failed to get openid configuration", "issuer", iss, "error", err)
+		log.Error("failed to get openid configuration", "issuer", m.Issuer, "error", err)
 		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
 
 	tokenEndpoint := openidConfig.TokenEndpoint
 	if tokenEndpoint == "" {
-		log.Error("token endpoint not found in openid configuration", "issuer", iss)
+		log.Error("token endpoint not found in openid configuration", "issuer", m.Issuer)
 		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
 
 	data := url.Values{}
 	data.Set("grant_type", "authorization_code")
 	data.Set("code", answer)
-	data.Set("redirect_uri", commitment.Metadata["redirect_uri"])
-	data.Set("client_id", aud)
+	data.Set("redirect_uri", m.RedirectURI)
+	data.Set("client_id", m.Audience)
 	data.Set("client_secret", clientSecret)
 	if commitment.AuthMode == proto.AuthMode_AuthCodePKCE {
 		data.Set("code_verifier", commitment.Answer)
@@ -203,7 +211,7 @@ func (h *AuthHandler) Verify(
 
 	idToken := body["id_token"].(string)
 
-	return h.idTokenHandler.VerifyToken(ctx, idToken, iss, aud, nil)
+	return h.idTokenHandler.VerifyToken(ctx, idToken, m.Issuer, m.Audience, nil)
 }
 
 func (h *AuthHandler) GetClientSecret(ctx context.Context, scope proto.Scope, iss string, aud string) (string, error) {
