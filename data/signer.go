@@ -63,6 +63,18 @@ func (s *Signer) DatabaseKey() map[string]types.AttributeValue {
 	}
 }
 
+func (s *Signer) GetEncryptedData() EncryptedData[any] {
+	return s.EncryptedData.ToAny()
+}
+
+func (s *Signer) SetEncryptedData(data EncryptedData[any]) {
+	s.EncryptedData = EncryptedData[*proto.SignerData]{
+		CipherKeyRef:   data.CipherKeyRef,
+		Ciphertext:     data.Ciphertext,
+		CiphertextHash: data.CiphertextHash,
+	}
+}
+
 func (s *Signer) CorrespondsToData(data *proto.SignerData, cryptoKey any) bool {
 	if s.ScopedKeyType.Scope != data.Scope {
 		return false
@@ -97,21 +109,28 @@ func (s *Signer) CorrespondsToProtoKey(protoKey proto.Key) bool {
 }
 
 type SignerIndices struct {
-	ByAddress string
+	ByAddress      string
+	ByCipherKeyRef string
 }
 
 type SignerTable struct {
 	db       DB
 	tableARN string
 	indices  SignerIndices
+	EncryptedDataTable[*Signer]
 }
 
 func NewSignerTable(db DB, tableARN string, indices SignerIndices) *SignerTable {
 	return &SignerTable{
-		db:       db,
-		tableARN: tableARN,
-		indices:  indices,
+		db:                 db,
+		tableARN:           tableARN,
+		indices:            indices,
+		EncryptedDataTable: NewEncryptedDataTable[*Signer](db, tableARN, indices.ByCipherKeyRef),
 	}
+}
+
+func (t *SignerTable) TableARN() string {
+	return t.tableARN
 }
 
 func (t *SignerTable) GetByIdentity(ctx context.Context, ident proto.Identity, scope proto.Scope, keyType proto.KeyType) (*Signer, bool, error) {

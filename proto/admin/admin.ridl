@@ -1,0 +1,14 @@
+webrpc = v1
+
+name = identity-instrument
+version = v0.1.0
+
+enum Table: string
+  - AuthCommitments
+  - AuthKeys
+  - Signers
+
+service IdentityInstrumentAdmin
+  - RotateCipherKey(keyRef: string)
+  - RefreshEncryptedData(table: Table, keyRef: string, batch: int) => (done: bool)
+  - CleanupUnusedCipherKeys() => (deleted: int)

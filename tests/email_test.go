@@ -24,6 +24,9 @@ import (
 )
 
 func TestEmail(t *testing.T) {
+	ep, terminate := initLocalstack()
+	defer terminate()
+
 	type assertionParams struct {
 		svc       *rpc.RPC
 		email     string
@@ -51,7 +54,7 @@ func TestEmail(t *testing.T) {
 				return true
 			},
 			extractAnswer: func(t *testing.T, p assertionParams) string {
-				subject, message, found := getSentEmailMessage(t, p.email)
+				subject, message, found := getSentEmailMessage(t, ep, p.email)
 				require.True(t, found)
 				assert.Contains(t, "Login code for 123", subject)
 				assert.Contains(t, message, "Your login code: ")
@@ -88,7 +91,7 @@ func TestEmail(t *testing.T) {
 				if p.attempt < 2 {
 					return "Wrong"
 				}
-				_, message, found := getSentEmailMessage(t, p.email)
+				_, message, found := getSentEmailMessage(t, ep, p.email)
 				require.True(t, found)
 				return strings.TrimPrefix(message, "Your login code: ")
 			},
@@ -110,7 +113,7 @@ func TestEmail(t *testing.T) {
 				if p.attempt < 3 {
 					return "Wrong"
 				}
-				_, message, found := getSentEmailMessage(t, p.email)
+				_, message, found := getSentEmailMessage(t, ep, p.email)
 				require.True(t, found)
 				return strings.TrimPrefix(message, "Your login code: ")
 			},
@@ -143,7 +146,7 @@ func TestEmail(t *testing.T) {
 				return true
 			},
 			extractAnswer: func(t *testing.T, p assertionParams) string {
-				subject, message, found := getSentEmailMessage(t, p.email)
+				subject, message, found := getSentEmailMessage(t, ep, p.email)
 				require.True(t, found)
 				assert.Contains(t, "Login code for 123", subject)
 				assert.Contains(t, message, "Your login code: ")
@@ -167,7 +170,7 @@ func TestEmail(t *testing.T) {
 			builderServer := httptest.NewServer(builder.NewEcosystemManagerServer(builder.NewMock()))
 			defer builderServer.Close()
 
-			svc := initRPC(t, nil, func(cfg *config.Config) {
+			svc := initRPC(t, ep, nil, func(cfg *config.Config) {
 				cfg.Builder.BaseURL = builderServer.URL
 			})
 

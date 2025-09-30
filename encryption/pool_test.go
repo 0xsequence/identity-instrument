@@ -88,11 +88,11 @@ func TestPool_Encrypt(t *testing.T) {
 
 		// 0 is the generation
 		// 4 is the key index (constant due to mocked randomness)
-		keysTable.On("Get", mock.Anything, 0, 4, false).Return(cipherKey, true, nil)
+		keysTable.On("Get", mock.Anything, 0, 4).Return(cipherKey, true, nil)
 		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
 		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
 		require.NoError(t, err)
 		require.Equal(t, "cipherKey4", keyRef)
@@ -129,20 +129,21 @@ func TestPool_Encrypt(t *testing.T) {
 
 		// 0 is the generation
 		// 4 is the key index (constant due to mocked randomness)
-		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, nil)
+		keysTable.On("Get", mock.Anything, 0, 4).Return(nil, false, nil)
 		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
 		remoteKey2.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare2", nil)
 
 		createMatcher := func(key *data.CipherKey) bool {
 			return key.Generation == 0 &&
-				key.KeyIndex == 4 &&
+				key.KeyIndex != nil &&
+				*key.KeyIndex == 4 &&
 				key.KeyRef == "QkJCQkJCQkJCQkJCQkJCQg" && // 0x42 repeated
 				key.EncryptedShares["remoteKey1"] == "encryptedShare1" &&
 				key.EncryptedShares["remoteKey2"] == "encryptedShare2"
 		}
 		keysTable.On("Create", mock.Anything, mock.MatchedBy(createMatcher)).Return(false, nil)
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
 		require.NoError(t, err)
 		require.Equal(t, "QkJCQkJCQkJCQkJCQkJCQg", keyRef)
@@ -179,9 +180,9 @@ func TestPool_Encrypt(t *testing.T) {
 
 		// 0 is the generation
 		// 4 is the key index (constant due to mocked randomness)
-		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, errors.New("mock error"))
+		keysTable.On("Get", mock.Anything, 0, 4).Return(nil, false, errors.New("mock error"))
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
 		require.Equal(t, "", keyRef)
 		require.Equal(t, "", ciphertext)
@@ -215,11 +216,11 @@ func TestPool_Encrypt(t *testing.T) {
 		require.NoError(t, err)
 		defer att.Close()
 
-		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, nil)
+		keysTable.On("Get", mock.Anything, 0, 4).Return(nil, false, nil)
 		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
 		remoteKey2.On("Encrypt", mock.Anything, att, mock.Anything).Return("", errors.New("mock error"))
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
 		require.Equal(t, "", keyRef)
 		require.Equal(t, "", ciphertext)
@@ -256,13 +257,13 @@ func TestPool_Encrypt(t *testing.T) {
 
 		// 0 is the generation
 		// 4 is the key index (constant due to mocked randomness)
-		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, nil)
+		keysTable.On("Get", mock.Anything, 0, 4).Return(nil, false, nil)
 		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
 		remoteKey2.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare2", nil)
 
 		keysTable.On("Create", mock.Anything, mock.Anything).Return(false, errors.New("mock error"))
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
 		require.Equal(t, "", keyRef)
 		require.Equal(t, "", ciphertext)
@@ -271,7 +272,7 @@ func TestPool_Encrypt(t *testing.T) {
 
 	t.Run("handles concurrent key creation", func(t *testing.T) {
 		// Test: Multiple concurrent encrypt calls that would create the same key
-		// Verify: Only one key is created, others use the existing one
+		// Verify: Returns appropriate error
 		kms := &MockKMS{}
 		remoteKey1 := &MockRemoteKey{}
 		remoteKey2 := &MockRemoteKey{}
@@ -302,26 +303,24 @@ func TestPool_Encrypt(t *testing.T) {
 
 		// 0 is the generation
 		// 4 is the key index (constant due to mocked randomness)
-		keysTable.On("Get", mock.Anything, 0, 4, false).Return(nil, false, nil)
+		keysTable.On("Get", mock.Anything, 0, 4).Return(nil, false, nil)
 		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
 		remoteKey2.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare2", nil)
 
 		// true in return = key already exists, e.g. another instance was faster
 		keysTable.On("Create", mock.Anything, mock.Anything).Return(true, nil)
 		// true in args = use a strongly consistent read
-		keysTable.On("Get", mock.Anything, 0, 4, true).Return(cipherKey, true, nil)
+		keysTable.On("Get", mock.Anything, 0, 4).Return(cipherKey, true, nil)
 
 		// since the key already exists, we must decrypt its shares
 		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
 		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		keyRef, ciphertext, err := pool.Encrypt(context.Background(), att, []byte("test"))
-		require.NoError(t, err)
-		require.Equal(t, "cipherKey4", keyRef)
-
-		// must be encrypted with the pre-existing key
-		require.Equal(t, dummyCiphertext55, ciphertext)
+		require.ErrorContains(t, err, "key already exists")
+		require.Equal(t, "", keyRef)
+		require.Equal(t, "", ciphertext)
 	})
 }
 
@@ -366,7 +365,7 @@ func TestPool_Decrypt(t *testing.T) {
 		remoteKey1.On("Decrypt", mock.Anything, att, "encryptedShare1").Return(shares[0], nil)
 		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", dummyCiphertext55)
 		require.NoError(t, err)
 		require.Equal(t, "test", string(plaintext))
@@ -413,7 +412,7 @@ func TestPool_Decrypt(t *testing.T) {
 		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(shares[1], nil)
 		remoteKey3.On("Decrypt", mock.Anything, att, "encryptedShare3").Return(nil, errors.New("mock error"))
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", dummyCiphertext55)
 		require.NoError(t, err)
 		require.Equal(t, "test", string(plaintext))
@@ -460,7 +459,7 @@ func TestPool_Decrypt(t *testing.T) {
 		remoteKey2.On("Decrypt", mock.Anything, att, "encryptedShare2").Return(nil, errors.New("mock error"))
 		remoteKey3.On("Decrypt", mock.Anything, att, "encryptedShare3").Return(nil, errors.New("mock error"))
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", dummyCiphertext42)
 		require.Equal(t, "", string(plaintext))
 		require.ErrorContains(t, err, "combine shares: less than two parts cannot be used to reconstruct the secret")
@@ -523,7 +522,7 @@ func TestPool_Decrypt(t *testing.T) {
 		var migratedKey *data.CipherKey
 		createMatcher := func(key *data.CipherKey) bool {
 			return key.Generation == 1 &&
-				key.KeyIndex == -4774451407313060418 && // constant due to mocked randomness
+				key.KeyIndex == nil &&
 				key.KeyRef == "cipherKey4" &&
 				key.EncryptedShares["remoteKey3"] == "encryptedShare3" &&
 				key.EncryptedShares["remoteKey4"] == "encryptedShare4" &&
@@ -533,7 +532,7 @@ func TestPool_Decrypt(t *testing.T) {
 			migratedKey = args.Get(1).(*data.CipherKey)
 		})
 
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", dummyCiphertext55)
 		require.NoError(t, err)
 		require.Equal(t, "test", string(plaintext))
@@ -603,7 +602,7 @@ func TestPool_Decrypt(t *testing.T) {
 		remoteKey4.On("Encrypt", mock.Anything, att, mock.Anything).Return("", errors.New("mock error"))
 
 		// decryption succeeds despite the migration error
-		pool := encryption.NewPool(enc, configs, keysTable)
+		pool := encryption.NewPool(enc, configs, keysTable, nil)
 		plaintext, err := pool.Decrypt(context.Background(), att, "cipherKey4", dummyCiphertext55)
 		require.NoError(t, err)
 		require.Equal(t, "test", string(plaintext))

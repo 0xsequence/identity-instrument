@@ -3,10 +3,8 @@ package encryption
 import (
 	"context"
 	"encoding/base64"
-	"encoding/binary"
 	"fmt"
 	"io"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -20,9 +18,17 @@ import (
 )
 
 type KeysTable interface {
-	Get(ctx context.Context, generation int, keyIndex int, consistentRead bool) (*data.CipherKey, bool, error)
+	Get(ctx context.Context, generation int, keyIndex int) (*data.CipherKey, bool, error)
 	GetLatestByKeyRef(ctx context.Context, keyRef string, consistentRead bool) (*data.CipherKey, bool, error)
+	ScanInactive(ctx context.Context, cursor *string) ([]*data.CipherKey, *string, error)
 	Create(ctx context.Context, key *data.CipherKey) (bool, error)
+	Delete(ctx context.Context, keyRef string, generation int) error
+	Deactivate(ctx context.Context, keyRef string, generation int, now time.Time, attestation []byte) error
+}
+
+type EncryptedDataTable interface {
+	TableARN() string
+	ReferencesCipherKeyRef(ctx context.Context, keyRef string) (bool, error)
 }
 
 type Attester interface {
@@ -30,20 +36,27 @@ type Attester interface {
 }
 
 type Pool struct {
-	attester  Attester
-	configs   []*Config
-	keysTable KeysTable
+	attester   Attester
+	configs    []*Config
+	keysTable  KeysTable
+	dataTables []EncryptedDataTable
 }
 
-func NewPool(attester Attester, configs []*Config, keysTable KeysTable) *Pool {
+func NewPool(attester Attester, configs []*Config, keysTable KeysTable, dataTables []EncryptedDataTable) *Pool {
 	return &Pool{
-		attester:  attester,
-		configs:   configs,
-		keysTable: keysTable,
+		attester:   attester,
+		configs:    configs,
+		keysTable:  keysTable,
+		dataTables: dataTables,
 	}
 }
 
-func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (_ string, _ string, err error) {
+// Encrypt encrypts the plaintext using a randomly selected cipher key from the Pool. It returns the key reference
+// and the ciphertext.
+//
+// If the cipher key does not exist, it will be generated using the Pool's current generation config
+// and stored in the keys table.
+func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (keyRef string, ciphertext string, err error) {
 	log := o11y.LoggerFromContext(ctx)
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.Encrypt")
 	defer func() {
@@ -62,18 +75,22 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 
 	var privateKey []byte
 
-	key, found, err := p.keysTable.Get(ctx, generation, keyIndex, false)
+	key, found, err := p.keysTable.Get(ctx, generation, keyIndex)
 	if err != nil {
 		return "", "", fmt.Errorf("get key: %w", err)
 	}
 	if !found {
 		log.Info("generating new cipher key", "generation", generation, "key_index", keyIndex)
 
-		key, privateKey, err = p.generateKey(ctx, att, keyIndex)
+		// Technically, this operation may be executed concurrently by multiple instances, causing a race condition.
+		// However, we don't care about it. Conflict is unlikely due to 128-bit key ref and small size of the pool.
+		// This may lead to two different keys sharing the same key index but that's not a problem in practice.
+		// Decryption retrieves keys based on key ref, while encryption will favor one of these keys.
+		key, privateKey, err = p.GenerateKey(ctx, att, keyIndex)
 		if err != nil {
 			return "", "", fmt.Errorf("generate key: %w", err)
 		}
-	} else if err := p.verifyKey(ctx, att, key); err != nil {
+	} else if err := p.VerifyKey(ctx, att, key); err != nil {
 		return "", "", fmt.Errorf("verify key: %w", err)
 	}
 	span.SetAnnotation("key_ref", key.KeyRef)
@@ -98,7 +115,10 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 	return key.KeyRef, strings.Join(ciphertextParts, "."), nil
 }
 
-func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef string, ciphertext string) (_ []byte, err error) {
+// Decrypt decrypts the ciphertext using the latest cipher key from the Pool referenced by the keyRef.
+//
+// The key is verified against the attestation and migrated to the current generation if needed.
+func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef string, ciphertext string) (plaintext []byte, err error) {
 	log := o11y.LoggerFromContext(ctx)
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.Decrypt", o11y.WithAnnotation("key_ref", keyRef))
 	defer func() {
@@ -126,12 +146,14 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 	if !found {
 		return nil, fmt.Errorf("key not found")
 	}
-	if err := p.verifyKey(ctx, att, key); err != nil {
+	if err := p.VerifyKey(ctx, att, key); err != nil {
 		return nil, fmt.Errorf("verify key: %w", err)
 	}
 
 	span.SetAnnotation("generation", strconv.Itoa(key.Generation))
-	span.SetAnnotation("key_index", strconv.Itoa(key.KeyIndex))
+	if key.KeyIndex != nil {
+		span.SetAnnotation("key_index", strconv.Itoa(*key.KeyIndex))
+	}
 
 	config, err := p.getConfig(key.Generation)
 	if err != nil {
@@ -162,6 +184,96 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 	return decrypted, nil
 }
 
+// RotateKey marks a key as inactive by setting its KeyIndex to a negative value. It won't be used for encrypting
+// new data while remaining accessible for decrypting existing data.
+//
+// Please note that as long as the key is referenced by any encrypted data, it will continue being automatically
+// migrated to newer generations.
+func (p *Pool) RotateKey(ctx context.Context, att *enclave.Attestation, keyRef string) (err error) {
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.RotateKey", o11y.WithAnnotation("key_ref", keyRef))
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
+	key, found, err := p.keysTable.GetLatestByKeyRef(ctx, keyRef, true)
+	if err != nil {
+		return fmt.Errorf("get cipher key: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("cipher key not found")
+	}
+
+	now := time.Now()
+	key.KeyIndex = nil
+	key.InactiveSince = &now
+
+	hash, err := key.Hash()
+	if err != nil {
+		return fmt.Errorf("hash key: %w", err)
+	}
+
+	keyAtt, err := p.attester.GetAttestation(ctx, nil, hash)
+	if err != nil {
+		return fmt.Errorf("get attestation: %w", err)
+	}
+	key.Attestation = keyAtt.Document()
+	keyAtt.Close()
+
+	if err := p.keysTable.Deactivate(ctx, key.KeyRef, key.Generation, now, keyAtt.Document()); err != nil {
+		return fmt.Errorf("deactivate key: %w", err)
+	}
+
+	return nil
+}
+
+// CleanupUnusedKeys removes cipher keys that are no longer used by any encrypted data.
+//
+// It is inefficient and best-effort, not guaranteed to complete in a single pass, as it is
+// assumed to be called infrequently. It can, however, be retried until the returned count is 0.
+func (p *Pool) CleanupUnusedKeys(ctx context.Context) (deleted int, err error) {
+	log := o11y.LoggerFromContext(ctx)
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.CleanupUnusedKeys")
+	defer func() {
+		span.RecordError(err)
+		span.End()
+	}()
+
+	var cursor *string
+	for {
+		keys, nextCursor, err := p.keysTable.ScanInactive(ctx, cursor)
+		if err != nil {
+			return deleted, fmt.Errorf("list generation key refs: %w", err)
+		}
+		for _, key := range keys {
+			isUsedAnywhere := false
+			for _, dataTable := range p.dataTables {
+				isUsed, err := dataTable.ReferencesCipherKeyRef(ctx, key.KeyRef)
+				if err != nil {
+					return deleted, fmt.Errorf("count by key ref in table %q: %w", dataTable.TableARN(), err)
+				}
+				if isUsed {
+					isUsedAnywhere = true
+					break
+				}
+			}
+			if !isUsedAnywhere {
+				log.Info("deleting unused cipher key", "key_ref", key.KeyRef, "generation", key.Generation, "key_index", key.KeyIndex)
+				if err := p.keysTable.Delete(ctx, key.KeyRef, key.Generation); err != nil {
+					return deleted, fmt.Errorf("delete cipher key by ref %q: %w", key.KeyRef, err)
+				}
+				deleted++
+			}
+		}
+		if nextCursor == nil {
+			break
+		}
+		cursor = nextCursor
+	}
+
+	return deleted, nil
+}
+
 func (p *Pool) currentConfig() (int, *Config) {
 	index := len(p.configs) - 1
 	return index, p.configs[index]
@@ -174,9 +286,8 @@ func (p *Pool) getConfig(configVersion int) (*Config, error) {
 	return p.configs[configVersion], nil
 }
 
-func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyIndex int) (_ *data.CipherKey, _ []byte, err error) {
-	log := o11y.LoggerFromContext(ctx)
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.generateKey", o11y.WithAnnotation("key_index", strconv.Itoa(keyIndex)))
+func (p *Pool) GenerateKey(ctx context.Context, att *enclave.Attestation, keyIndex int) (_ *data.CipherKey, _ []byte, err error) {
+	ctx, span := o11y.Trace(ctx, "encryption.Pool.GenerateKey", o11y.WithAnnotation("key_index", strconv.Itoa(keyIndex)))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -217,7 +328,7 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 
 	key := &data.CipherKey{
 		Generation:      generation,
-		KeyIndex:        keyIndex,
+		KeyIndex:        &keyIndex,
 		KeyRef:          keyRef,
 		EncryptedShares: encryptedShares,
 		CreatedAt:       time.Now(),
@@ -240,29 +351,13 @@ func (p *Pool) generateKey(ctx context.Context, att *enclave.Attestation, keyInd
 		return nil, nil, fmt.Errorf("create key: %w", err)
 	}
 	if alreadyExists {
-		log.Info("attempted to create key that already exists", "key_ref", keyRef, "generation", generation, "key_index", keyIndex)
-
-		// The key was created by another instance. We need to get the latest key from the database.
-		// This time, use a strongly consistent read.
-		existingKey, found, err := p.keysTable.Get(ctx, generation, keyIndex, true)
-		if err != nil {
-			return nil, nil, fmt.Errorf("get latest key: %w", err)
-		}
-		if !found {
-			return nil, nil, fmt.Errorf("key not found")
-		}
-		if err := p.verifyKey(ctx, att, key); err != nil {
-			return nil, nil, fmt.Errorf("verify key: %w", err)
-		}
-
-		// Return nil private key so that the caller decrypts the existingKey shares
-		return existingKey, nil, nil
+		return nil, nil, fmt.Errorf("key already exists")
 	}
 
 	return key, privateKey, nil
 }
 
-func (p *Pool) verifyKey(ctx context.Context, att *enclave.Attestation, key *data.CipherKey) (err error) {
+func (p *Pool) VerifyKey(ctx context.Context, att *enclave.Attestation, key *data.CipherKey) (err error) {
 	ctx, span := o11y.Trace(ctx, "encryption.Pool.verifyKey")
 	defer func() {
 		span.RecordError(err)
@@ -335,23 +430,9 @@ func (p *Pool) migrateKey(ctx context.Context, att *enclave.Attestation, key *da
 		i++
 	}
 
-	// Generate a random negative key index (to avoid collision with positive indices).
-	var keyIndex int
-	{
-		var b [8]byte
-		_, err := io.ReadFull(att, b[:])
-		if err != nil {
-			return fmt.Errorf("read random bytes for keyIndex: %w", err)
-		}
-		// Convert bytes to uint64, then to int and make negative
-		// Use modulo to ensure the value fits in int64 range before conversion
-		randomUint64 := binary.BigEndian.Uint64(b[:])
-		keyIndex = -int(randomUint64 % math.MaxInt64)
-	}
-
 	migratedKey := &data.CipherKey{
 		Generation:      generation,
-		KeyIndex:        keyIndex,
+		KeyIndex:        nil,
 		KeyRef:          key.KeyRef,
 		EncryptedShares: encryptedShares,
 		CreatedAt:       key.CreatedAt,
@@ -374,11 +455,9 @@ func (p *Pool) migrateKey(ctx context.Context, att *enclave.Attestation, key *da
 		return fmt.Errorf("create key: %w", err)
 	}
 
-	// We don't care if we encounter an index collision.
-	// Either the random key index is already taken (unlikely) or the key was already migrated by another instance.
-	// In either case, we bail here. If migration is still needed, it will be attempted again in the future.
+	// We don't care if we encounter an index collision, as this means the key is already migrated.
 	if alreadyExists {
-		log.Info("attempted to migrate key that already exists", "key_ref", key.KeyRef, "generation", generation, "key_index", keyIndex)
+		log.Info("attempted to migrate key that already exists", "key_ref", key.KeyRef, "generation", generation)
 	}
 
 	return nil

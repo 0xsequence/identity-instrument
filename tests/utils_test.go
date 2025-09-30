@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"testing"
 	"time"
 
@@ -24,17 +23,7 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-var awsEndpoint string
-
-func TestMain(m *testing.M) {
-	ep, terminate := initLocalstack()
-	defer terminate()
-	awsEndpoint = ep
-	code := m.Run()
-	os.Exit(code)
-}
-
-func initRPC(t *testing.T, transport http.RoundTripper, options ...func(*config.Config)) *rpc.RPC {
+func initRPC(t *testing.T, awsEndpoint string, transport http.RoundTripper, options ...func(*config.Config)) *rpc.RPC {
 	cfg := initConfig(t, awsEndpoint)
 	for _, opt := range options {
 		opt(cfg)
@@ -128,7 +117,7 @@ func initLocalstack() (string, func()) {
 	return endpoint, terminate
 }
 
-func getSentEmailMessage(t *testing.T, recipient string) (string, string, bool) {
+func getSentEmailMessage(t *testing.T, awsEndpoint string, recipient string) (string, string, bool) {
 	res, err := http.Get(fmt.Sprintf("%s/_aws/ses?email=noreply@local.auth.sequence.app", awsEndpoint))
 	require.NoError(t, err)
 	defer res.Body.Close()

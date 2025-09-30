@@ -17,6 +17,7 @@ import (
 	encryptionkms "github.com/0xsequence/identity-instrument/encryption/kms"
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
+	protoadmin "github.com/0xsequence/identity-instrument/proto/admin"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
 	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
 	"github.com/0xsequence/identity-instrument/rpc/internal/signature"
@@ -48,6 +49,7 @@ type RPC struct {
 	AuthKeys        *data.AuthKeyTable
 	AuthCommitments *data.AuthCommitmentTable
 	Signers         *data.SignerTable
+	CipherKeys      *data.CipherKeyTable
 	AuthHandlers    map[proto.AuthMode]auth.Handler
 	Secrets         *secretsmanager.Client
 	EncryptionPool  *encryption.Pool
@@ -106,7 +108,8 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 
 	db := dynamodb.NewFromConfig(awsCfg)
 	cipherKeyTable := data.NewCipherKeyTable(db, cfg.Database.CipherKeysTable, data.CipherKeyIndices{
-		KeyRefIndex: "KeyRef-Index",
+		ByKeyIndexAndGeneration: "KeyIndex-Generation-Index",
+		Inactive:                "Inactive-Index",
 	})
 	encPoolConfigs := make([]*encryption.Config, len(cfg.Encryption))
 	for i, encCfg := range cfg.Encryption {
@@ -117,7 +120,12 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		encPoolConfigs[i] = encryption.NewConfig(encCfg.PoolSize, encCfg.Threshold, remoteKeys)
 	}
 
-	encPool := encryption.NewPool(enc, encPoolConfigs, cipherKeyTable)
+	authCommitments := data.NewAuthCommitmentTable(db, cfg.Database.AuthCommitmentsTable, data.AuthCommitmentIndices{ByCipherKeyRef: "CipherKeyRef-Index"})
+	authKeys := data.NewAuthKeyTable(db, cfg.Database.AuthKeysTable, data.AuthKeyIndices{ByCipherKeyRef: "CipherKeyRef-Index"})
+	signers := data.NewSignerTable(db, cfg.Database.SignersTable, data.SignerIndices{ByAddress: "Address-Index", ByCipherKeyRef: "CipherKeyRef-Index"})
+
+	dataTables := []encryption.EncryptedDataTable{authCommitments, authKeys, signers}
+	encPool := encryption.NewPool(enc, encPoolConfigs, cipherKeyTable, dataTables)
 
 	m, err := enc.GetMeasurements(context.Background(), []uint16{0})
 	if err != nil {
@@ -132,9 +140,10 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		Server:          httpServer,
 		HTTPClient:      wrappedClient,
 		Enclave:         enc,
-		AuthCommitments: data.NewAuthCommitmentTable(db, cfg.Database.AuthCommitmentsTable, data.AuthCommitmentIndices{}),
-		AuthKeys:        data.NewAuthKeyTable(db, cfg.Database.AuthKeysTable, data.AuthKeyIndices{}),
-		Signers:         data.NewSignerTable(db, cfg.Database.SignersTable, data.SignerIndices{ByAddress: "Address-Index"}),
+		AuthCommitments: authCommitments,
+		AuthKeys:        authKeys,
+		Signers:         signers,
+		CipherKeys:      cipherKeyTable,
 		Secrets:         secretsmanager.NewFromConfig(awsCfg),
 		EncryptionPool:  encPool,
 		startTime:       time.Now(),
@@ -237,6 +246,19 @@ func (s *RPC) Handler() http.Handler {
 		r.Handle("/rpc/IdentityInstrument/CommitVerifier", srv)
 		r.Handle("/rpc/IdentityInstrument/CompleteAuth", srv)
 		r.Handle("/rpc/IdentityInstrument/Sign", srv)
+	})
+
+	r.Group(func(r chi.Router) {
+		// Observability middleware
+		r.Use(o11y.Middleware())
+
+		// Generate attestation document
+		r.Use(attestation.Middleware(s.Enclave))
+
+		srv := protoadmin.NewIdentityInstrumentAdminServer(s)
+		r.Handle("/rpc/IdentityInstrumentAdmin/RotateCipherKey", srv)
+		r.Handle("/rpc/IdentityInstrumentAdmin/RefreshEncryptedData", srv)
+		r.Handle("/rpc/IdentityInstrumentAdmin/CleanupUnusedCipherKeys", srv)
 	})
 
 	return r

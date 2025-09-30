@@ -33,6 +33,9 @@ import (
 )
 
 func TestOIDC(t *testing.T) {
+	ep, terminate := initLocalstack()
+	defer terminate()
+
 	t.Run("AuthMode_IDToken", func(t *testing.T) {
 		ctx := context.Background()
 
@@ -41,7 +44,7 @@ func TestOIDC(t *testing.T) {
 			b.Expiration(exp)
 		}
 
-		svc := initRPC(t, nil)
+		svc := initRPC(t, ep, nil)
 
 		authServer := newMockOAuth2Server(t, svc)
 		defer authServer.Close()
@@ -130,7 +133,7 @@ func TestOIDC(t *testing.T) {
 			b.Expiration(exp)
 		}
 
-		svc := initRPC(t, nil)
+		svc := initRPC(t, ep, nil)
 
 		authServer := newMockOAuth2Server(t, svc)
 		defer authServer.Close()
@@ -223,7 +226,7 @@ func TestOIDC(t *testing.T) {
 			b.Expiration(exp)
 		}
 
-		svc := initRPC(t, nil)
+		svc := initRPC(t, ep, nil)
 
 		authServer := newMockOAuth2Server(t, svc)
 		defer authServer.Close()
