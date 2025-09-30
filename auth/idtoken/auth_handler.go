@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
@@ -59,6 +58,10 @@ func (h *AuthHandler) Commit(
 		return "", "", "", proto.ErrInvalidRequest.WithCausef("cannot reuse an old ID token")
 	}
 
+	if _, err := ExtractMetadata(metadata); err != nil {
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("extract metadata: %w", err)
+	}
+
 	commitment, err = h.constructCommitment(authID, authKey, metadata)
 	if err != nil {
 		return "", "", "", err
@@ -88,13 +91,14 @@ func (h *AuthHandler) Verify(
 		return proto.Identity{}, proto.ErrProofVerificationFailed
 	}
 
-	vi, err := h.extractMetadata(commitment.Metadata)
+	// The metadata should have been validated at this point
+	m, err := ExtractMetadata(commitment.Metadata)
 	if err != nil {
 		log.Error("failed to extract metadata", "error", err)
-		return proto.Identity{}, proto.ErrProofVerificationFailed
+		return proto.Identity{}, proto.ErrInternalError
 	}
 
-	return h.VerifyToken(ctx, answer, vi.issuer, vi.audience, h.getVerifyChallengeFunc(commitment))
+	return h.VerifyToken(ctx, answer, m.Issuer, m.Audience, h.getVerifyChallengeFunc(commitment))
 }
 
 func (h *AuthHandler) VerifyToken(
@@ -177,12 +181,12 @@ func (h *AuthHandler) GetKeySet(ctx context.Context, issuer string) (set jwk.Set
 func (h *AuthHandler) constructCommitment(
 	authID proto.AuthID, authKey proto.Key, metadata map[string]string,
 ) (*proto.AuthCommitmentData, error) {
-	vi, err := h.extractMetadata(metadata)
+	m, err := ExtractMetadata(metadata)
 	if err != nil {
 		return nil, err
 	}
 
-	if time.Now().After(vi.expiresAt) {
+	if time.Now().After(m.ExpiresAt) {
 		return nil, proto.ErrProofVerificationFailed.WithCausef("token expired")
 	}
 
@@ -192,43 +196,20 @@ func (h *AuthHandler) constructCommitment(
 		AuthMode:     authID.AuthMode,
 		IdentityType: authID.IdentityType,
 		Handle:       authID.Verifier,
-		Expiry:       vi.expiresAt,
+		Expiry:       m.ExpiresAt,
 		Metadata:     metadata,
 	}
 	return commitment, nil
 }
 
-type verifierInfo struct {
-	issuer    string
-	audience  string
-	expiresAt time.Time
-}
-
-func (h *AuthHandler) extractMetadata(metadata map[string]string) (*verifierInfo, error) {
-	issuer := metadata["iss"]
-	audience := metadata["aud"]
-	exp, err := strconv.ParseInt(metadata["exp"], 10, 64)
-	if err != nil {
-		return nil, fmt.Errorf("parse exp: %w", err)
-	}
-	expiresAt := time.Unix(exp, 0)
-
-	vi := &verifierInfo{
-		issuer:    issuer,
-		audience:  audience,
-		expiresAt: expiresAt,
-	}
-	return vi, nil
-}
-
 func (h *AuthHandler) getVerifyChallengeFunc(commitment *proto.AuthCommitmentData) func(tok jwt.Token) error {
 	return func(tok jwt.Token) error {
-		vi, err := h.extractMetadata(commitment.Metadata)
+		m, err := ExtractMetadata(commitment.Metadata)
 		if err != nil {
 			return fmt.Errorf("extract metadata: %w", err)
 		}
 
-		if !tok.Expiration().Equal(vi.expiresAt) {
+		if !tok.Expiration().Equal(m.ExpiresAt) {
 			return fmt.Errorf("invalid exp claim")
 		}
 
