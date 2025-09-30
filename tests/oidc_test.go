@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -44,7 +45,13 @@ func TestOIDC(t *testing.T) {
 			b.Expiration(exp)
 		}
 
-		svc := initRPC(t, ep, nil)
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				// skip TLS verification for testing
+				InsecureSkipVerify: true,
+			},
+		}
+		svc := initRPC(t, ep, transport)
 
 		authServer := newMockOAuth2Server(t, svc)
 		defer authServer.Close()
@@ -133,7 +140,13 @@ func TestOIDC(t *testing.T) {
 			b.Expiration(exp)
 		}
 
-		svc := initRPC(t, ep, nil)
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				// skip TLS verification for testing
+				InsecureSkipVerify: true,
+			},
+		}
+		svc := initRPC(t, ep, transport)
 
 		authServer := newMockOAuth2Server(t, svc)
 		defer authServer.Close()
@@ -167,8 +180,9 @@ func TestOIDC(t *testing.T) {
 			IdentityType: proto.IdentityType_OIDC,
 			Handle:       codeHash,
 			Metadata: map[string]string{
-				"iss": issuer,
-				"aud": "audience",
+				"iss":          issuer,
+				"aud":          "audience",
+				"redirect_uri": "http://localhost:8080/callback",
 			},
 		}
 		sig := signRequest(t, authKey, initiateParams)
@@ -226,7 +240,13 @@ func TestOIDC(t *testing.T) {
 			b.Expiration(exp)
 		}
 
-		svc := initRPC(t, ep, nil)
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				// skip TLS verification for testing
+				InsecureSkipVerify: true,
+			},
+		}
+		svc := initRPC(t, ep, transport)
 
 		authServer := newMockOAuth2Server(t, svc)
 		defer authServer.Close()
@@ -251,8 +271,9 @@ func TestOIDC(t *testing.T) {
 			AuthMode:     proto.AuthMode_AuthCodePKCE,
 			IdentityType: proto.IdentityType_OIDC,
 			Metadata: map[string]string{
-				"iss": issuer,
-				"aud": "audience",
+				"iss":          issuer,
+				"aud":          "audience",
+				"redirect_uri": "http://localhost:8080/callback",
 			},
 		}
 		sig := signRequest(t, authKey, initiateParams)
@@ -351,7 +372,7 @@ func newMockOAuth2Server(t *testing.T, svc *rpc.RPC) *mockOAuth2Server {
 	mux.HandleFunc("/jwks", s.handleJWKS)
 	mux.HandleFunc("/.well-known/openid-configuration", s.handleOpenIDConfig)
 
-	s.server = httptest.NewServer(mux)
+	s.server = httptest.NewTLSServer(mux)
 
 	secretConfig := &authcode.SecretConfig{
 		Value: &clientSecret,
@@ -370,7 +391,11 @@ func newMockOAuth2Server(t *testing.T, svc *rpc.RPC) *mockOAuth2Server {
 }
 
 func (s *mockOAuth2Server) URL() string {
-	return s.server.URL
+	url := s.server.URL
+	if strings.HasPrefix(url, "http://") {
+		url = strings.Replace(url, "http://", "https://", 1)
+	}
+	return url
 }
 
 func (s *mockOAuth2Server) Close() {
