@@ -20,11 +20,8 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 		return "", proto.ErrInvalidRequest.WithCausef("valid scope is required")
 	}
 
-	if params == nil {
-		return "", proto.ErrInvalidRequest.WithCausef("params is required")
-	}
-	if authKey == nil {
-		return "", proto.ErrInvalidRequest.WithCausef("auth key is required")
+	if err := params.Validate(); err != nil {
+		return "", proto.ErrInvalidRequest.WithCausef("invalid params: %w", err)
 	}
 
 	dbAuthKey, found, err := s.AuthKeys.Get(ctx, scope, *authKey)
