@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 )
 
@@ -44,11 +45,29 @@ func NewKeyFromPrivateKey(keyType KeyType, privateKey any) (Key, error) {
 }
 
 func (k *Key) String() string {
+	if k == nil {
+		return ""
+	}
 	return fmt.Sprintf("%s:%s", k.KeyType, strings.ToLower(k.Address))
 }
 
 func (k *Key) IsValid() bool {
-	return k != nil && k.HasValidKeyType() && k.Address != ""
+	if k == nil {
+		return false
+	}
+
+	b, err := hexutil.Decode(k.Address)
+	if err != nil {
+		return false
+	}
+
+	switch k.KeyType {
+	case KeyType_Ethereum_Secp256k1:
+		return len(b) == 20
+	case KeyType_WebCrypto_Secp256r1:
+		return len(b) == 65
+	}
+	return false
 }
 
 func (k *Key) HasValidKeyType() bool {
