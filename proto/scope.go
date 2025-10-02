@@ -19,7 +19,7 @@ func (s *Scope) FromString(str string) error {
 }
 
 func (s Scope) IsValid() bool {
-	return scopeRegex.MatchString(string(s))
+	return scopeRegex.MatchString(string(s)) && len(s) <= 100
 }
 
 func (s Scope) Ecosystem() (string, error) {

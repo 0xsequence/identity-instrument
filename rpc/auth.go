@@ -36,13 +36,8 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	if err != nil {
 		return "", "", "", proto.ErrInvalidRequest.WithCausef("valid scope is required")
 	}
-
-	if params == nil {
-		return "", "", "", proto.ErrInvalidRequest.WithCausef("params is required")
-	}
-
-	if authKey == nil {
-		return "", "", "", proto.ErrInvalidRequest.WithCausef("auth key is required")
+	if err := params.Validate(); err != nil {
+		return "", "", "", proto.ErrInvalidRequest.WithCausef("invalid params: %w", err)
 	}
 
 	authHandler, err := s.getAuthHandler(params.AuthMode)
@@ -140,12 +135,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	if err != nil {
 		return nil, nil, proto.ErrInvalidRequest.WithCausef("valid scope is required")
 	}
-
-	if params == nil {
-		return nil, nil, proto.ErrInvalidRequest.WithCausef("params is required")
-	}
-	if authKey == nil {
-		return nil, nil, proto.ErrInvalidRequest.WithCausef("auth key is required")
+	if err := params.Validate(); err != nil {
+		return nil, nil, proto.ErrInvalidRequest.WithCausef("invalid params: %w", err)
 	}
 
 	// Currently we only support Ethereum_Secp256k1 signers
