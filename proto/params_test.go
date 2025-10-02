@@ -425,7 +425,7 @@ func TestCompleteAuthParams_Validate(t *testing.T) {
 		})
 
 		t.Run("answer at max length", func(t *testing.T) {
-			longAnswer := string(make([]byte, 250))
+			longAnswer := string(make([]byte, 2048))
 			for i := range longAnswer {
 				longAnswer = longAnswer[:i] + "a" + longAnswer[i+1:]
 			}
@@ -440,7 +440,7 @@ func TestCompleteAuthParams_Validate(t *testing.T) {
 		})
 
 		t.Run("answer too long", func(t *testing.T) {
-			longAnswer := string(make([]byte, 251))
+			longAnswer := string(make([]byte, 2049))
 			for i := range longAnswer {
 				longAnswer = longAnswer[:i] + "a" + longAnswer[i+1:]
 			}

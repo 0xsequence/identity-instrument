@@ -73,7 +73,7 @@ func (p *CompleteAuthParams) Validate() error {
 		return fmt.Errorf("verifier is too long: %s", p.Verifier)
 	}
 
-	if p.Answer != "" && len(p.Answer) > 250 {
+	if p.Answer != "" && len(p.Answer) > 2048 {
 		return fmt.Errorf("answer is too long: %s", p.Answer)
 	}
 
