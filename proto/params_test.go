@@ -1,6 +1,7 @@
 package proto_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/0xsequence/identity-instrument/proto"
@@ -122,6 +123,131 @@ func TestCommitVerifierParams_Validate(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid signer")
 	})
+
+	t.Run("handle length validation", func(t *testing.T) {
+		t.Run("valid handle length", func(t *testing.T) {
+			params := proto.CommitVerifierParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				Handle:       "valid-handle",
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("handle at max length", func(t *testing.T) {
+			longHandle := string(make([]byte, 250))
+			for i := range longHandle {
+				longHandle = longHandle[:i] + "a" + longHandle[i+1:]
+			}
+			params := proto.CommitVerifierParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				Handle:       longHandle,
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("handle too long", func(t *testing.T) {
+			longHandle := string(make([]byte, 251))
+			for i := range longHandle {
+				longHandle = longHandle[:i] + "a" + longHandle[i+1:]
+			}
+			params := proto.CommitVerifierParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				Handle:       longHandle,
+			}
+			err := params.Validate()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "handle is too long")
+		})
+	})
+
+	t.Run("metadata length validation", func(t *testing.T) {
+		t.Run("valid metadata", func(t *testing.T) {
+			params := proto.CommitVerifierParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				Metadata: map[string]string{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("too many metadata entries", func(t *testing.T) {
+			metadata := make(map[string]string)
+			for i := 0; i < 11; i++ {
+				metadata[fmt.Sprintf("key%d", i)] = "value"
+			}
+			params := proto.CommitVerifierParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				Metadata:     metadata,
+			}
+			err := params.Validate()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "too many metadata entries")
+		})
+
+		t.Run("metadata key too long", func(t *testing.T) {
+			longKey := string(make([]byte, 51))
+			for i := range longKey {
+				longKey = longKey[:i] + "a" + longKey[i+1:]
+			}
+			params := proto.CommitVerifierParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				Metadata: map[string]string{
+					longKey: "value",
+				},
+			}
+			err := params.Validate()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "metadata key is too long")
+		})
+
+		t.Run("metadata value too long", func(t *testing.T) {
+			longValue := string(make([]byte, 251))
+			for i := range longValue {
+				longValue = longValue[:i] + "a" + longValue[i+1:]
+			}
+			params := proto.CommitVerifierParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				Metadata: map[string]string{
+					"key": longValue,
+				},
+			}
+			err := params.Validate()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "metadata value for key key is too long")
+		})
+
+		t.Run("metadata at max lengths", func(t *testing.T) {
+			longKey := string(make([]byte, 50))
+			for i := range longKey {
+				longKey = longKey[:i] + "a" + longKey[i+1:]
+			}
+			longValue := string(make([]byte, 250))
+			for i := range longValue {
+				longValue = longValue[:i] + "a" + longValue[i+1:]
+			}
+			params := proto.CommitVerifierParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				Metadata: map[string]string{
+					longKey: longValue,
+				},
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+	})
 }
 
 func TestCompleteAuthParams_Validate(t *testing.T) {
@@ -240,6 +366,94 @@ func TestCompleteAuthParams_Validate(t *testing.T) {
 		err := params.Validate()
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid signer type")
+	})
+
+	t.Run("verifier length validation", func(t *testing.T) {
+		t.Run("valid verifier length", func(t *testing.T) {
+			params := proto.CompleteAuthParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				SignerType:   proto.KeyType_Ethereum_Secp256k1,
+				Verifier:     "valid-verifier",
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("verifier at max length", func(t *testing.T) {
+			longVerifier := string(make([]byte, 250))
+			for i := range longVerifier {
+				longVerifier = longVerifier[:i] + "a" + longVerifier[i+1:]
+			}
+			params := proto.CompleteAuthParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				SignerType:   proto.KeyType_Ethereum_Secp256k1,
+				Verifier:     longVerifier,
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("verifier too long", func(t *testing.T) {
+			longVerifier := string(make([]byte, 251))
+			for i := range longVerifier {
+				longVerifier = longVerifier[:i] + "a" + longVerifier[i+1:]
+			}
+			params := proto.CompleteAuthParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				SignerType:   proto.KeyType_Ethereum_Secp256k1,
+				Verifier:     longVerifier,
+			}
+			err := params.Validate()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "verifier is too long")
+		})
+	})
+
+	t.Run("answer length validation", func(t *testing.T) {
+		t.Run("valid answer length", func(t *testing.T) {
+			params := proto.CompleteAuthParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				SignerType:   proto.KeyType_Ethereum_Secp256k1,
+				Answer:       "valid-answer",
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("answer at max length", func(t *testing.T) {
+			longAnswer := string(make([]byte, 250))
+			for i := range longAnswer {
+				longAnswer = longAnswer[:i] + "a" + longAnswer[i+1:]
+			}
+			params := proto.CompleteAuthParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				SignerType:   proto.KeyType_Ethereum_Secp256k1,
+				Answer:       longAnswer,
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("answer too long", func(t *testing.T) {
+			longAnswer := string(make([]byte, 251))
+			for i := range longAnswer {
+				longAnswer = longAnswer[:i] + "a" + longAnswer[i+1:]
+			}
+			params := proto.CompleteAuthParams{
+				IdentityType: proto.IdentityType_Email,
+				AuthMode:     proto.AuthMode_OTP,
+				SignerType:   proto.KeyType_Ethereum_Secp256k1,
+				Answer:       longAnswer,
+			}
+			err := params.Validate()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "answer is too long")
+		})
 	})
 }
 
@@ -423,5 +637,55 @@ func TestSignParams_Validate(t *testing.T) {
 		}
 		err := params.Validate()
 		require.NoError(t, err)
+	})
+
+	t.Run("nonce length validation", func(t *testing.T) {
+		t.Run("valid nonce length", func(t *testing.T) {
+			params := proto.SignParams{
+				Signer: proto.Key{
+					KeyType: proto.KeyType_Ethereum_Secp256k1,
+					Address: "0x36cf0e1D975f4eF8DbF4C7A70abef0548a68505e",
+				},
+				Digest: "0x1234567890123456789012345678901234567890123456789012345678901234",
+				Nonce:  "valid-nonce",
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("nonce at max length", func(t *testing.T) {
+			longNonce := string(make([]byte, 64))
+			for i := range longNonce {
+				longNonce = longNonce[:i] + "a" + longNonce[i+1:]
+			}
+			params := proto.SignParams{
+				Signer: proto.Key{
+					KeyType: proto.KeyType_Ethereum_Secp256k1,
+					Address: "0x36cf0e1D975f4eF8DbF4C7A70abef0548a68505e",
+				},
+				Digest: "0x1234567890123456789012345678901234567890123456789012345678901234",
+				Nonce:  longNonce,
+			}
+			err := params.Validate()
+			require.NoError(t, err)
+		})
+
+		t.Run("nonce too long", func(t *testing.T) {
+			longNonce := string(make([]byte, 65))
+			for i := range longNonce {
+				longNonce = longNonce[:i] + "a" + longNonce[i+1:]
+			}
+			params := proto.SignParams{
+				Signer: proto.Key{
+					KeyType: proto.KeyType_Ethereum_Secp256k1,
+					Address: "0x36cf0e1D975f4eF8DbF4C7A70abef0548a68505e",
+				},
+				Digest: "0x1234567890123456789012345678901234567890123456789012345678901234",
+				Nonce:  longNonce,
+			}
+			err := params.Validate()
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "nonce is too long")
+		})
 	})
 }
