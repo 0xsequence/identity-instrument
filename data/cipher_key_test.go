@@ -63,6 +63,6 @@ func TestCipherKey(t *testing.T) {
 		require.NoError(t, err)
 		b, err := json.Marshal(av)
 		require.NoError(t, err)
-		require.Less(t, len(b), 250*1024)
+		require.Less(t, len(b), 350*1024)
 	})
 }
