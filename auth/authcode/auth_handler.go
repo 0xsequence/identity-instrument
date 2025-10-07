@@ -126,7 +126,7 @@ func (h *AuthHandler) Verify(
 	commitment *proto.AuthCommitmentData,
 	authKey proto.Key,
 	answer string,
-) (proto.Identity, error) {
+) (ident proto.Identity, err error) {
 	log := o11y.LoggerFromContext(ctx)
 
 	if commitment == nil {
@@ -191,7 +191,11 @@ func (h *AuthHandler) Verify(
 		log.Error("failed to do request", "error", err)
 		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := resp.Body.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	var body map[string]interface{}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {

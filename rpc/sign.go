@@ -33,7 +33,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 		return "", proto.ErrKeyNotFound
 	}
 
-	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
+	authKeyData, err := dbAuthKey.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
 	if err != nil {
 		log.Error("failed to decrypt auth key data", "error", err)
 		return "", proto.ErrEncryptionError
@@ -62,7 +62,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 		return "", proto.ErrSignerNotFound
 	}
 
-	signerData, err := dbSigner.EncryptedData.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
+	signerData, err := dbSigner.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
 	if err != nil {
 		log.Error("failed to decrypt signer data", "error", err)
 		return "", proto.ErrEncryptionError

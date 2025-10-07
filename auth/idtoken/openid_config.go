@@ -14,7 +14,7 @@ type OpenIDConfig struct {
 	JWKSURL       string `json:"jwks_uri"`
 }
 
-func (h *AuthHandler) GetOpenIDConfig(ctx context.Context, issuer string) (*OpenIDConfig, error) {
+func (h *AuthHandler) GetOpenIDConfig(ctx context.Context, issuer string) (cfg *OpenIDConfig, err error) {
 	ttl := 1 * time.Hour
 	getter := func(ctx context.Context, _ string) (OpenIDConfig, error) {
 		issuerConfigURL := normalizeIssuer(issuer) + "/.well-known/openid-configuration"
@@ -27,7 +27,11 @@ func (h *AuthHandler) GetOpenIDConfig(ctx context.Context, issuer string) (*Open
 		if err != nil {
 			return OpenIDConfig{}, fmt.Errorf("failed to fetch openid configuration: %w", err)
 		}
-		defer resp.Body.Close()
+		defer func() {
+			if closeErr := resp.Body.Close(); err == nil && closeErr != nil {
+				err = closeErr
+			}
+		}()
 
 		if resp.StatusCode != http.StatusOK {
 			return OpenIDConfig{}, fmt.Errorf("failed to fetch openid configuration: %d", resp.StatusCode)

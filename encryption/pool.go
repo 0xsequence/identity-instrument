@@ -362,7 +362,7 @@ func (p *Pool) GenerateKey(ctx context.Context, att *enclave.Attestation, keyInd
 }
 
 func (p *Pool) VerifyKey(ctx context.Context, att *enclave.Attestation, key *data.CipherKey) (err error) {
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.verifyKey")
+	_, span := o11y.Trace(ctx, "encryption.Pool.verifyKey")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -452,7 +452,9 @@ func (p *Pool) migrateKey(ctx context.Context, att *enclave.Attestation, key *da
 		return fmt.Errorf("get attestation: %w", err)
 	}
 	migratedKey.Attestation = keyAtt.Document()
-	keyAtt.Close()
+	if err := keyAtt.Close(); err != nil {
+		return fmt.Errorf("close attestation: %w", err)
+	}
 
 	alreadyExists, err := p.keysTable.Create(ctx, migratedKey)
 	if err != nil {

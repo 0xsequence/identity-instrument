@@ -68,11 +68,7 @@ func (ed EncryptedData[T]) Decrypt(ctx context.Context, att *enclave.Attestation
 }
 
 func (ed EncryptedData[T]) ToAny() EncryptedData[any] {
-	return EncryptedData[any]{
-		CipherKeyRef:   ed.CipherKeyRef,
-		Ciphertext:     ed.Ciphertext,
-		CiphertextHash: ed.CiphertextHash,
-	}
+	return EncryptedData[any](ed)
 }
 
 // EncryptedDataTable defines methods common to all tables that store encrypted data.
@@ -106,7 +102,7 @@ func (t *EncryptedDataTable[T]) ReferencesCipherKeyRef(ctx context.Context, keyR
 
 	out, err := t.db.Query(ctx, input)
 	if err != nil {
-		return false, fmt.Errorf("Query: %w", err)
+		return false, fmt.Errorf("query: %w", err)
 	}
 	return out.Count > 0, nil
 }
@@ -125,7 +121,7 @@ func (t *EncryptedDataTable[T]) ListByCipherKeyRef(ctx context.Context, keyRef s
 	}
 	out, err := t.db.Query(ctx, input)
 	if err != nil {
-		return nil, false, fmt.Errorf("Query: %w", err)
+		return nil, false, fmt.Errorf("query: %w", err)
 	}
 
 	var records []T
@@ -162,7 +158,7 @@ func (t *EncryptedDataTable[T]) UpdateEncryptedData(ctx context.Context, record 
 		},
 	}
 	if _, err := t.db.UpdateItem(ctx, input); err != nil {
-		return fmt.Errorf("UpdateItem: %w", err)
+		return fmt.Errorf("update item: %w", err)
 	}
 	return nil
 }

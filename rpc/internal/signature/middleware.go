@@ -39,7 +39,7 @@ func Middleware() func(http.Handler) http.Handler {
 				return
 			}
 
-			if req.Params == nil || len(req.Params) == 0 {
+			if len(req.Params) == 0 {
 				proto.RespondWithError(w, proto.ErrInvalidRequest.WithCausef("params is required"))
 				return
 			}

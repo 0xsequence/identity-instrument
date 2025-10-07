@@ -16,13 +16,13 @@ func TestProvider_Retrieve(t *testing.T) {
 		switch r.URL.Path {
 		case "/latest/meta-data/iam/security-credentials/":
 			w.WriteHeader(200)
-			w.Write([]byte("PROFILE"))
+			_, _ = w.Write([]byte("PROFILE"))
 		case "/latest/meta-data/iam/security-credentials/PROFILE":
 			w.WriteHeader(200)
-			w.Write([]byte(`{"AccessKeyId":"AccessKeyID","SecretAccessKey":"SecretAccessKey","Token":"SessionToken"}`))
+			_, _ = w.Write([]byte(`{"AccessKeyId":"AccessKeyID","SecretAccessKey":"SecretAccessKey","Token":"SessionToken"}`))
 		default:
 			w.WriteHeader(400)
-			w.Write([]byte("Wrong path"))
+			_, _ = w.Write([]byte("Wrong path"))
 		}
 	}))
 

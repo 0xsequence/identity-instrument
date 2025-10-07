@@ -68,7 +68,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		if !found {
 			return "", "", "", proto.ErrInvalidRequest.WithCausef("signer not found")
 		}
-		signer, err = dbSigner.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+		signer, err = dbSigner.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
 			log.Error("decrypt signer data failed", "error", err)
 			return "", "", "", proto.ErrEncryptionError
@@ -86,7 +86,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 			return "", "", "", proto.ErrDatabaseError
 		}
 		if found && dbCommitment != nil {
-			commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+			commitment, err = dbCommitment.Decrypt(ctx, att, s.EncryptionPool)
 			if err != nil {
 				log.Error("decrypt auth commitment failed", "error", err)
 				return "", "", "", proto.ErrEncryptionError
@@ -162,7 +162,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		return nil, nil, proto.ErrDatabaseError
 	}
 	if found && dbCommitment != nil {
-		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+		commitment, err = dbCommitment.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
 			log.Error("decrypt auth commitment failed", "error", err)
 			return nil, nil, proto.ErrEncryptionError

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/0xsequence/identity-instrument/proto/builder"
@@ -8,5 +9,7 @@ import (
 
 func main() {
 	svc := builder.NewEcosystemManagerServer(builder.NewMock())
-	http.ListenAndServe(":9999", svc)
+	if err := http.ListenAndServe(":9999", svc); err != nil {
+		log.Fatal(err)
+	}
 }

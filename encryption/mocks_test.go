@@ -152,7 +152,11 @@ func newCipherKey(t *testing.T, enc *enclave.Enclave, options ...func(*data.Ciph
 
 	att, err := enc.GetAttestation(context.Background(), nil, hash)
 	require.NoError(t, err)
-	defer att.Close()
+	defer func() {
+		if err := att.Close(); err != nil {
+			t.Log("failed to close attestation", err)
+		}
+	}()
 
 	key.Attestation = att.Document()
 

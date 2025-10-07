@@ -22,22 +22,31 @@ import (
 // If the HTTP request includes an X-Attestation-Nonce header, its value is sent to the NSM and included in
 // the final attestation document.
 func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
-	runPreMiddleware := func(r *http.Request) (ctx context.Context, cancelFunc func() error, err error) {
+	runPreMiddleware := func(r *http.Request) (ctx context.Context, cancelFunc func(), err error) {
 		ctx, span := o11y.Trace(r.Context(), "attestation.Middleware")
 		defer func() {
 			span.RecordError(err)
 			span.End()
 		}()
 
+		log := o11y.LoggerFromContext(ctx)
 		att, err := enc.GetAttestation(ctx, nil, nil)
 		if err != nil {
 			return nil, nil, err
 		}
 
-		return context.WithValue(r.Context(), contextKey, att), att.Close, nil
+		cancelFunc = func() {
+			if err := att.Close(); err != nil {
+				log.Error("failed to close attestation", "error", err)
+				return
+			}
+		}
+
+		return context.WithValue(r.Context(), contextKey, att), cancelFunc, nil
 	}
 
 	runPostMiddleware := func(w http.ResponseWriter, r *http.Request, body []byte, nonce []byte) (err error) {
+		log := o11y.LoggerFromContext(r.Context())
 		ctx, span := o11y.Trace(r.Context(), "attestation.Middleware")
 		defer func() {
 			span.RecordError(err)
@@ -53,7 +62,12 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 		if err != nil {
 			return err
 		}
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				log.Error("failed to close attestation", "error", err)
+				return
+			}
+		}()
 
 		w.Header().Set("X-Attestation-Document", base64.StdEncoding.EncodeToString(att.Document()))
 		return nil

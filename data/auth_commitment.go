@@ -28,15 +28,11 @@ func (c *AuthCommitment) DatabaseKey() map[string]types.AttributeValue {
 }
 
 func (c *AuthCommitment) GetEncryptedData() EncryptedData[any] {
-	return c.EncryptedData.ToAny()
+	return c.ToAny()
 }
 
 func (c *AuthCommitment) SetEncryptedData(data EncryptedData[any]) {
-	c.EncryptedData = EncryptedData[*proto.AuthCommitmentData]{
-		CipherKeyRef:   data.CipherKeyRef,
-		Ciphertext:     data.Ciphertext,
-		CiphertextHash: data.CiphertextHash,
-	}
+	c.EncryptedData = EncryptedData[*proto.AuthCommitmentData](data)
 }
 
 func (c *AuthCommitment) CorrespondsTo(data *proto.AuthCommitmentData) bool {
@@ -98,7 +94,7 @@ func (t *AuthCommitmentTable) Get(ctx context.Context, authID proto.AuthID) (*Au
 		Key:       commitment.DatabaseKey(),
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("GetItem: %w", err)
+		return nil, false, fmt.Errorf("get item: %w", err)
 	}
 	if len(out.Item) == 0 {
 		return nil, false, nil
@@ -122,7 +118,7 @@ func (t *AuthCommitmentTable) Put(ctx context.Context, commitment *AuthCommitmen
 		Item:      av,
 	}
 	if _, err := t.db.PutItem(ctx, input); err != nil {
-		return fmt.Errorf("PutItem: %w", err)
+		return fmt.Errorf("put item: %w", err)
 	}
 	return nil
 }
@@ -149,7 +145,7 @@ func (t *AuthCommitmentTable) UpdateData(
 		},
 	}
 	if _, err := t.db.PutItem(ctx, input); err != nil {
-		return fmt.Errorf("PutItem: %w", err)
+		return fmt.Errorf("put item: %w", err)
 	}
 	return nil
 }

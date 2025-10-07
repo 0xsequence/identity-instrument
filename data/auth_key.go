@@ -29,15 +29,11 @@ func (k *AuthKey) DatabaseKey() map[string]types.AttributeValue {
 }
 
 func (k *AuthKey) GetEncryptedData() EncryptedData[any] {
-	return k.EncryptedData.ToAny()
+	return k.ToAny()
 }
 
 func (k *AuthKey) SetEncryptedData(data EncryptedData[any]) {
-	k.EncryptedData = EncryptedData[*proto.AuthKeyData]{
-		CipherKeyRef:   data.CipherKeyRef,
-		Ciphertext:     data.Ciphertext,
-		CiphertextHash: data.CiphertextHash,
-	}
+	k.EncryptedData = EncryptedData[*proto.AuthKeyData](data)
 }
 
 func (k *AuthKey) CorrespondsTo(data *proto.AuthKeyData) bool {
@@ -85,7 +81,7 @@ func (t *AuthKeyTable) Get(ctx context.Context, scope proto.Scope, key proto.Key
 		Key:       authKey.DatabaseKey(),
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("GetItem: %w", err)
+		return nil, false, fmt.Errorf("get item: %w", err)
 	}
 	if len(out.Item) == 0 {
 		return nil, false, nil
@@ -109,7 +105,7 @@ func (t *AuthKeyTable) Put(ctx context.Context, key *AuthKey) error {
 		Item:      av,
 	}
 	if _, err := t.db.PutItem(ctx, input); err != nil {
-		return fmt.Errorf("PutItem: %w", err)
+		return fmt.Errorf("put item: %w", err)
 	}
 	return nil
 }

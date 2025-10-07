@@ -18,7 +18,7 @@ func TestAuthKey(t *testing.T) {
 	// Maximum DynamoDB item size is 400 KB, use 350 KB as a safe margin
 	t.Run("maximum possible size is less than 350 KB", func(t *testing.T) {
 		id := [32]byte{}
-		rand.Read(id[:])
+		_, _ = rand.Read(id[:])
 
 		scope := "@1:"
 		for i := 0; i < 253; i++ {
