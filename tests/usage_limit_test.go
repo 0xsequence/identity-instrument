@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUsageLimis(t *testing.T) {
+func TestUsageLimits(t *testing.T) {
 	ep, terminate := initLocalstack()
 	defer terminate()
 
