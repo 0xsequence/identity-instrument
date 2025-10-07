@@ -68,7 +68,6 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 
 			var nonce []byte
 			if nonceVal := r.Header.Get("X-Attestation-Nonce"); nonceVal != "" {
-				fmt.Println("nonceVal", nonceVal, len(nonceVal))
 				if len(nonceVal) > 32 {
 					proto.RespondWithError(w, fmt.Errorf("X-Attestation-Nonce value cannot be longer than 32"))
 					return
