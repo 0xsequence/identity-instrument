@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
@@ -66,11 +65,15 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 
 			var nonce []byte
 			if nonceVal := r.Header.Get("X-Attestation-Nonce"); nonceVal != "" {
-				nonceVal = strings.TrimSpace(nonceVal)
 				if len(nonceVal) > 32 {
 					proto.RespondWithError(w, fmt.Errorf("X-Attestation-Nonce value cannot be longer than 32"))
 					return
 				}
+				if !isNonceValid(nonceVal) {
+					proto.RespondWithError(w, fmt.Errorf("X-Attestation-Nonce value contains invalid characters"))
+					return
+				}
+
 				nonce = []byte(nonceVal)
 			}
 
@@ -100,4 +103,18 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 			}
 		})
 	}
+}
+
+func isNonceValid(s string) bool {
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if (c >= 'a' && c <= 'z') ||
+			(c >= 'A' && c <= 'Z') ||
+			(c >= '0' && c <= '9') ||
+			c == '_' || c == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
