@@ -61,7 +61,11 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			reqBody, _ := io.ReadAll(r.Body)
+			reqBody, err := io.ReadAll(r.Body)
+			if err != nil {
+				proto.RespondWithError(w, fmt.Errorf("failed to read request body: %w", err))
+				return
+			}
 			r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 
 			var nonce []byte

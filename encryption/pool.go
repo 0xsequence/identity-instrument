@@ -218,7 +218,9 @@ func (p *Pool) RotateKey(ctx context.Context, att *enclave.Attestation, keyRef s
 		return fmt.Errorf("get attestation: %w", err)
 	}
 	key.Attestation = keyAtt.Document()
-	keyAtt.Close()
+	if err := keyAtt.Close(); err != nil {
+		return fmt.Errorf("close attestation: %w", err)
+	}
 
 	if err := p.keysTable.Deactivate(ctx, key.KeyRef, key.Generation, now, keyAtt.Document()); err != nil {
 		return fmt.Errorf("deactivate key: %w", err)
@@ -344,7 +346,9 @@ func (p *Pool) GenerateKey(ctx context.Context, att *enclave.Attestation, keyInd
 		return nil, nil, fmt.Errorf("get attestation: %w", err)
 	}
 	key.Attestation = keyAtt.Document()
-	keyAtt.Close()
+	if err := keyAtt.Close(); err != nil {
+		return nil, nil, fmt.Errorf("close attestation: %w", err)
+	}
 
 	alreadyExists, err := p.keysTable.Create(ctx, key)
 	if err != nil {

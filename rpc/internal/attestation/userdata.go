@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 	"io"
 	"net/http"
 )
@@ -13,8 +14,12 @@ func generateUserData(r *http.Request, resBody []byte) ([]byte, error) {
 	hasher.Write([]byte(r.Method + " " + r.URL.Path + "\n"))
 
 	var reqBody []byte
+	var err error
 	if r.Body != nil {
-		reqBody, _ = io.ReadAll(r.Body)
+		reqBody, err = io.ReadAll(r.Body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read request body: %w", err)
+		}
 		r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 		hasher.Write(reqBody)
 	}

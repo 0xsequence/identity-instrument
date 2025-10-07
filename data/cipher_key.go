@@ -52,7 +52,9 @@ func (k *CipherKey) Hash() ([]byte, error) {
 	}
 
 	h := sha256.New()
-	h.Write(b)
+	if _, err := h.Write(b); err != nil {
+		return nil, fmt.Errorf("write hash payload: %w", err)
+	}
 	return h.Sum(nil), nil
 }
 

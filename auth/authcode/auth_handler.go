@@ -270,7 +270,9 @@ func generateClientSecretJWT(config *GenerateJWT) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("convert to jwk: %w", err)
 	}
-	jwtKey.Set(jwk.KeyIDKey, config.SigningKey.KeyID)
+	if err := jwtKey.Set(jwk.KeyIDKey, config.SigningKey.KeyID); err != nil {
+		return "", fmt.Errorf("set key id: %w", err)
+	}
 
 	var alg jwa.SignatureAlgorithm
 	switch config.SigningKey.Algorithm {
