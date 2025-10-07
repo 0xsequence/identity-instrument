@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -16,6 +17,7 @@ type Config struct {
 	SES        SESConfig          `toml:"ses"`
 	Database   DatabaseConfig     `toml:"database"`
 	Encryption []EncryptionConfig `toml:"encryption"`
+	RateLimit  RateLimitConfig    `toml:"rate_limit"`
 }
 
 type ServiceConfig struct {
@@ -56,6 +58,12 @@ type EncryptionConfig struct {
 	PoolSize  int      `toml:"pool_size"`
 	Threshold int      `toml:"threshold"`
 	KMSKeys   []string `toml:"kms_keys"`
+}
+
+type RateLimitConfig struct {
+	Enabled    bool          `toml:"enabled"`
+	WindowSize time.Duration `toml:"window_size"`
+	UsageLimit int           `toml:"usage_limit"`
 }
 
 func New() (*Config, error) {
