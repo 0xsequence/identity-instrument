@@ -7,13 +7,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"regexp"
 
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/nitrocontrol/enclave"
 	"github.com/go-chi/chi/v5/middleware"
 )
+
+var nonceRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 // Middleware is an HTTP middleware that issues an attestation document request to the enclave's NSM.
 // The result wrapped in the Attestation type is then set in the context available to subsequent handlers.
@@ -66,11 +68,16 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 
 			var nonce []byte
 			if nonceVal := r.Header.Get("X-Attestation-Nonce"); nonceVal != "" {
-				nonceVal = strings.TrimSpace(nonceVal)
+				fmt.Println("nonceVal", nonceVal, len(nonceVal))
 				if len(nonceVal) > 32 {
 					proto.RespondWithError(w, fmt.Errorf("X-Attestation-Nonce value cannot be longer than 32"))
 					return
 				}
+				if !nonceRegex.MatchString(nonceVal) {
+					proto.RespondWithError(w, fmt.Errorf("X-Attestation-Nonce value contains invalid characters"))
+					return
+				}
+
 				nonce = []byte(nonceVal)
 			}
 
