@@ -14,7 +14,9 @@ jobs:
       - uses: actions/setup-go@v6
         with:
           go-version: stable
-      - name: golangci-lint
+      - name: Ensure version.go exists
+        run: make ensure-version
+      - name: Run linters
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.5
