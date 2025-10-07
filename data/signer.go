@@ -64,7 +64,7 @@ func (s *Signer) DatabaseKey() map[string]types.AttributeValue {
 }
 
 func (s *Signer) GetEncryptedData() EncryptedData[any] {
-	return s.ToAny()
+	return s.EncryptedData.ToAny()
 }
 
 func (s *Signer) SetEncryptedData(data EncryptedData[any]) {

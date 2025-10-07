@@ -29,7 +29,7 @@ func (k *AuthKey) DatabaseKey() map[string]types.AttributeValue {
 }
 
 func (k *AuthKey) GetEncryptedData() EncryptedData[any] {
-	return k.ToAny()
+	return k.EncryptedData.ToAny()
 }
 
 func (k *AuthKey) SetEncryptedData(data EncryptedData[any]) {

@@ -37,7 +37,7 @@ func NewKeyFromPrivateKey(keyType KeyType, privateKey any) (Key, error) {
 		}
 		return Key{
 			KeyType: keyType,
-			Address: ecdsaKey.X.String() + ecdsaKey.Y.String(),
+			Address: ecdsaKey.PublicKey.X.String() + ecdsaKey.PublicKey.Y.String(),
 		}, nil
 	}
 

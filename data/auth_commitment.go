@@ -28,7 +28,7 @@ func (c *AuthCommitment) DatabaseKey() map[string]types.AttributeValue {
 }
 
 func (c *AuthCommitment) GetEncryptedData() EncryptedData[any] {
-	return c.ToAny()
+	return c.EncryptedData.ToAny()
 }
 
 func (c *AuthCommitment) SetEncryptedData(data EncryptedData[any]) {
