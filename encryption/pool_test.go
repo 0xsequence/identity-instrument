@@ -79,7 +79,11 @@ func TestPool_Encrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		cipherKey, privateKey := newCipherKey(t, enc)
 
@@ -125,7 +129,11 @@ func TestPool_Encrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		// 0 is the generation
 		// 4 is the key index (constant due to mocked randomness)
@@ -176,7 +184,11 @@ func TestPool_Encrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		// 0 is the generation
 		// 4 is the key index (constant due to mocked randomness)
@@ -214,7 +226,11 @@ func TestPool_Encrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		keysTable.On("Get", mock.Anything, 0, 4).Return(nil, false, nil)
 		remoteKey1.On("Encrypt", mock.Anything, att, mock.Anything).Return("encryptedShare1", nil)
@@ -253,7 +269,11 @@ func TestPool_Encrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		// 0 is the generation
 		// 4 is the key index (constant due to mocked randomness)
@@ -295,7 +315,11 @@ func TestPool_Encrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		cipherKey, privateKey := newCipherKey(t, enc)
 		shares, err := shamir.Split(privateKey[:], 2, 2)
@@ -354,7 +378,11 @@ func TestPool_Decrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		cipherKey, privateKey := newCipherKey(t, enc)
 
@@ -398,7 +426,11 @@ func TestPool_Decrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		cipherKey, privateKey := newCipherKey(t, enc, func(key *data.CipherKey) {
 			key.EncryptedShares["remoteKey3"] = "encryptedShare3"
@@ -445,7 +477,11 @@ func TestPool_Decrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		cipherKey, privateKey := newCipherKey(t, enc, func(key *data.CipherKey) {
 			key.EncryptedShares["remoteKey3"] = "encryptedShare3"
@@ -502,7 +538,11 @@ func TestPool_Decrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		cipherKey, privateKey := newCipherKey(t, enc)
 
@@ -585,7 +625,11 @@ func TestPool_Decrypt(t *testing.T) {
 
 		att, err := enc.GetAttestation(context.Background(), nil, nil)
 		require.NoError(t, err)
-		defer att.Close()
+		defer func() {
+			if err := att.Close(); err != nil {
+				t.Log("failed to close attestation", err)
+			}
+		}()
 
 		cipherKey, privateKey := newCipherKey(t, enc)
 

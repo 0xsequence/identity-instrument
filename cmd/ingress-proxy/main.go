@@ -56,7 +56,9 @@ func main() {
 	client := &http.Client{Transport: transport}
 
 	log.Println("Listening on " + listenAddress)
-	http.ListenAndServe(listenAddress, handler(client))
+	if err := http.ListenAndServe(listenAddress, handler(client)); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func handler(client *http.Client) http.Handler {
@@ -116,7 +118,11 @@ func proxy(httpClient *http.Client) http.Handler {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
 		}
-		defer res.Body.Close()
+		defer func() {
+			if closeErr := res.Body.Close(); closeErr != nil {
+				log.Println("failed to close response body", closeErr)
+			}
+		}()
 
 		resBody, err := io.ReadAll(res.Body)
 		if err != nil {
@@ -129,7 +135,9 @@ func proxy(httpClient *http.Client) http.Handler {
 
 		copyHeader(w.Header(), res.Header)
 		w.WriteHeader(res.StatusCode)
-		w.Write(resBody)
+		if _, err := w.Write(resBody); err != nil {
+			log.Println("failed to write response body", err)
+		}
 	})
 }
 

@@ -8,7 +8,6 @@ import (
 	"crypto/subtle"
 	"fmt"
 	mathrand "math/rand"
-	"time"
 )
 
 const (
@@ -155,7 +154,6 @@ func Split(secret []byte, parts, threshold int) ([][]byte, error) {
 	}
 
 	// Generate random list of x coordinates
-	mathrand.Seed(time.Now().UnixNano())
 	xCoordinates := mathrand.Perm(255)
 
 	// Allocate the output array, initialize the final byte

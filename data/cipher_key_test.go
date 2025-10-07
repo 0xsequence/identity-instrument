@@ -19,11 +19,11 @@ func TestCipherKey(t *testing.T) {
 	t.Run("maximum possible size is less than 350 KB", func(t *testing.T) {
 		// 256-bit hash size
 		id := [32]byte{}
-		rand.Read(id[:])
+		_, _ = rand.Read(id[:])
 
 		// Attestations are typically no larger than 4 KB. Use 10 KB as a safe margin.
 		att := [10 * 1024]byte{}
-		rand.Read(att[:])
+		_, _ = rand.Read(att[:])
 
 		var (
 			scope           = "@1:"

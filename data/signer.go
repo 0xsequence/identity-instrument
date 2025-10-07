@@ -68,11 +68,7 @@ func (s *Signer) GetEncryptedData() EncryptedData[any] {
 }
 
 func (s *Signer) SetEncryptedData(data EncryptedData[any]) {
-	s.EncryptedData = EncryptedData[*proto.SignerData]{
-		CipherKeyRef:   data.CipherKeyRef,
-		Ciphertext:     data.Ciphertext,
-		CiphertextHash: data.CiphertextHash,
-	}
+	s.EncryptedData = EncryptedData[*proto.SignerData](data)
 }
 
 func (s *Signer) CorrespondsToData(data *proto.SignerData, cryptoKey any) bool {
@@ -144,7 +140,7 @@ func (t *SignerTable) GetByIdentity(ctx context.Context, ident proto.Identity, s
 		Key:       signer.DatabaseKey(),
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("GetItem: %w", err)
+		return nil, false, fmt.Errorf("get item: %w", err)
 	}
 	if len(out.Item) == 0 {
 		return nil, false, nil
@@ -173,7 +169,7 @@ func (t *SignerTable) GetByAddress(ctx context.Context, scope proto.Scope, key p
 		Limit: aws.Int32(1),
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("Query: %w", err)
+		return nil, false, fmt.Errorf("query: %w", err)
 	}
 	if len(out.Items) == 0 || len(out.Items[0]) == 0 {
 		return nil, false, nil
@@ -201,7 +197,7 @@ func (t *SignerTable) Put(ctx context.Context, signer *Signer) error {
 		Item:      av,
 	}
 	if _, err := t.db.PutItem(ctx, input); err != nil {
-		return fmt.Errorf("PutItem: %w", err)
+		return fmt.Errorf("put item: %w", err)
 	}
 	return nil
 }

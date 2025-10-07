@@ -142,7 +142,9 @@ func TestMiddleware(t *testing.T) {
 
 			resp, err := srv.Client().Do(req)
 			require.NoError(t, err)
-			defer resp.Body.Close()
+			defer func() {
+				require.NoError(t, resp.Body.Close())
+			}()
 			body, _ := io.ReadAll(resp.Body)
 
 			require.Equal(t, tt.wantStatus, resp.StatusCode, string(body))

@@ -1,0 +1,7 @@
+version: "2"
+
+linters:
+  settings:
+    staticcheck:
+      checks:
+        - '-QF1008' # `could remove embedded field "..." from selector`

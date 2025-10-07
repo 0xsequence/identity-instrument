@@ -39,7 +39,7 @@ func (p *Provider) Retrieve(ctx context.Context) (aws.Credentials, error) {
 	return *cred, nil
 }
 
-func (p *Provider) getAWSCredential(ctx context.Context) (*aws.Credentials, error) {
+func (p *Provider) getAWSCredential(ctx context.Context) (awsCred *aws.Credentials, err error) {
 	profileName, err := p.getInstanceProfileName(ctx)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,11 @@ func (p *Provider) getAWSCredential(ctx context.Context) (*aws.Credentials, erro
 	if err != nil {
 		return nil, fmt.Errorf("doing HTTP request: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		if closeErr := res.Body.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	if res.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("unexpected status: %s", res.Status)
@@ -83,7 +87,7 @@ func (p *Provider) getAWSCredential(ctx context.Context) (*aws.Credentials, erro
 	}, nil
 }
 
-func (p *Provider) getInstanceProfileName(ctx context.Context) (string, error) {
+func (p *Provider) getInstanceProfileName(ctx context.Context) (name string, err error) {
 	u, err := url.JoinPath(p.baseURL, "latest/meta-data/iam/security-credentials/")
 	if err != nil {
 		return "", err
@@ -98,7 +102,11 @@ func (p *Provider) getInstanceProfileName(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("doing HTTP request: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() {
+		if closeErr := res.Body.Close(); err == nil && closeErr != nil {
+			err = closeErr
+		}
+	}()
 
 	if res.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("unexpected status: %s", res.Status)

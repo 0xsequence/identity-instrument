@@ -52,7 +52,9 @@ func (k *CipherKey) Hash() ([]byte, error) {
 	}
 
 	h := sha256.New()
-	h.Write(b)
+	if _, err := h.Write(b); err != nil {
+		return nil, fmt.Errorf("write hash payload: %w", err)
+	}
 	return h.Sum(nil), nil
 }
 
@@ -92,7 +94,7 @@ func (t *CipherKeyTable) Get(ctx context.Context, generation int, keyIndex int) 
 		Limit: aws.Int32(1),
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("GetItem: %w", err)
+		return nil, false, fmt.Errorf("get item: %w", err)
 	}
 	if len(out.Items) == 0 || len(out.Items[0]) == 0 {
 		return nil, false, nil
@@ -117,7 +119,7 @@ func (t *CipherKeyTable) GetLatestByKeyRef(ctx context.Context, keyRef string, c
 		ConsistentRead:   &consistentRead,
 	})
 	if err != nil {
-		return nil, false, fmt.Errorf("GetItem: %w", err)
+		return nil, false, fmt.Errorf("get item: %w", err)
 	}
 	if len(out.Items) == 0 || len(out.Items[0]) == 0 {
 		return nil, false, nil
@@ -143,7 +145,7 @@ func (t *CipherKeyTable) Create(ctx context.Context, key *CipherKey) (alreadyExi
 		if errors.As(err, &ccf) {
 			return true, nil
 		}
-		return false, fmt.Errorf("PutItem: %w", err)
+		return false, fmt.Errorf("put item: %w", err)
 	}
 	return false, nil
 }
@@ -164,7 +166,7 @@ func (t *CipherKeyTable) ScanInactive(ctx context.Context, cursor *string) ([]*C
 		ExclusiveStartKey: startKey,
 	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("Scan: %w", err)
+		return nil, nil, fmt.Errorf("scan: %w", err)
 	}
 
 	if len(out.Items) > 0 {
@@ -193,7 +195,7 @@ func (t *CipherKeyTable) Delete(ctx context.Context, keyRef string, generation i
 		Key:       key.DatabaseKey(),
 	})
 	if err != nil {
-		return fmt.Errorf("DeleteItem: %w", err)
+		return fmt.Errorf("delete item: %w", err)
 	}
 	return nil
 }
@@ -210,7 +212,7 @@ func (t *CipherKeyTable) Deactivate(ctx context.Context, keyRef string, generati
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("UpdateItem: %w", err)
+		return fmt.Errorf("update item: %w", err)
 	}
 	return nil
 }

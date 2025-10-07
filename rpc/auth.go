@@ -68,7 +68,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		if !found {
 			return "", "", "", proto.ErrInvalidRequest.WithCausef("signer not found")
 		}
-		signer, err = dbSigner.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+		signer, err = dbSigner.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
 			log.Error("decrypt signer data failed", "error", err)
 			return "", "", "", proto.ErrEncryptionError
@@ -86,7 +86,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 			return "", "", "", proto.ErrDatabaseError
 		}
 		if found && dbCommitment != nil {
-			commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+			commitment, err = dbCommitment.Decrypt(ctx, att, s.EncryptionPool)
 			if err != nil {
 				log.Error("decrypt auth commitment failed", "error", err)
 				return "", "", "", proto.ErrEncryptionError
@@ -162,7 +162,7 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		return nil, nil, proto.ErrDatabaseError
 	}
 	if found && dbCommitment != nil {
-		commitment, err = dbCommitment.EncryptedData.Decrypt(ctx, att, s.EncryptionPool)
+		commitment, err = dbCommitment.Decrypt(ctx, att, s.EncryptionPool)
 		if err != nil {
 			log.Error("decrypt auth commitment failed", "error", err)
 			return nil, nil, proto.ErrEncryptionError
@@ -326,7 +326,15 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		if err != nil {
 			return "", fmt.Errorf("get ecosystem: %w", err)
 		}
-		secretName := "oauth/" + ecosystem + "/" + encodeValueForSecretName(iss) + "/" + encodeValueForSecretName(aud)
+		issuer, err := encodeValueForSecretName(iss)
+		if err != nil {
+			return "", fmt.Errorf("encode issuer for secret name: %w", err)
+		}
+		audience, err := encodeValueForSecretName(aud)
+		if err != nil {
+			return "", fmt.Errorf("encode audience for secret name: %w", err)
+		}
+		secretName := "oauth/" + ecosystem + "/" + issuer + "/" + audience
 
 		secret, err := s.Secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 			SecretId: aws.String(secretName),
@@ -367,7 +375,7 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 	return handlers, nil
 }
 
-func encodeValueForSecretName(value string) string {
+func encodeValueForSecretName(value string) (string, error) {
 	if strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
 		value = strings.TrimPrefix(value, "https://")
 		value = strings.TrimPrefix(value, "http://")
@@ -376,10 +384,14 @@ func encodeValueForSecretName(value string) string {
 	var result strings.Builder
 	for _, char := range value {
 		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') || (char >= '0' && char <= '9') || char == '.' {
-			result.WriteRune(char)
+			if _, err := result.WriteRune(char); err != nil {
+				return "", fmt.Errorf("write rune: %w", err)
+			}
 		} else {
-			result.WriteRune('-')
+			if _, err := result.WriteRune('-'); err != nil {
+				return "", fmt.Errorf("write rune: %w", err)
+			}
 		}
 	}
-	return result.String()
+	return result.String(), nil
 }

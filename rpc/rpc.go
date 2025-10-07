@@ -73,8 +73,11 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 	}
 
 	if cfg.Endpoints.AWSEndpoint != "" {
+		//nolint:staticcheck // TODO: this is deprecated, upgrade to EndpointResolverV2
 		options = append(options, awsconfig.WithEndpointResolverWithOptions(
+			//nolint:staticcheck // TODO: this is deprecated, upgrade to EndpointResolverV2
 			aws.EndpointResolverWithOptionsFunc(func(service, region string, options ...interface{}) (aws.Endpoint, error) {
+				//nolint:staticcheck // TODO: this is deprecated, upgrade to EndpointResolverV2
 				return aws.Endpoint{URL: cfg.Endpoints.AWSEndpoint}, nil
 			}),
 		), awsconfig.WithCredentialsProvider(&awscreds.StaticProvider{
@@ -195,7 +198,9 @@ func (s *RPC) Stop(timeoutCtx context.Context) {
 	atomic.StoreInt32(&s.running, 2)
 
 	s.Log.Info().Str("op", "stop").Msg("-> rpc: stopping..")
-	s.Server.Shutdown(timeoutCtx)
+	if err := s.Server.Shutdown(timeoutCtx); err != nil {
+		s.Log.Error().Str("op", "stop").Err(err).Msg("-> rpc: failed to shutdown")
+	}
 	s.Log.Info().Str("op", "stop").Msg("-> rpc: stopped.")
 }
 
