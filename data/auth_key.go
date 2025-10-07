@@ -6,6 +6,7 @@ import (
 	"time"
 
 	proto "github.com/0xsequence/identity-instrument/proto"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -17,6 +18,9 @@ type AuthKey struct {
 	ExpiresAt time.Time   `dynamodbav:"ExpiresAt,unixtime"`
 
 	Key *proto.Key `dynamodbav:"-"`
+
+	UsageWindowStart   time.Time `dynamodbav:"UsageWindowStart"`
+	UsageCountInWindow int       `dynamodbav:"UsageCountInWindow"`
 
 	EncryptedData[*proto.AuthKeyData]
 }
@@ -110,6 +114,39 @@ func (t *AuthKeyTable) Put(ctx context.Context, key *AuthKey) error {
 	}
 	if _, err := t.db.PutItem(ctx, input); err != nil {
 		return fmt.Errorf("PutItem: %w", err)
+	}
+	return nil
+}
+
+func (t *AuthKeyTable) ResetUsageWindow(ctx context.Context, key *AuthKey, windowStart time.Time) error {
+	input := &dynamodb.UpdateItemInput{
+		TableName:        &t.tableARN,
+		Key:              key.DatabaseKey(),
+		UpdateExpression: aws.String("SET UsageCountInWindow = :initialCount, UsageWindowStart = :windowStart"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":windowStart":  &types.AttributeValueMemberS{Value: windowStart.Format(time.RFC3339Nano)},
+			":initialCount": &types.AttributeValueMemberN{Value: "1"},
+		},
+	}
+	if _, err := t.db.UpdateItem(ctx, input); err != nil {
+		return fmt.Errorf("UpdateItem: %w", err)
+	}
+	return nil
+}
+
+func (t *AuthKeyTable) IncrementUsageCount(ctx context.Context, key *AuthKey) error {
+	input := &dynamodb.UpdateItemInput{
+		TableName:           &t.tableARN,
+		Key:                 key.DatabaseKey(),
+		UpdateExpression:    aws.String("ADD UsageCountInWindow :increment"),
+		ConditionExpression: aws.String("UsageWindowStart = :windowStart"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":windowStart": &types.AttributeValueMemberS{Value: key.UsageWindowStart.Format(time.RFC3339Nano)},
+			":increment":   &types.AttributeValueMemberN{Value: "1"},
+		},
+	}
+	if _, err := t.db.UpdateItem(ctx, input); err != nil {
+		return fmt.Errorf("UpdateItem: %w", err)
 	}
 	return nil
 }
