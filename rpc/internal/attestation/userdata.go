@@ -9,6 +9,16 @@ import (
 	"net/http"
 )
 
+type userData struct {
+	Prefix  string
+	Version int
+	Hash    []byte
+}
+
+func (u *userData) String() string {
+	return fmt.Sprintf("%s/%d:%s", u.Prefix, u.Version, base64.StdEncoding.EncodeToString(u.Hash))
+}
+
 func generateUserData(r *http.Request, resBody []byte) ([]byte, error) {
 	hasher := sha256.New()
 	hasher.Write([]byte(r.Method + " " + r.URL.Path + "\n"))
@@ -27,6 +37,10 @@ func generateUserData(r *http.Request, resBody []byte) ([]byte, error) {
 	hasher.Write(resBody)
 	hash := hasher.Sum(nil)
 
-	userData := "Sequence/1:" + base64.StdEncoding.EncodeToString(hash)
-	return []byte(userData), nil
+	userData := &userData{
+		Prefix:  "Sequence",
+		Version: 1,
+		Hash:    hash,
+	}
+	return []byte(userData.String()), nil
 }
