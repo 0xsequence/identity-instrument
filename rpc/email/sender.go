@@ -32,8 +32,11 @@ func NewSender(manager builder.EcosystemManager, awsCfg aws.Config, cfg config.S
 }
 
 func (s *Sender) NormalizeRecipient(recipient string) (string, error) {
-	// TODO: Validate email address
-	return Normalize(recipient), nil
+	normalized := Normalize(recipient)
+	if err := Validate(normalized); err != nil {
+		return "", fmt.Errorf("invalid email address: %w", err)
+	}
+	return normalized, nil
 }
 
 func (s *Sender) SendOTP(ctx context.Context, scope proto.Scope, recipient string, code string) (err error) {
