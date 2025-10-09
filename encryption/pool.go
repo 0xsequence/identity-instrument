@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/0xsequence/identity-instrument/data"
@@ -107,12 +106,16 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 		return "", "", fmt.Errorf("encrypt: %w", err)
 	}
 
-	ciphertextParts := []string{
-		"v1",
-		base64.RawURLEncoding.EncodeToString(encrypted),
+	decoded := Ciphertext{
+		Version:       1,
+		EncryptedData: encrypted,
 	}
 
-	return key.KeyRef, strings.Join(ciphertextParts, "."), nil
+	encoded, err := decoded.Encode()
+	if err != nil {
+		return "", "", fmt.Errorf("encode ciphertext: %w", err)
+	}
+	return key.KeyRef, encoded, nil
 }
 
 // Decrypt decrypts the ciphertext using the latest cipher key from the Pool referenced by the keyRef.
@@ -126,17 +129,9 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 		span.End()
 	}()
 
-	parts := strings.Split(ciphertext, ".")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid ciphertext")
-	}
-	if parts[0] != "v1" {
-		return nil, fmt.Errorf("unsupported ciphertext version")
-	}
-
-	encrypted, err := base64.RawURLEncoding.DecodeString(parts[1])
+	decoded, err := DecodeCiphertext(ciphertext)
 	if err != nil {
-		return nil, fmt.Errorf("decode encrypted data: %w", err)
+		return nil, fmt.Errorf("decode ciphertext: %w", err)
 	}
 
 	key, found, err := p.keysTable.GetLatestByKeyRef(ctx, keyRef, false)
@@ -168,7 +163,7 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 		return nil, fmt.Errorf("combine shares: %w", err)
 	}
 
-	decrypted, err := aescbc.Decrypt(privateKey, encrypted)
+	decrypted, err := aescbc.Decrypt(privateKey, decoded.EncryptedData)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt: %w", err)
 	}
