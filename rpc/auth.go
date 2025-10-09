@@ -387,7 +387,7 @@ type secretName struct {
 }
 
 func (s *secretName) String() string {
-	return strings.Join([]string{s.Ecosystem, s.Type, s.Issuer, s.Audience}, "/")
+	return strings.Join([]string{s.Type, s.Ecosystem, s.Issuer, s.Audience}, "/")
 }
 
 func encodeValueForSecretName(value string) (string, error) {
