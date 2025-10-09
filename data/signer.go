@@ -17,12 +17,22 @@ type ScopedKeyType struct {
 	KeyType proto.KeyType
 }
 
-func (s ScopedKeyType) String() string {
-	return fmt.Sprintf("%s/%s", s.Scope, s.KeyType)
+func (s ScopedKeyType) Encode() (string, error) {
+	if !s.Scope.IsValid() || strings.Contains(string(s.Scope), "/") {
+		return "", fmt.Errorf("invalid scope: %s", s.Scope)
+	}
+	if strings.Contains(string(s.KeyType), "/") {
+		return "", fmt.Errorf("invalid key type: %s", s.KeyType)
+	}
+	return fmt.Sprintf("%s/%s", s.Scope, s.KeyType), nil
 }
 
 func (s ScopedKeyType) MarshalDynamoDBAttributeValue() (types.AttributeValue, error) {
-	return &types.AttributeValueMemberS{Value: s.String()}, nil
+	encoded, err := s.Encode()
+	if err != nil {
+		return nil, fmt.Errorf("encode: %w", err)
+	}
+	return &types.AttributeValueMemberS{Value: encoded}, nil
 }
 
 func (s *ScopedKeyType) UnmarshalDynamoDBAttributeValue(value types.AttributeValue) error {
@@ -56,11 +66,15 @@ func (s *Signer) Key() proto.Key {
 	}
 }
 
-func (s *Signer) DatabaseKey() map[string]types.AttributeValue {
+func (s *Signer) DatabaseKey() (map[string]types.AttributeValue, error) {
+	scopedKeyType, err := s.ScopedKeyType.Encode()
+	if err != nil {
+		return nil, fmt.Errorf("encode scoped key type: %w", err)
+	}
 	return map[string]types.AttributeValue{
 		"IdentityHash":  &types.AttributeValueMemberS{Value: s.IdentityHash},
-		"ScopedKeyType": &types.AttributeValueMemberS{Value: s.ScopedKeyType.String()},
-	}
+		"ScopedKeyType": &types.AttributeValueMemberS{Value: scopedKeyType},
+	}, nil
 }
 
 func (s *Signer) GetEncryptedData() EncryptedData[any] {
@@ -78,7 +92,11 @@ func (s *Signer) CorrespondsToData(data *proto.SignerData, cryptoKey any) bool {
 	if s.ScopedKeyType.KeyType != data.KeyType {
 		return false
 	}
-	if s.IdentityHash != data.Identity.Hash() {
+	identHash, err := data.Identity.Hash()
+	if err != nil {
+		return false
+	}
+	if s.IdentityHash != identHash {
 		return false
 	}
 	key, err := proto.NewKeyFromPrivateKey(data.KeyType, cryptoKey)
@@ -130,14 +148,21 @@ func (t *SignerTable) TableARN() string {
 }
 
 func (t *SignerTable) GetByIdentity(ctx context.Context, ident proto.Identity, scope proto.Scope, keyType proto.KeyType) (*Signer, bool, error) {
+	identHash, err := ident.Hash()
+	if err != nil {
+		return nil, false, fmt.Errorf("hash identity: %w", err)
+	}
 	signer := Signer{
-		IdentityHash:  ident.Hash(),
+		IdentityHash:  identHash,
 		ScopedKeyType: ScopedKeyType{Scope: scope, KeyType: keyType},
 	}
-
+	dbKey, err := signer.DatabaseKey()
+	if err != nil {
+		return nil, false, fmt.Errorf("encode database key: %w", err)
+	}
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
-		Key:       signer.DatabaseKey(),
+		Key:       dbKey,
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("get item: %w", err)
@@ -154,9 +179,12 @@ func (t *SignerTable) GetByIdentity(ctx context.Context, ident proto.Identity, s
 
 func (t *SignerTable) GetByAddress(ctx context.Context, scope proto.Scope, key proto.Key) (*Signer, bool, error) {
 	var signer Signer
-	scopedKeyType := ScopedKeyType{
+	scopedKeyType, err := ScopedKeyType{
 		Scope:   scope,
 		KeyType: key.KeyType,
+	}.Encode()
+	if err != nil {
+		return nil, false, fmt.Errorf("encode scoped key type: %w", err)
 	}
 	out, err := t.db.Query(ctx, &dynamodb.QueryInput{
 		TableName:              &t.tableARN,
@@ -164,7 +192,7 @@ func (t *SignerTable) GetByAddress(ctx context.Context, scope proto.Scope, key p
 		KeyConditionExpression: aws.String("Address = :address and ScopedKeyType = :scopedKeyType"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":address":       &types.AttributeValueMemberS{Value: strings.ToLower(key.Address)},
-			":scopedKeyType": &types.AttributeValueMemberS{Value: scopedKeyType.String()},
+			":scopedKeyType": &types.AttributeValueMemberS{Value: scopedKeyType},
 		},
 		Limit: aws.Int32(1),
 	})
@@ -180,13 +208,16 @@ func (t *SignerTable) GetByAddress(ctx context.Context, scope proto.Scope, key p
 	return &signer, true, nil
 }
 
-func (t *SignerTable) Put(ctx context.Context, signer *Signer) error {
+func (t *SignerTable) Put(ctx context.Context, signer *Signer) (err error) {
 	if signer.Identity == nil {
 		return fmt.Errorf("identity is required")
 	}
 
 	signer.Address = strings.ToLower(signer.Address)
-	signer.IdentityHash = signer.Identity.Hash()
+	signer.IdentityHash, err = signer.Identity.Hash()
+	if err != nil {
+		return fmt.Errorf("hash identity: %w", err)
+	}
 
 	av, err := attributevalue.MarshalMap(signer)
 	if err != nil {
