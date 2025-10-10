@@ -91,8 +91,8 @@ func TestScope_FromString(t *testing.T) {
 		},
 		{
 			name:     "scope with maximum length name",
-			input:    "@1:" + string(make([]byte, 95)), // @1: + 95 chars = 98 total, under 100 limit
-			expected: Scope("@1:" + string(make([]byte, 95))),
+			input:    "@1:" + makeString(97),
+			expected: Scope("@1:" + makeString(97)),
 		},
 	}
 
@@ -150,13 +150,13 @@ func TestScope_IsValid(t *testing.T) {
 		},
 		{
 			name:     "valid scope with maximum length",
-			scope:    Scope("@1:" + string(make([]byte, 95))), // @1: + 95 chars = 98 total
-			expected: false,                                   // null bytes don't match regex
+			scope:    Scope("@1:" + makeString(96)),
+			expected: true,
 		},
 		{
 			name:     "valid scope with exactly 100 characters",
-			scope:    Scope("@1:" + string(make([]byte, 96))), // @1: + 96 chars = 100 total
-			expected: false,                                   // null bytes don't match regex
+			scope:    Scope("@1:" + makeString(97)),
+			expected: true,
 		},
 		{
 			name:     "invalid scope with zero ecosystem ID",
@@ -247,7 +247,7 @@ func TestScope_IsValid(t *testing.T) {
 		},
 		{
 			name:     "invalid scope - too long (over 100 characters)",
-			scope:    Scope("@1:" + string(make([]byte, 97))), // @1: + 97 chars = 101 total
+			scope:    Scope("@1:" + makeString(98)),
 			expected: false,
 		},
 		{
@@ -352,7 +352,7 @@ func TestScope_Ecosystem(t *testing.T) {
 		},
 		{
 			name:          "invalid scope - too long",
-			scope:         Scope("@1:" + string(make([]byte, 97))),
+			scope:         Scope("@1:" + makeString(98)),
 			expectedError: true,
 			errorContains: "invalid scope:",
 		},
@@ -460,23 +460,18 @@ func TestScope_EdgeCases(t *testing.T) {
 	}{
 		{
 			name:     "scope with maximum valid length",
-			scope:    Scope("@1:" + string(make([]byte, 95))), // @1: + 95 chars = 98 total
-			expected: false,                                   // null bytes don't match regex
+			scope:    Scope("@1:" + makeString(96)),
+			expected: true,
 		},
 		{
 			name:     "scope with exactly 100 characters",
-			scope:    Scope("@1:" + string(make([]byte, 96))), // @1: + 96 chars = 100 total
-			expected: false,                                   // null bytes don't match regex
+			scope:    Scope("@1:" + makeString(97)),
+			expected: true,
 		},
 		{
 			name:     "scope with 101 characters (too long)",
-			scope:    Scope("@1:" + string(make([]byte, 97))), // @1: + 97 chars = 101 total
+			scope:    Scope("@1:" + makeString(98)),
 			expected: false,
-		},
-		{
-			name:     "scope with valid characters at length boundary",
-			scope:    Scope("@1:" + string(make([]byte, 95))), // @1: + 95 chars = 98 total
-			expected: false,                                   // null bytes don't match regex
 		},
 		{
 			name:     "scope with very long ecosystem ID",
@@ -679,22 +674,22 @@ func TestScope_LengthBoundaries(t *testing.T) {
 	}{
 		{
 			name:     "scope with 99 characters",
-			scope:    Scope("@1:" + string(make([]byte, 95))), // @1: + 95 chars = 98 total
-			expected: false,                                   // null bytes don't match regex
+			scope:    Scope("@1:" + makeString(96)),
+			expected: true,
 		},
 		{
 			name:     "scope with 100 characters",
-			scope:    Scope("@1:" + string(make([]byte, 96))), // @1: + 96 chars = 100 total
-			expected: false,                                   // null bytes don't match regex
+			scope:    Scope("@1:" + makeString(97)),
+			expected: true,
 		},
 		{
 			name:     "scope with 101 characters",
-			scope:    Scope("@1:" + string(make([]byte, 97))), // @1: + 97 chars = 101 total
+			scope:    Scope("@1:" + makeString(98)),
 			expected: false,
 		},
 		{
 			name:     "scope with 102 characters",
-			scope:    Scope("@1:" + string(make([]byte, 98))), // @1: + 98 chars = 102 total
+			scope:    Scope("@1:" + makeString(99)),
 			expected: false,
 		},
 		{
@@ -823,4 +818,12 @@ func BenchmarkScope_IsValid_Ecosystem_Roundtrip(b *testing.B) {
 			_, _ = scope.Ecosystem()
 		}
 	}
+}
+
+func makeString(n int) string {
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = 'a'
+	}
+	return string(b)
 }
