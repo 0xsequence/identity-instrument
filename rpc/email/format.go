@@ -14,10 +14,10 @@ func Normalize(email string) string {
 
 func Validate(email string) error {
 	if len(email) > 254 {
-		return fmt.Errorf("too long")
+		return fmt.Errorf("email too long")
 	}
 	if !emailRegex.MatchString(email) {
-		return fmt.Errorf("incorrect format")
+		return fmt.Errorf("incorrect email format")
 	}
 	return nil
 }
