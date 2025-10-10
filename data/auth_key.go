@@ -25,11 +25,11 @@ type AuthKey struct {
 	EncryptedData[*proto.AuthKeyData]
 }
 
-func (k *AuthKey) DatabaseKey() map[string]types.AttributeValue {
+func (k *AuthKey) DatabaseKey() (map[string]types.AttributeValue, error) {
 	return map[string]types.AttributeValue{
 		"Scope":   &types.AttributeValueMemberS{Value: k.Scope.String()},
 		"KeyHash": &types.AttributeValueMemberS{Value: k.KeyHash},
-	}
+	}, nil
 }
 
 func (k *AuthKey) GetEncryptedData() EncryptedData[any] {
@@ -79,10 +79,14 @@ func (t *AuthKeyTable) TableARN() string {
 
 func (t *AuthKeyTable) Get(ctx context.Context, scope proto.Scope, key proto.Key) (*AuthKey, bool, error) {
 	authKey := AuthKey{Scope: scope, KeyHash: key.Hash()}
+	dbKey, err := authKey.DatabaseKey()
+	if err != nil {
+		return nil, false, fmt.Errorf("encode database key: %w", err)
+	}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
-		Key:       authKey.DatabaseKey(),
+		Key:       dbKey,
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("get item: %w", err)
@@ -115,9 +119,13 @@ func (t *AuthKeyTable) Put(ctx context.Context, key *AuthKey) error {
 }
 
 func (t *AuthKeyTable) ResetUsageWindow(ctx context.Context, key *AuthKey, windowStart time.Time) error {
+	dbKey, err := key.DatabaseKey()
+	if err != nil {
+		return fmt.Errorf("encode database key: %w", err)
+	}
 	input := &dynamodb.UpdateItemInput{
 		TableName:        &t.tableARN,
-		Key:              key.DatabaseKey(),
+		Key:              dbKey,
 		UpdateExpression: aws.String("SET UsageCountInWindow = :initialCount, UsageWindowStart = :windowStart"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":windowStart":  &types.AttributeValueMemberS{Value: windowStart.Format(time.RFC3339Nano)},
@@ -131,9 +139,13 @@ func (t *AuthKeyTable) ResetUsageWindow(ctx context.Context, key *AuthKey, windo
 }
 
 func (t *AuthKeyTable) IncrementUsageCount(ctx context.Context, key *AuthKey) error {
+	dbKey, err := key.DatabaseKey()
+	if err != nil {
+		return fmt.Errorf("encode database key: %w", err)
+	}
 	input := &dynamodb.UpdateItemInput{
 		TableName:           &t.tableARN,
-		Key:                 key.DatabaseKey(),
+		Key:                 dbKey,
 		UpdateExpression:    aws.String("ADD UsageCountInWindow :increment"),
 		ConditionExpression: aws.String("UsageWindowStart = :windowStart"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{

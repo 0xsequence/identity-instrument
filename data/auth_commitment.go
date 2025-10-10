@@ -21,10 +21,10 @@ type AuthCommitment struct {
 	EncryptedData[*proto.AuthCommitmentData]
 }
 
-func (c *AuthCommitment) DatabaseKey() map[string]types.AttributeValue {
+func (c *AuthCommitment) DatabaseKey() (map[string]types.AttributeValue, error) {
 	return map[string]types.AttributeValue{
 		"ID": &types.AttributeValueMemberS{Value: c.ID},
-	}
+	}, nil
 }
 
 func (c *AuthCommitment) GetEncryptedData() EncryptedData[any] {
@@ -53,8 +53,18 @@ func (c *AuthCommitment) CorrespondsTo(data *proto.AuthCommitmentData) bool {
 	}
 	if c.AuthID != nil && *c.AuthID != handleAuthID && *c.AuthID != signerAuthID {
 		return false
-	} else if c.ID != "" && c.ID != handleAuthID.Hash() && c.ID != signerAuthID.Hash() {
-		return false
+	} else if c.ID != "" {
+		handleHash, err := handleAuthID.Hash()
+		if err != nil {
+			return false
+		}
+		signerHash, err := signerAuthID.Hash()
+		if err != nil {
+			return false
+		}
+		if c.ID != handleHash && c.ID != signerHash {
+			return false
+		}
 	}
 	if c.ExpiresAt.Unix() != data.Expiry.Unix() {
 		return false
@@ -87,11 +97,20 @@ func (t *AuthCommitmentTable) TableARN() string {
 }
 
 func (t *AuthCommitmentTable) Get(ctx context.Context, authID proto.AuthID) (*AuthCommitment, bool, error) {
-	commitment := AuthCommitment{ID: authID.Hash()}
+	hash, err := authID.Hash()
+	if err != nil {
+		return nil, false, fmt.Errorf("hash auth ID: %w", err)
+	}
+
+	commitment := AuthCommitment{ID: hash}
+	dbKey, err := commitment.DatabaseKey()
+	if err != nil {
+		return nil, false, fmt.Errorf("encode database key: %w", err)
+	}
 
 	out, err := t.db.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &t.tableARN,
-		Key:       commitment.DatabaseKey(),
+		Key:       dbKey,
 	})
 	if err != nil {
 		return nil, false, fmt.Errorf("get item: %w", err)
@@ -107,7 +126,11 @@ func (t *AuthCommitmentTable) Get(ctx context.Context, authID proto.AuthID) (*Au
 }
 
 func (t *AuthCommitmentTable) Put(ctx context.Context, commitment *AuthCommitment) error {
-	commitment.ID = commitment.AuthID.Hash()
+	var err error
+	commitment.ID, err = commitment.AuthID.Hash()
+	if err != nil {
+		return fmt.Errorf("hash auth ID: %w", err)
+	}
 
 	av, err := attributevalue.MarshalMap(commitment)
 	if err != nil {

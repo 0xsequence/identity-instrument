@@ -5,7 +5,7 @@ import (
 	"regexp"
 )
 
-var scopeRegex = regexp.MustCompile(`^@([0-9]+)(:[a-zA-Z0-9-_]+)?$`)
+var scopeRegex = regexp.MustCompile(`^@([1-9][0-9]*)(:[a-zA-Z0-9-_]+)?$`)
 
 type Scope string
 

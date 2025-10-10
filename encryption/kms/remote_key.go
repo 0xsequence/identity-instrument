@@ -2,9 +2,7 @@ package kms
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
-	"strings"
 
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/nitrocontrol/aescbc"
@@ -42,11 +40,16 @@ func (k *RemoteKey) Encrypt(ctx context.Context, att *enclave.Attestation, plain
 		return "", fmt.Errorf("encrypt: %w", err)
 	}
 
-	ciphertextParts := []string{
-		base64.RawURLEncoding.EncodeToString(dataKey.Ciphertext),
-		base64.RawURLEncoding.EncodeToString(encrypted),
+	ciphertext := Ciphertext{
+		EncryptedKey:  dataKey.Ciphertext,
+		EncryptedData: encrypted,
 	}
-	return strings.Join(ciphertextParts, "."), nil
+
+	encoded, err := ciphertext.Encode()
+	if err != nil {
+		return "", fmt.Errorf("encode ciphertext: %w", err)
+	}
+	return encoded, nil
 }
 
 func (k *RemoteKey) Decrypt(ctx context.Context, att *enclave.Attestation, ciphertext string) (_ []byte, err error) {
@@ -56,27 +59,17 @@ func (k *RemoteKey) Decrypt(ctx context.Context, att *enclave.Attestation, ciphe
 		span.End()
 	}()
 
-	parts := strings.Split(ciphertext, ".")
-	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid ciphertext")
-	}
-
-	dataKeyCiphertext, err := base64.RawURLEncoding.DecodeString(parts[0])
+	decoded, err := DecodeCiphertext(ciphertext)
 	if err != nil {
-		return nil, fmt.Errorf("decode data key ciphertext: %w", err)
+		return nil, fmt.Errorf("decode ciphertext: %w", err)
 	}
 
-	encrypted, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, fmt.Errorf("decode encrypted data: %w", err)
-	}
-
-	dataKey, err := att.Decrypt(ctx, dataKeyCiphertext, []string{k.keyARN})
+	dataKey, err := att.Decrypt(ctx, decoded.EncryptedKey, []string{k.keyARN})
 	if err != nil {
 		return nil, fmt.Errorf("decrypt data key: %w", err)
 	}
 
-	plaintext, err := aescbc.Decrypt(dataKey, encrypted)
+	plaintext, err := aescbc.Decrypt(dataKey, decoded.EncryptedData)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt: %w", err)
 	}

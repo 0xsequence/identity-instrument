@@ -147,9 +147,13 @@ func (t *EncryptedDataTable[T]) ListByCipherKeyRef(ctx context.Context, keyRef s
 // UpdateEncryptedData updates the encrypted data for a record in the table.
 func (t *EncryptedDataTable[T]) UpdateEncryptedData(ctx context.Context, record T) error {
 	ed := record.GetEncryptedData()
+	dbKey, err := record.DatabaseKey()
+	if err != nil {
+		return fmt.Errorf("encode database key: %w", err)
+	}
 	input := &dynamodb.UpdateItemInput{
 		TableName:        &t.tableARN,
-		Key:              record.DatabaseKey(),
+		Key:              dbKey,
 		UpdateExpression: aws.String("SET CipherKeyRef = :cipherKeyRef, Ciphertext = :ciphertext, CiphertextHash = :ciphertextHash"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":cipherKeyRef":   &types.AttributeValueMemberS{Value: ed.CipherKeyRef},

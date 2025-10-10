@@ -96,7 +96,7 @@ func TestRefreshEncryptedData(t *testing.T) {
 
 		signer := &data.Signer{
 			ScopedKeyType: data.ScopedKeyType{
-				Scope:   proto.Scope("test"),
+				Scope:   proto.Scope("@1:test"),
 				KeyType: proto.KeyType_Ethereum_Secp256k1,
 			},
 			Address:       crypto.PubkeyToAddress(wallet.PublicKey).Hex(),
@@ -170,12 +170,12 @@ func TestCleanupUnusedCipherKeys(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		err := svc.Signers.Put(context.Background(), &data.Signer{
 			ScopedKeyType: data.ScopedKeyType{
-				Scope:   proto.Scope("cleanup" + strconv.Itoa(i)),
+				Scope:   proto.Scope("@" + strconv.Itoa(i+1) + ":cleanup"),
 				KeyType: proto.KeyType_Ethereum_Secp256k1,
 			},
 			Identity: &proto.Identity{
 				Type:    proto.IdentityType_Email,
-				Subject: "cleanup" + strconv.Itoa(i) + "@test.com",
+				Subject: "cleanup" + strconv.Itoa(i+1) + "@test.com",
 			},
 			Address: "0x1234567890123456789012345678901234567890",
 			EncryptedData: data.EncryptedData[*proto.SignerData]{
