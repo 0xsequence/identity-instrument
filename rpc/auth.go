@@ -334,10 +334,14 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		if err != nil {
 			return "", fmt.Errorf("encode audience for secret name: %w", err)
 		}
-		secretName := "oauth/" + ecosystem + "/" + issuer + "/" + audience
-
+		name := &secretName{
+			Ecosystem: ecosystem,
+			Type:      "oauth",
+			Issuer:    issuer,
+			Audience:  audience,
+		}
 		secret, err := s.Secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
-			SecretId: aws.String(secretName),
+			SecretId: aws.String(name.String()),
 		})
 		if err != nil {
 			return "", fmt.Errorf("get secret: %w", err)
@@ -373,6 +377,17 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		proto.AuthMode_OTP:          o11y.NewTracedAuthHandler("otp.AuthProvider", otpHandler),
 	}
 	return handlers, nil
+}
+
+type secretName struct {
+	Ecosystem string
+	Type      string
+	Issuer    string
+	Audience  string
+}
+
+func (s *secretName) String() string {
+	return strings.Join([]string{s.Type, s.Ecosystem, s.Issuer, s.Audience}, "/")
 }
 
 func encodeValueForSecretName(value string) (string, error) {
