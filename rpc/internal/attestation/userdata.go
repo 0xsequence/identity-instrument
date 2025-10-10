@@ -9,6 +9,11 @@ import (
 	"net/http"
 )
 
+const (
+	_UserDataPrefix  = "Sequence"
+	_UserDataVersion = 1
+)
+
 type userData struct {
 	Prefix  string
 	Version int
@@ -38,8 +43,8 @@ func generateUserData(r *http.Request, resBody []byte) ([]byte, error) {
 	hash := hasher.Sum(nil)
 
 	userData := &userData{
-		Prefix:  "Sequence",
-		Version: 1,
+		Prefix:  _UserDataPrefix,
+		Version: _UserDataVersion,
 		Hash:    hash,
 	}
 	return []byte(userData.String()), nil
