@@ -88,7 +88,9 @@ func handler(client *http.Client) http.Handler {
 
 func proxy(httpClient *http.Client) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		url := "http://" + r.Host + r.URL.String()
+		r.URL.Host = r.Host
+		r.URL.Scheme = "http"
+
 		reqBody, err := io.ReadAll(r.Body)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
@@ -103,7 +105,7 @@ func proxy(httpClient *http.Client) http.Handler {
 			return
 		}
 
-		clientReq, err := http.NewRequest(r.Method, url, bytes.NewBuffer(reqBody))
+		clientReq, err := http.NewRequest(r.Method, r.URL.String(), bytes.NewBuffer(reqBody))
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
 			return
