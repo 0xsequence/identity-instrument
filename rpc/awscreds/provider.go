@@ -5,25 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/ec2/imds"
 )
-
-type HTTPClient interface {
-	Do(*http.Request) (*http.Response, error)
-}
 
 // Provider implements aws.CredentialsProvider.
 type Provider struct {
 	baseURL string
-	client  HTTPClient
+	client  *imds.Client
 }
 
 // NewProvider returns a new Provider using the given HTTPClient.
-func NewProvider(client HTTPClient, baseURL string) *Provider {
+func NewProvider(httpClient imds.HTTPClient, baseURL string) *Provider {
+	client := imds.New(imds.Options{
+		HTTPClient:     httpClient,
+		Endpoint:       baseURL,
+		EnableFallback: aws.FalseTernary, // disable fallback to IMDSv1
+	})
 	return &Provider{
 		baseURL: baseURL,
 		client:  client,
@@ -45,28 +45,11 @@ func (p *Provider) getAWSCredential(ctx context.Context) (awsCred *aws.Credentia
 		return nil, err
 	}
 
-	u, err := url.JoinPath(p.baseURL, "latest/meta-data/iam/security-credentials", profileName)
+	res, err := p.client.GetMetadata(ctx, &imds.GetMetadataInput{
+		Path: "iam/security-credentials/" + profileName,
+	})
 	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest(http.MethodGet, u, nil)
-	if err != nil {
-		return nil, fmt.Errorf("creating request: %w", err)
-	}
-
-	res, err := p.client.Do(req.WithContext(ctx))
-	if err != nil {
-		return nil, fmt.Errorf("doing HTTP request: %w", err)
-	}
-	defer func() {
-		if closeErr := res.Body.Close(); err == nil && closeErr != nil {
-			err = closeErr
-		}
-	}()
-
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status: %s", res.Status)
+		return nil, fmt.Errorf("getting metadata: %w", err)
 	}
 
 	var cred struct {
@@ -74,7 +57,7 @@ func (p *Provider) getAWSCredential(ctx context.Context) (awsCred *aws.Credentia
 		SecretAccessKey string `json:"SecretAccessKey"`
 		Token           string `json:"Token"`
 	}
-	if err := json.NewDecoder(res.Body).Decode(&cred); err != nil {
+	if err := json.NewDecoder(res.Content).Decode(&cred); err != nil {
 		return nil, fmt.Errorf("decoding response: %w", err)
 	}
 
@@ -88,33 +71,16 @@ func (p *Provider) getAWSCredential(ctx context.Context) (awsCred *aws.Credentia
 }
 
 func (p *Provider) getInstanceProfileName(ctx context.Context) (name string, err error) {
-	u, err := url.JoinPath(p.baseURL, "latest/meta-data/iam/security-credentials/")
+	res, err := p.client.GetMetadata(ctx, &imds.GetMetadataInput{
+		Path: "iam/security-credentials/",
+	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("getting metadata: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	content, err := io.ReadAll(res.Content)
 	if err != nil {
-		return "", fmt.Errorf("creating request: %w", err)
+		return "", fmt.Errorf("reading response: %w", err)
 	}
-
-	res, err := p.client.Do(req.WithContext(ctx))
-	if err != nil {
-		return "", fmt.Errorf("doing HTTP request: %w", err)
-	}
-	defer func() {
-		if closeErr := res.Body.Close(); err == nil && closeErr != nil {
-			err = closeErr
-		}
-	}()
-
-	if res.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("unexpected status: %s", res.Status)
-	}
-
-	b, err := io.ReadAll(res.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading response body: %w", err)
-	}
-	return string(b), nil
+	return string(content), nil
 }

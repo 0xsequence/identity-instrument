@@ -14,12 +14,27 @@ import (
 func TestProvider_Retrieve(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case "/latest/api/token":
+			assert.Equal(t, "PUT", r.Method)
+
+			w.Header().Set("X-Aws-Ec2-Metadata-Token-Ttl-Seconds", "3600")
+			w.WriteHeader(200)
+			_, _ = w.Write([]byte("TOKEN"))
+
 		case "/latest/meta-data/iam/security-credentials/":
+			assert.Equal(t, "GET", r.Method)
+			assert.Equal(t, "TOKEN", r.Header.Get("X-Aws-Ec2-Metadata-Token"))
+
 			w.WriteHeader(200)
 			_, _ = w.Write([]byte("PROFILE"))
+
 		case "/latest/meta-data/iam/security-credentials/PROFILE":
+			assert.Equal(t, "GET", r.Method)
+			assert.Equal(t, "TOKEN", r.Header.Get("X-Aws-Ec2-Metadata-Token"))
+
 			w.WriteHeader(200)
 			_, _ = w.Write([]byte(`{"AccessKeyId":"AccessKeyID","SecretAccessKey":"SecretAccessKey","Token":"SessionToken"}`))
+
 		default:
 			w.WriteHeader(400)
 			_, _ = w.Write([]byte("Wrong path"))
