@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -251,6 +252,11 @@ func TestOIDC(t *testing.T) {
 		authServer := newMockOAuth2Server(t, svc)
 		defer authServer.Close()
 		authServer.tokenBuilderFn = tokBuilderFn
+		authServer.onTokenFn = func(formValues url.Values) {
+			require.Equal(t, formValues.Get("client_id"), "audience")
+			require.Equal(t, formValues.Get("client_secret"), authServer.clientSecret)
+			require.Equal(t, formValues.Get("redirect_uri"), "http://localhost:8080/callback")
+		}
 
 		issuer := authServer.URL()
 
@@ -330,6 +336,110 @@ func TestOIDC(t *testing.T) {
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
 		assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
+
+	t.Run("AuthMode_AuthCodePKCE_NoClientSecret", func(t *testing.T) {
+		ctx := context.Background()
+
+		exp := time.Now().Add(120 * time.Second)
+		tokBuilderFn := func(b *jwt.Builder, url string) {
+			b.Expiration(exp)
+		}
+
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				// skip TLS verification for testing
+				InsecureSkipVerify: true,
+			},
+		}
+		svc := initRPC(t, ep, transport)
+
+		authServer := newMockOAuth2Server(t, svc)
+		defer authServer.Close()
+		authServer.tokenBuilderFn = tokBuilderFn
+		authServer.onTokenFn = func(formValues url.Values) {
+			require.Equal(t, formValues.Get("client_id"), "missing-client-secret")
+			require.False(t, formValues.Has("client_secret"))
+			require.Equal(t, formValues.Get("redirect_uri"), "http://localhost:8080/callback")
+		}
+
+		issuer := authServer.URL()
+
+		authKey, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+		require.NoError(t, err)
+
+		srv := httptest.NewServer(svc.Handler())
+		defer srv.Close()
+
+		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
+
+		protoAuthKey := &proto.Key{
+			KeyType: proto.KeyType_Ethereum_Secp256k1,
+			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+		}
+		initiateParams := &proto.CommitVerifierParams{
+			Scope:        proto.Scope("@123"),
+			AuthMode:     proto.AuthMode_AuthCodePKCE,
+			IdentityType: proto.IdentityType_OIDC,
+			Metadata: map[string]string{
+				"iss":          issuer,
+				"aud":          "missing-client-secret",
+				"redirect_uri": "http://localhost:8080/callback",
+			},
+		}
+		sig := signRequest(t, authKey, initiateParams)
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams, protoAuthKey, sig)
+		require.NoError(t, err)
+		require.NotEmpty(t, resVerifier)
+		require.NotEmpty(t, challenge)
+		require.Empty(t, loginHint)
+
+		code := authServer.authorize(map[string]string{
+			"client_id":             "missing-client-secret",
+			"redirect_uri":          "http://localhost:8080/callback",
+			"code_challenge":        challenge,
+			"code_challenge_method": "S256",
+		})
+		require.NotEmpty(t, code)
+
+		registerParams := &proto.CompleteAuthParams{
+			Scope:        proto.Scope("@123"),
+			AuthMode:     proto.AuthMode_AuthCodePKCE,
+			IdentityType: proto.IdentityType_OIDC,
+			SignerType:   proto.KeyType_Ethereum_Secp256k1,
+			Verifier:     resVerifier,
+			Answer:       code,
+		}
+		sig = signRequest(t, authKey, registerParams)
+		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams, protoAuthKey, sig)
+		require.NoError(t, err)
+		require.NotEmpty(t, resSigner)
+		require.NotEmpty(t, resIdentity)
+		assert.Equal(t, resIdentity.Type, proto.IdentityType_OIDC)
+		assert.Equal(t, resIdentity.Subject, "subject")
+		assert.Equal(t, resIdentity.Issuer, issuer)
+
+		digest := crypto.Keccak256([]byte("message"))
+		digestHex := hexutil.Encode(digest)
+
+		signParams := &proto.SignParams{
+			Scope:  proto.Scope("@123"),
+			Signer: *resSigner,
+			Digest: digestHex,
+		}
+		sig = signRequest(t, authKey, signParams)
+		resSignature, err := c.Sign(ctx, signParams, protoAuthKey, sig)
+		require.NoError(t, err)
+
+		sigBytes := common.FromHex(resSignature)
+		if sigBytes[64] == 27 || sigBytes[64] == 28 {
+			sigBytes[64] -= 27
+		}
+
+		pub, err := crypto.Ecrecover(digest, sigBytes)
+		require.NoError(t, err)
+		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
+		assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
+	})
 }
 
 type mockOAuth2Server struct {
@@ -338,6 +448,7 @@ type mockOAuth2Server struct {
 	codes          map[string]codeData
 	jwtKey         jwk.Key
 	tokenBuilderFn func(b *jwt.Builder, url string)
+	onTokenFn      func(formValues url.Values)
 	clientSecret   string
 }
 
@@ -430,6 +541,10 @@ func (s *mockOAuth2Server) handleToken(w http.ResponseWriter, r *http.Request) {
 
 	code := r.Form.Get("code")
 	codeVerifier := r.Form.Get("code_verifier")
+
+	if s.onTokenFn != nil {
+		s.onTokenFn(r.Form)
+	}
 
 	data, ok := s.codes[code]
 	require.True(s.t, ok)
