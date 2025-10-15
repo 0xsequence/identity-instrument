@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"crypto/ecdsa"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -23,6 +24,7 @@ import (
 	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/goware/cachestore/memlru"
 	"github.com/lestrrat-go/jwx/v2/jwk"
@@ -321,18 +323,18 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 	randomProvider := func(ctx context.Context) io.Reader {
 		return attestation.FromContext(ctx)
 	}
-	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, scope proto.Scope, iss string, aud string) (string, error) {
+	secretProvider := authcode.SecretProviderFunc(func(ctx context.Context, scope proto.Scope, iss string, aud string) (string, bool, error) {
 		ecosystem, err := scope.Ecosystem()
 		if err != nil {
-			return "", fmt.Errorf("get ecosystem: %w", err)
+			return "", false, fmt.Errorf("get ecosystem: %w", err)
 		}
 		issuer, err := encodeValueForSecretName(iss)
 		if err != nil {
-			return "", fmt.Errorf("encode issuer for secret name: %w", err)
+			return "", false, fmt.Errorf("encode issuer for secret name: %w", err)
 		}
 		audience, err := encodeValueForSecretName(aud)
 		if err != nil {
-			return "", fmt.Errorf("encode audience for secret name: %w", err)
+			return "", false, fmt.Errorf("encode audience for secret name: %w", err)
 		}
 		name := &secretName{
 			Ecosystem: ecosystem,
@@ -343,13 +345,16 @@ func (s *RPC) makeAuthHandlers(awsCfg aws.Config, cfg config.Config) (map[proto.
 		secret, err := s.Secrets.GetSecretValue(ctx, &secretsmanager.GetSecretValueInput{
 			SecretId: aws.String(name.String()),
 		})
+		if temp := new(types.ResourceNotFoundException); errors.As(err, &temp) {
+			return "", false, nil
+		}
 		if err != nil {
-			return "", fmt.Errorf("get secret: %w", err)
+			return "", false, fmt.Errorf("get secret: %w", err)
 		}
 		if secret.SecretString == nil {
-			return "", fmt.Errorf("secret is nil")
+			return "", false, fmt.Errorf("secret is nil")
 		}
-		return *secret.SecretString, nil
+		return *secret.SecretString, true, nil
 	})
 	authCodeHandler, err := authcode.NewAuthHandler(
 		s.HTTPClient,
