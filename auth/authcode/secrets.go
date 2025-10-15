@@ -7,12 +7,12 @@ import (
 )
 
 type SecretProvider interface {
-	GetClientSecret(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, error)
+	GetClientSecret(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, bool, error)
 }
 
-type SecretProviderFunc func(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, error)
+type SecretProviderFunc func(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, bool, error)
 
-func (f SecretProviderFunc) GetClientSecret(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, error) {
+func (f SecretProviderFunc) GetClientSecret(ctx context.Context, scope proto.Scope, issuer string, audience string) (string, bool, error) {
 	return f(ctx, scope, issuer, audience)
 }
 
