@@ -173,7 +173,9 @@ func (h *AuthHandler) Verify(
 	data.Set("code", answer)
 	data.Set("redirect_uri", m.RedirectURI)
 	data.Set("client_id", m.Audience)
-	data.Set("client_secret", clientSecret)
+	if clientSecret != "" {
+		data.Set("client_secret", clientSecret)
+	}
 	if commitment.AuthMode == proto.AuthMode_AuthCodePKCE {
 		data.Set("code_verifier", commitment.Answer)
 	}
@@ -205,11 +207,17 @@ func (h *AuthHandler) Verify(
 
 	if err, ok := body["error"]; ok {
 		log.Error("token exchange oauth error", "error", err, "description", body["error_description"])
+		if clientSecret == "" {
+			log.Warn("token exchange might have failed due to missing client secret", "scope", commitment.Scope, "issuer", m.Issuer, "audience", m.Audience)
+		}
 		return proto.Identity{}, proto.ErrOAuthError.WithCausef("%s: %s", err, body["error_description"])
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		log.Error("token exchange unexpected status code", "status", resp.StatusCode)
+		if clientSecret == "" {
+			log.Warn("token exchange might have failed due to missing client secret", "scope", commitment.Scope, "issuer", m.Issuer, "audience", m.Audience)
+		}
 		return proto.Identity{}, proto.ErrIdentityProviderError
 	}
 
@@ -221,13 +229,23 @@ func (h *AuthHandler) Verify(
 func (h *AuthHandler) GetClientSecret(ctx context.Context, scope proto.Scope, iss string, aud string) (string, error) {
 	ttl := 1 * time.Hour
 	getter := func(ctx context.Context, _ string) (string, error) {
-		return h.secretProvider.GetClientSecret(ctx, scope, iss, aud)
+		secret, found, err := h.secretProvider.GetClientSecret(ctx, scope, iss, aud)
+		if err != nil {
+			return "", err
+		}
+		if !found {
+			return "", nil
+		}
+		return secret, nil
 	}
 
 	secretName := scope.String() + "|" + iss + "|" + aud
 	secretConfigString, err := h.secretStore.GetOrSetWithLockEx(ctx, secretName, getter, ttl)
 	if err != nil {
 		return "", fmt.Errorf("get secret: %w", err)
+	}
+	if secretConfigString == "" {
+		return "", nil
 	}
 
 	var secretConfig SecretConfig
