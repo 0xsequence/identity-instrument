@@ -253,9 +253,9 @@ func TestOIDC(t *testing.T) {
 		defer authServer.Close()
 		authServer.tokenBuilderFn = tokBuilderFn
 		authServer.onTokenFn = func(formValues url.Values) {
-			require.Equal(t, formValues.Get("client_id"), "audience")
-			require.Equal(t, formValues.Get("client_secret"), authServer.clientSecret)
-			require.Equal(t, formValues.Get("redirect_uri"), "http://localhost:8080/callback")
+			assert.Equal(t, "audience", formValues.Get("client_id"))
+			assert.Equal(t, authServer.clientSecret, formValues.Get("client_secret"))
+			assert.Equal(t, "http://localhost:8080/callback", formValues.Get("redirect_uri"))
 		}
 
 		issuer := authServer.URL()
@@ -357,9 +357,9 @@ func TestOIDC(t *testing.T) {
 		defer authServer.Close()
 		authServer.tokenBuilderFn = tokBuilderFn
 		authServer.onTokenFn = func(formValues url.Values) {
-			require.Equal(t, formValues.Get("client_id"), "missing-client-secret")
-			require.False(t, formValues.Has("client_secret"))
-			require.Equal(t, formValues.Get("redirect_uri"), "http://localhost:8080/callback")
+			assert.Equal(t, "missing-client-secret", formValues.Get("client_id"))
+			assert.False(t, formValues.Has("client_secret"))
+			assert.Equal(t, "http://localhost:8080/callback", formValues.Get("redirect_uri"))
 		}
 
 		issuer := authServer.URL()
