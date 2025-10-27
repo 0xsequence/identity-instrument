@@ -2,13 +2,30 @@
 {{ $opts := .Opts -}}
 
 //
-// Helpers
+// Webrpc helpers
 //
 
 type method struct  {
-	Name string
-	Service string
-	Annotations map[string]string
+	name string
+	service string
+	annotations map[string]string
+}
+
+func (m method)Name() string {
+    return m.name
+}
+
+func (m method)Service() string {
+    return m.service
+}
+
+func (m method)Annotations() map[string]string {
+    res := make(map[string]string, len(m.annotations))
+	for k, v := range m.annotations {
+		res[k] = v
+	}
+
+	return res
 }
 
 type contextKey struct {
@@ -21,17 +38,15 @@ func (k *contextKey) String() string {
 
 var (
 {{- if $opts.client}}
-	HTTPClientRequestHeadersCtxKey = &contextKey{"HTTPClientRequestHeaders"}
+	HTTPClientRequestHeadersCtxKey = &contextKey{"HTTPClientRequestHeaders"} // client
 {{- end}}
 
 {{- if $opts.server}}
-	HTTPResponseWriterCtxKey = &contextKey{"HTTPResponseWriter"}
-{{ end}}
-	HTTPRequestCtxKey = &contextKey{"HTTPRequest"}
-
-	ServiceNameCtxKey = &contextKey{"ServiceName"}
-
-	MethodNameCtxKey = &contextKey{"MethodName"}
+	HTTPResponseWriterCtxKey = &contextKey{"HTTPResponseWriter"} // server
+{{- end }}
+	HTTPRequestCtxKey = &contextKey{"HTTPRequest"} // server
+	ServiceNameCtxKey = &contextKey{"ServiceName"} // server
+	MethodNameCtxKey  = &contextKey{"MethodName"}  // server
 )
 
 func ServiceNameFromContext(ctx context.Context) string {
@@ -62,6 +77,9 @@ func MethodCtx(ctx context.Context) (method, bool) {
 
 	return m, true
 }
+
+// PtrTo is a useful helper when constructing values for optional fields.
+func PtrTo[T any](v T) *T { return &v }
 
 {{ if $opts.server}}
 func ResponseWriterFromContext(ctx context.Context) http.ResponseWriter {

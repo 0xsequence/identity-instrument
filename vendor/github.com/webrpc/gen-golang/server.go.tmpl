@@ -2,6 +2,7 @@
 {{- $services := .Services -}}
 {{- $typeMap := .TypeMap -}}
 {{- $typePrefix := .TypePrefix -}}
+{{- $json := .Json -}}
 {{- $opts := .Opts -}}
 
 {{- if $services -}}
@@ -15,17 +16,17 @@ type WebRPCServer interface {
 
 {{- range $_, $service := $services}}
 {{- $name := $service.Name -}}
-{{ $serviceName := (printf "%sServer" (firstLetterToLower $service.Name)) }}
+{{ $serviceName := (printf "%sService" (firstWordToLower $service.Name)) }}
 
 type {{$serviceName}} struct {
-	{{$typePrefix}}{{$service.Name}}
+	{{$typePrefix}}{{$service.Name}}Server
 	OnError func(r *http.Request, rpcErr *WebRPCError)
 	OnRequest func(w http.ResponseWriter, r *http.Request) error
 }
 
-func New{{firstLetterToUpper $service.Name}}Server(svc {{$typePrefix}}{{.Name}}) *{{$serviceName}} {
+func New{{firstLetterToUpper $service.Name}}Server(svc {{$typePrefix}}{{.Name}}Server) *{{$serviceName}} {
 	return &{{$serviceName}}{
-		{{.Name}}: svc,
+		{{.Name}}Server: svc,
 	}
 }
 
@@ -104,19 +105,28 @@ func (s *{{$serviceName}}) serve{{firstLetterToUpper $method.Name}}JSON(ctx cont
 	}
 	defer r.Body.Close()
 
+	{{ if $method.Succinct }}
+	{{- $input := index $method.Inputs 0 -}}
+	var reqPayload {{template "field" dict "Name" $input.Name "Type" $input.Type "Optional" $input.Optional "TypeMap" $typeMap "TypePrefix" $typePrefix "Succinct" $method.Succinct}}
+	{{- else -}}
 	reqPayload := struct {
 	{{- range $i, $input := $method.Inputs}}
 		Arg{{$i}} {{template "field" dict "Name" $input.Name "Type" $input.Type "Optional" $input.Optional "TypeMap" $typeMap "TypePrefix" $typePrefix "TypeMeta" $input.Meta "JsonTags" true}}
 	{{- end}}
 	}{}
-	if err := json.Unmarshal(reqBody, &reqPayload); err != nil {
+	{{- end}}
+	if err := {{$json}}.Unmarshal(reqBody, &reqPayload); err != nil {
 		s.sendErrorJSON(w, r, ErrWebrpcBadRequest.WithCausef("failed to unmarshal request data: %w", err))
 		return
 	}
 	{{- end }}
 
 	// Call service method implementation.
-	{{range $i, $output := $method.Outputs}}ret{{$i}}, {{end}}err {{if or (eq (len $method.Inputs) 0) (gt (len $method.Outputs) 0)}}:{{end}}= s.{{$name}}.{{$method.Name}}(ctx{{range $i, $_ := $method.Inputs}}, reqPayload.Arg{{$i}}{{end}})
+	{{ if $method.Succinct -}}
+	respPayload, err := s.{{$name}}Server.{{$method.Name}}(ctx, reqPayload)
+	{{- else -}}
+	{{range $i, $output := $method.Outputs}}ret{{$i}}, {{end}}err {{if or (eq (len $method.Inputs) 0) (gt (len $method.Outputs) 0)}}:{{end}}= s.{{$name}}Server.{{$method.Name}}(ctx{{range $i, $_ := $method.Inputs}}, reqPayload.Arg{{$i}}{{end}})
+	{{- end}}
 	if err != nil {
 		rpcErr, ok := err.(WebRPCError)
 		if !ok {
@@ -128,19 +138,21 @@ func (s *{{$serviceName}}) serve{{firstLetterToUpper $method.Name}}JSON(ctx cont
 
 	{{- if gt (len $method.Outputs) 0}}
 
+	{{ if eq $method.Succinct false }}
 	respPayload := struct {
 	{{- range $i, $output := $method.Outputs}}
 		Ret{{$i}} {{template "field" dict "Name" $output.Name "Type" $output.Type "Optional" $output.Optional "TypeMap" $typeMap "TypePrefix" $typePrefix "TypeMeta" $output.Meta "JsonTags" true}}
-	{{- end}}
+	{{- end }}
 	}{ {{- range $i, $_ := $method.Outputs}}{{if gt $i 0}}, {{end}}ret{{$i}}{{end}}}
-	{{- end}}
+	{{- end }}
+	{{- end }}
 
 
 	{{- if $method.Outputs | len}}
 	{{ if $opts.fixEmptyArrays -}}
-	respBody, err := json.Marshal(initializeNilSlices(respPayload))
+	respBody, err := {{$json}}.Marshal(initializeNilSlices(respPayload))
 	{{ else -}}
-	respBody, err := json.Marshal(respPayload)
+	respBody, err := {{$json}}.Marshal(respPayload)
 	{{ end -}}
 	if err != nil {
 		s.sendErrorJSON(w, r, ErrWebrpcBadResponse.WithCausef("failed to marshal json response: %w", err))
@@ -174,7 +186,7 @@ func (s *{{$serviceName}}) serve{{firstLetterToUpper $method.Name}}JSONStream(ct
 		Arg{{$i}} {{template "field" dict "Name" $input.Name "Type" $input.Type "Optional" $input.Optional "TypeMap" $typeMap "TypePrefix" $typePrefix "TypeMeta" $input.Meta "JsonTags" true}}
 	{{- end}}
 	}{}
-	if err := json.Unmarshal(reqBody, &reqPayload); err != nil {
+	if err := {{$json}}.Unmarshal(reqBody, &reqPayload); err != nil {
 		s.sendErrorJSON(w, r, ErrWebrpcBadRequest.WithCausef("failed to unmarshal request data: %w", err))
 		return
 	}
@@ -192,24 +204,28 @@ func (s *{{$serviceName}}) serve{{firstLetterToUpper $method.Name}}JSONStream(ct
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 
-	streamWriter := &{{firstLetterToLower $method.Name}}StreamWriter{streamWriter{w: w, f: f, e: json.NewEncoder(w), sendError: s.sendErrorJSON}}
+	streamWriter := &{{firstLetterToLower $method.Name}}StreamWriter{streamWriter{w: w, f: f, e: {{$json}}.NewEncoder(w), sendError: s.sendErrorJSON}}
 	if err := streamWriter.ping(); err != nil {
 		s.sendErrorJSON(w, r, ErrWebrpcStreamLost.WithCausef("failed to establish SSE stream: %w", err))
 		return
 	}
 
-	ctx, cancel := context.WithCancel(r.Context())
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	go streamWriter.keepAlive(ctx)
 
 	// Call service method implementation.
-	if err {{if or (eq (len $method.Inputs) 0) (gt (len $method.Outputs) 0)}}:{{end}}= s.{{$name}}.{{$method.Name}}(ctx{{range $i, $_ := $method.Inputs}}, reqPayload.Arg{{$i}}{{end}}, streamWriter); err != nil {
+	if err {{if or (eq (len $method.Inputs) 0) (gt (len $method.Outputs) 0)}}:{{end}}= s.{{$name}}Server.{{$method.Name}}(ctx{{range $i, $_ := $method.Inputs}}, reqPayload.Arg{{$i}}{{end}}, streamWriter); err != nil {
+		cancel()
 		rpcErr, ok := err.(WebRPCError)
 		if !ok {
 			rpcErr = ErrWebrpcEndpoint.WithCause(err)
 		}
+		streamWriter.mu.Lock()
 		streamWriter.sendError(w, r, rpcErr)
+		streamWriter.f.Flush()
+		streamWriter.mu.Unlock()
 		return
 	}
 }
@@ -226,7 +242,7 @@ func (s *{{$serviceName}}) sendErrorJSON(w http.ResponseWriter, r *http.Request,
 		out := struct {
 			WebRPCError WebRPCError `json:"webrpcError"`
 		}{ WebRPCError: rpcErr }
-		json.NewEncoder(w).Encode(out)
+		{{$json}}.NewEncoder(w).Encode(out)
 		return	
 	}
 	{{- end }}
@@ -234,7 +250,7 @@ func (s *{{$serviceName}}) sendErrorJSON(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(rpcErr.HTTPStatus)
 
-	respBody, _ := json.Marshal(rpcErr)
+	respBody, _ := {{$json}}.Marshal(rpcErr)
 	w.Write(respBody)
 }
 {{- end}}
@@ -248,7 +264,7 @@ func RespondWithError(w http.ResponseWriter, err error) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(rpcErr.HTTPStatus)
 
-	respBody, _ := json.Marshal(rpcErr)
+	respBody, _ := {{$json}}.Marshal(rpcErr)
 	w.Write(respBody)
 }
 

@@ -231,6 +231,7 @@ type EnumNode struct {
 	enumType *TokenNode
 	values   []*DefinitionNode
 	comment  string
+	line     int
 }
 
 func (en EnumNode) Type() NodeType {
@@ -257,6 +258,7 @@ type StructNode struct {
 	name    *TokenNode
 	fields  []*DefinitionNode
 	comment string
+	line    int
 }
 
 func (mn StructNode) Name() *TokenNode {
@@ -344,6 +346,7 @@ type MethodNode struct {
 	annotations []*AnnotationNode
 	inputs      argumentList
 	outputs     argumentList
+	errors      []*TokenNode // List of error names this method can throw
 }
 
 func (mn *MethodNode) Name() *TokenNode {
@@ -372,6 +375,10 @@ func (mn *MethodNode) Outputs() []*ArgumentNode {
 
 func (mn *MethodNode) Comment() string {
 	return mn.comment
+}
+
+func (mn *MethodNode) Errors() []*TokenNode {
+	return mn.errors
 }
 
 func (mn *MethodNode) Annotations() []*AnnotationNode {

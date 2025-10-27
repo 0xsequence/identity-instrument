@@ -131,10 +131,13 @@ components:
 paths:
 {{- range $_, $service := .Services -}}
   {{- range $_, $method := .Methods}}
+  {{- $deprecated := index $method.Annotations "deprecated" }}
   /rpc/{{$service.Name}}/{{$method.Name}}:
     post:
-      summary: {{$method.Name}}
-      {{- if (index $method.Annotations "deprecated") }}
+      operationId: {{$service.Name}}-{{$method.Name}}
+      tags: ["{{$service.Name}}"]
+      summary: {{ if $deprecated }}{{ if $deprecated.Value }}{{printf "%q" (print "Deprecated: " $deprecated.Value)}}{{else}}"Deprecated."{{end}}{{else if gt (len $method.Comments) 0}}{{printf "%q" (index $method.Comments 0)}}{{else}}""{{end}}
+      {{- if $deprecated }}
       deprecated: true
       {{- end }}
       {{- if (index $opts "securityAnnotation") }}
@@ -148,9 +151,12 @@ paths:
         {{- end }}
       {{- end }}
       {{- end }}
-      {{- if gt (len $method.Comments) 0 }}
-      description: "{{ replaceAll (join $method.Comments "\n") "\"" "'" }}"
-    {{- end }}
+      {{- if gt (len $method.Comments) 1 }}
+      description: |
+        {{- range $i, $comment := (slice $method.Comments 1) }}
+        {{$comment}}
+        {{- end }}
+      {{- end }}
       requestBody:
         content:
           application/json:
