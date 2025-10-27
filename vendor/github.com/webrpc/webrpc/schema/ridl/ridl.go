@@ -1,14 +1,18 @@
 package ridl
 
 import (
+	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"path"
+	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/webrpc/webrpc/schema"
+	"github.com/webrpc/webrpc/schema/ridl/internal/graph"
 )
 
 var (
@@ -18,21 +22,21 @@ var (
 
 type Parser struct {
 	parent  *Parser
-	imports map[string]struct{}
+	imports *graph.Graph[string]
+	cache   map[string]*schema.WebRPCSchema // cache for already parsed schemas
 
-	reader io.Reader
-	path   string
-	fsys   fs.FS
+	path string
+	root string
+	fsys fs.FS
 }
 
-func NewParser(fsys fs.FS, path string) *Parser {
+func NewParser(fsys fs.FS, root, path string) *Parser {
 	return &Parser{
-		fsys: fsys,
-		path: path,
-		imports: map[string]struct{}{
-			// this file imports itself
-			path: {},
-		},
+		fsys:    fsys,
+		path:    path,
+		root:    root,
+		imports: graph.New(path),
+		cache:   make(map[string]*schema.WebRPCSchema),
 	}
 }
 
@@ -51,17 +55,55 @@ func (p *Parser) Parse() (*schema.WebRPCSchema, error) {
 	return s, nil
 }
 
-func (p *Parser) importRIDLFile(filename string) (*schema.WebRPCSchema, error) {
-	for node := p; node != nil; node = node.parent {
-		if _, imported := node.imports[filename]; imported {
-			return nil, fmt.Errorf("circular import %q in file %q", path.Base(filename), p.path)
-		}
-		node.imports[filename] = struct{}{}
+func (p *Parser) importParser(filename string) (*Parser, error) {
+	p.imports.AddNode(filename)
+	p.imports.AddEdge(p.path, filename)
+
+	if p.imports.IsCircular() {
+		return nil, fmt.Errorf("circular import %q in file %q", path.Base(filename), p.path)
 	}
 
-	m := NewParser(p.fsys, filename)
+	m := NewParser(p.fsys, p.root, filename)
+	m.imports = p.imports
+	m.cache = p.cache
 	m.parent = p
-	return m.Parse()
+	return m, nil
+}
+
+func newImportError(parser *Parser, cause error) error {
+	if errors.As(cause, &importError{}) {
+		return cause
+	}
+	var stack []string
+	for p := parser; p != nil; p = p.parent {
+		stack = append(stack, filepath.Join(p.root, p.path))
+	}
+	return importError{
+		stack: stack,
+		err:   cause,
+	}
+}
+
+type importError struct {
+	stack []string
+	err   error
+}
+
+func (e importError) Error() string {
+	if len(e.stack) == 0 {
+		return e.err.Error()
+	}
+
+	s := strings.Builder{}
+	s.WriteString(e.err.Error())
+	s.WriteString("\nstack trace:\n")
+	for i, file := range e.stack {
+		fmt.Fprintf(&s, "  - %s", file)
+		if i < len(e.stack)-1 {
+			s.WriteString("\n")
+		}
+	}
+	return s.String()
 }
 
 func (p *Parser) parse() (*schema.WebRPCSchema, error) {
@@ -74,7 +116,7 @@ func (p *Parser) parse() (*schema.WebRPCSchema, error) {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
-	q, err := newParser(src)
+	q, err := newParser(p.path, src)
 	if err != nil {
 		return nil, err
 	}
@@ -118,9 +160,14 @@ func (p *Parser) parse() (*schema.WebRPCSchema, error) {
 	for _, line := range q.root.Imports() {
 		importPath := path.Join(path.Dir(p.path), line.Path().String())
 
-		imported, err := p.importRIDLFile(importPath)
-		if err != nil {
-			return nil, p.trace(err, line.Path())
+		if _, ok := p.cache[importPath]; !ok {
+			parser, err := p.importParser(importPath)
+			if err != nil {
+				return nil, err
+			}
+			if p.cache[importPath], err = parser.Parse(); err != nil {
+				return nil, newImportError(parser, err)
+			}
 		}
 
 		members := []string{}
@@ -128,19 +175,21 @@ func (p *Parser) parse() (*schema.WebRPCSchema, error) {
 			members = append(members, member.String())
 		}
 
-		for i := range imported.Types {
-			if isImportAllowed(imported.Types[i].Name, members) {
-				s.Types = append(s.Types, imported.Types[i])
+		if imported := p.cache[importPath]; imported != nil {
+			for i := range imported.Types {
+				if !slices.Contains(s.Types, imported.Types[i]) && isImportAllowed(imported.Types[i].Name, members) {
+					s.Types = append(s.Types, imported.Types[i])
+				}
 			}
-		}
-		for i := range imported.Errors {
-			if isImportAllowed(imported.Errors[i].Name, members) {
-				s.Errors = append(s.Errors, imported.Errors[i])
+			for i := range imported.Errors {
+				if isImportAllowed(imported.Errors[i].Name, members) {
+					s.Errors = append(s.Errors, imported.Errors[i])
+				}
 			}
-		}
-		for i := range imported.Services {
-			if isImportAllowed(imported.Services[i].Name, members) {
-				s.Services = append(s.Services, imported.Services[i])
+			for i := range imported.Services {
+				if isImportAllowed(imported.Services[i].Name, members) {
+					s.Services = append(s.Services, imported.Services[i])
+				}
 			}
 		}
 	}
@@ -264,14 +313,24 @@ func (p *Parser) parse() (*schema.WebRPCSchema, error) {
 		methods := []*schema.Method{}
 
 		for _, method := range service.Methods() {
-			inputs, err := buildArgumentsList(s, method.Inputs())
+			inputs, succinctInput, err := buildArgumentsList(s, method.Inputs())
 			if err != nil {
 				return nil, err
 			}
 
-			outputs, err := buildArgumentsList(s, method.Outputs())
+			outputs, succinctOutput, err := buildArgumentsList(s, method.Outputs())
 			if err != nil {
 				return nil, err
+			}
+
+			if (len(inputs) > 1 || len(outputs) > 1) && (succinctInput || succinctOutput) {
+				return nil, fmt.Errorf("method definition must be in succinct form for both inputs and inputs of method '%s'", method.Name().String())
+			}
+
+			// Convert error tokens to strings
+			methodErrors := make([]string, len(method.Errors()))
+			for i, errorToken := range method.Errors() {
+				methodErrors[i] = errorToken.String()
 			}
 
 			// push m
@@ -281,8 +340,10 @@ func (p *Parser) parse() (*schema.WebRPCSchema, error) {
 				StreamOutput: method.StreamOutput(),
 				Inputs:       inputs,
 				Outputs:      outputs,
+				Errors:       methodErrors,
 				Comments:     parseComment(method.Comment()),
 				Annotations:  buildAnnotations(method),
+				Succinct:     succinctInput || succinctOutput,
 			}
 
 			methods = append(methods, m)
@@ -318,30 +379,32 @@ func isImportAllowed(name string, whitelist []string) bool {
 	return false
 }
 
-func buildArgumentsList(s *schema.WebRPCSchema, args []*ArgumentNode) ([]*schema.MethodArgument, error) {
+func buildArgumentsList(s *schema.WebRPCSchema, args []*ArgumentNode) ([]*schema.MethodArgument, bool, error) {
 	output := []*schema.MethodArgument{}
 
-	// succint form
+	// succinct form
 	if len(args) == 1 && args[0].inlineStruct != nil {
 		node := args[0].inlineStruct
 		structName := node.tok.val
 
 		typ := s.GetTypeByName(structName)
 		if typ.Kind != "struct" {
-			return nil, fmt.Errorf("expecting struct type for inline definition of '%s'", structName)
+			return nil, true, fmt.Errorf("expecting struct type for succinct definition of '%s'", structName)
 		}
 
-		for _, arg := range typ.Fields {
-			methodArgument := &schema.MethodArgument{
-				Name:      arg.Name,
-				Type:      arg.Type,
-				Optional:  arg.Optional,
-				TypeExtra: arg.TypeExtra,
-			}
-			output = append(output, methodArgument)
+		var varType schema.VarType
+		err := schema.ParseVarTypeExpr(s, typ.Name, &varType)
+		if err != nil {
+			return nil, true, fmt.Errorf("parsing argument %v: %w", typ.Name, err)
 		}
 
-		return output, nil
+		output = append(output, &schema.MethodArgument{
+			Name:     toLowerFirstChar(typ.Name),
+			Type:     &varType,
+			Optional: false,
+		})
+
+		return output, true, nil
 	}
 
 	// normal form
@@ -349,7 +412,7 @@ func buildArgumentsList(s *schema.WebRPCSchema, args []*ArgumentNode) ([]*schema
 		var varType schema.VarType
 		err := schema.ParseVarTypeExpr(s, arg.TypeName().String(), &varType)
 		if err != nil {
-			return nil, fmt.Errorf("parsing argument %v: %w", arg.TypeName(), err)
+			return nil, false, fmt.Errorf("parsing argument %v: %w", arg.TypeName(), err)
 		}
 
 		methodArgument := &schema.MethodArgument{
@@ -360,7 +423,7 @@ func buildArgumentsList(s *schema.WebRPCSchema, args []*ArgumentNode) ([]*schema
 		output = append(output, methodArgument)
 	}
 
-	return output, nil
+	return output, false, nil
 }
 
 func parseComment(comment string) []string {
@@ -386,4 +449,14 @@ func buildAnnotations(method *MethodNode) schema.Annotations {
 	}
 
 	return schema.Annotations(annotations)
+}
+
+func toLowerFirstChar(s string) string {
+	if s == "" {
+		return ""
+	}
+
+	rs := []rune(s)
+	rs[0] = unicode.ToLower(rs[0])
+	return string(rs)
 }

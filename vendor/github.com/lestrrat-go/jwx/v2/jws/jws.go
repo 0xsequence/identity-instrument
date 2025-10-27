@@ -550,7 +550,7 @@ func Parse(src []byte, options ...ParseOption) (*Message, error) {
 
 	// if format is 0 or both JSON/Compact, auto detect
 	if v := formats & (fmtJSON | fmtCompact); v == 0 || v == fmtJSON|fmtCompact {
-		for i := 0; i < len(src); i++ {
+		for i := range src {
 			r := rune(src[i])
 			if r >= utf8.RuneSelf {
 				r, _ = utf8.DecodeRune(src)
@@ -632,24 +632,30 @@ func parseJSON(data []byte) (result *Message, err error) {
 	return &m, nil
 }
 
+const tokenDelim = "."
+
 // SplitCompact splits a JWT and returns its three parts
 // separately: protected headers, payload and signature.
 func SplitCompact(src []byte) ([]byte, []byte, []byte, error) {
-	parts := bytes.Split(src, []byte("."))
-	if len(parts) < 3 {
+	protected, s, ok := bytes.Cut(src, []byte(tokenDelim))
+	if !ok { // no period found
 		return nil, nil, nil, fmt.Errorf(`invalid number of segments`)
 	}
-	return parts[0], parts[1], parts[2], nil
+	payload, s, ok := bytes.Cut(s, []byte(tokenDelim))
+	if !ok { // only one period found
+		return nil, nil, nil, fmt.Errorf(`invalid number of segments`)
+	}
+	signature, _, ok := bytes.Cut(s, []byte(tokenDelim))
+	if ok { // three periods found
+		return nil, nil, nil, fmt.Errorf(`invalid number of segments`)
+	}
+	return protected, payload, signature, nil
 }
 
 // SplitCompactString splits a JWT and returns its three parts
 // separately: protected headers, payload and signature.
 func SplitCompactString(src string) ([]byte, []byte, []byte, error) {
-	parts := strings.Split(src, ".")
-	if len(parts) < 3 {
-		return nil, nil, nil, fmt.Errorf(`invalid number of segments`)
-	}
-	return []byte(parts[0]), []byte(parts[1]), []byte(parts[2]), nil
+	return SplitCompact([]byte(src))
 }
 
 // SplitCompactReader splits a JWT and returns its three parts

@@ -17,6 +17,7 @@ type Method struct {
 	Name        string      `json:"name"`
 	Annotations Annotations `json:"annotations"`
 	Comments    []string    `json:"comments"`
+	Succinct    bool        `json:"succinct,omitempty"`
 
 	StreamInput  bool `json:"streamInput,omitempty"`
 	StreamOutput bool `json:"streamOutput,omitempty"`
@@ -24,6 +25,7 @@ type Method struct {
 
 	Inputs  []*MethodArgument `json:"inputs"`
 	Outputs []*MethodArgument `json:"outputs"`
+	Errors  []string          `json:"errors,omitempty"` // List of errors this method can throw
 
 	Service *Service `json:"-"` // denormalize/back-reference
 }
@@ -103,6 +105,9 @@ func (m *Method) Parse(schema *WebRPCSchema, service *Service) error {
 	serviceName := service.Name
 
 	// Parse+validate inputs
+	if len(m.Inputs) > 1 && m.Succinct {
+		return fmt.Errorf("schema error: detected multiple input arguments using succinct form for method '%s' in service '%s'", m.Name, serviceName)
+	}
 	for _, input := range m.Inputs {
 		input.InputArg = true // back-ref
 		if input.Name == "" {
@@ -115,6 +120,9 @@ func (m *Method) Parse(schema *WebRPCSchema, service *Service) error {
 	}
 
 	// Parse+validate outputs
+	if len(m.Outputs) > 1 && m.Succinct {
+		return fmt.Errorf("schema error: detected multiple output arguments using succinct form for method '%s' in service '%s'", m.Name, serviceName)
+	}
 	for _, output := range m.Outputs {
 		output.OutputArg = true // back-ref
 		if output.Name == "" {
@@ -123,6 +131,20 @@ func (m *Method) Parse(schema *WebRPCSchema, service *Service) error {
 		err := output.Type.Parse(schema)
 		if err != nil {
 			return err
+		}
+	}
+
+	// Parse+validate errors
+	for _, errorName := range m.Errors {
+		found := false
+		for _, schemaError := range schema.Errors {
+			if schemaError.Name == errorName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("schema error: method '%s' in service '%s' references undefined error '%s'", m.Name, serviceName, errorName)
 		}
 	}
 

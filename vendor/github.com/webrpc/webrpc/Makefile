@@ -41,7 +41,7 @@ generate: build
 
 # Upgrade Go dependencies
 dep-upgrade-all:
-	go get -u go@1.22 ./...
+	go get -u go@1.25 ./...
 
 # Run git diff and fail on any local changes
 diff:
@@ -61,3 +61,8 @@ test-interoperability: build-test
 		until nc -z localhost 9988; do sleep 0.1; done; \
 		./bin/webrpc-test -client -url=http://localhost:9988; \
 		wait
+
+# Update ridl golden examples
+update-ridl-test-golden-examples:
+	cd ./schema/ridl && go test -update=./_example/example1-golden.json
+	cd ./schema/ridl && go test -update=./_example/example2-golden.json

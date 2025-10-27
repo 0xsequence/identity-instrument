@@ -6,6 +6,7 @@ import (
 	"github.com/Masterminds/sprig/v3"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/golang-cz/textcase"
+	"github.com/webrpc/webrpc/schema"
 )
 
 // Template functions are part of webrpc-gen API. Keep backward-compatible.
@@ -30,6 +31,10 @@ func templateFuncMap(opts map[string]interface{}) map[string]interface{} {
 		"mapKeyType":   mapKeyType,   // v0.7.0
 		"mapValueType": mapValueType, // v0.7.0
 		"listElemType": listElemType, // v0.7.0
+		"isString": func(v interface{}) bool { // v0.30.0
+			_, ok := v.(string)
+			return ok
+		},
 
 		// Dictionary (map[string]any).
 		"dict":   dict,   // v0.7.0
@@ -70,11 +75,54 @@ func templateFuncMap(opts map[string]interface{}) map[string]interface{} {
 			}
 			return strings.ToUpper(input[:1]) + input[1:]
 		}),
+		"firstWordToLower": applyStringFunction("firstWordToLower", func(input string) string { // v0.29.0
+			if input == "" {
+				return ""
+			}
+			if input[0] >= 'a' && input[0] <= 'z' {
+				return input
+			}
+
+			letters := []rune(input)
+			length := len(letters)
+			if length == 0 {
+				return ""
+			}
+
+			isUpper := func(r rune) bool { return r >= 'A' && r <= 'Z' }
+			isLower := func(r rune) bool { return r >= 'a' && r <= 'z' }
+			isDigit := func(r rune) bool { return r >= '0' && r <= '9' }
+
+			j := 0
+			if isUpper(letters[0]) {
+				for j < length && isUpper(letters[j]) {
+					j++
+				}
+				if j > 1 && j < length && isLower(letters[j]) && (j+1) < length && isLower(letters[j+1]) {
+					j--
+				}
+				for j < length && (isLower(letters[j]) || isDigit(letters[j])) {
+					j++
+				}
+			} else {
+				for j < length && (isLower(letters[j]) || isDigit(letters[j])) {
+					j++
+				}
+			}
+
+			// Lowercase the first word prefix and append the rest unchanged.
+			prefix := strings.ToLower(string(letters[:j]))
+			return prefix + string(letters[j:])
+		}),
 		"camelCase":  applyStringFunction("camelCase", textcase.CamelCase),   // v0.7.0
 		"pascalCase": applyStringFunction("pascalCase", textcase.PascalCase), // v0.7.0
 		"snakeCase":  applyStringFunction("snakeCase", textcase.SnakeCase),   // v0.7.0
 		"kebabCase":  applyStringFunction("kebabCase", textcase.KebabCase),   // v0.7.0
 		"replaceAll": strings.ReplaceAll,
+
+		// Schema bigint analysis + helpers
+		"SchemaUsesBigInts":        schema.SchemaUsesBigInts,        // v0.30.0
+		"SchemaBigIntFieldsByType": schema.SchemaBigIntFieldsByType, // v0.30.0
 	}
 
 	for k, v := range extra {
