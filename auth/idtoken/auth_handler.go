@@ -109,7 +109,24 @@ func (h *AuthHandler) VerifyToken(
 	verifyChallenge func(tok jwt.Token) error,
 ) (proto.Identity, error) {
 	log := o11y.LoggerFromContext(ctx)
-	tok, err := jwt.Parse([]byte(idToken), jwt.WithVerify(false), jwt.WithValidate(false))
+
+	ks := &operationKeySet{
+		ctx:       ctx,
+		iss:       expectedIssuer,
+		store:     h.jwkStore,
+		getKeySet: h.GetKeySet,
+	}
+
+	options := []jwt.ParseOption{
+		jwt.WithVerify(true),
+		jwt.WithValidate(true),
+		jwt.WithKeySet(ks, jws.WithMultipleKeysPerKeyID(false)),
+		jwt.WithValidator(withIssuer(expectedIssuer, true)),
+		jwt.WithValidator(withAudience([]string{expectedAudience})),
+		jwt.WithAcceptableSkew(10 * time.Second),
+	}
+
+	tok, err := jwt.Parse([]byte(idToken), options...)
 	if err != nil {
 		log.Error("failed to parse JWT", "error", err)
 		return proto.Identity{}, proto.ErrProofVerificationFailed
@@ -122,34 +139,9 @@ func (h *AuthHandler) VerifyToken(
 		}
 	}
 
-	issuer := normalizeIssuer(tok.Issuer())
-
-	ks := &operationKeySet{
-		ctx:       ctx,
-		iss:       issuer,
-		store:     h.jwkStore,
-		getKeySet: h.GetKeySet,
-	}
-
-	if _, err := jws.Verify([]byte(idToken), jws.WithKeySet(ks, jws.WithMultipleKeysPerKeyID(false))); err != nil {
-		log.Error("failed to verify signature", "error", err)
-		return proto.Identity{}, proto.ErrProofVerificationFailed
-	}
-
-	validateOptions := []jwt.ValidateOption{
-		jwt.WithValidator(withIssuer(expectedIssuer, true)),
-		jwt.WithValidator(withAudience([]string{expectedAudience})),
-		jwt.WithAcceptableSkew(10 * time.Second),
-	}
-
-	if err := jwt.Validate(tok, validateOptions...); err != nil {
-		log.Error("failed to validate JWT", "error", err)
-		return proto.Identity{}, proto.ErrProofVerificationFailed
-	}
-
 	identity := proto.Identity{
 		Type:    proto.IdentityType_OIDC,
-		Issuer:  issuer,
+		Issuer:  normalizeIssuer(tok.Issuer()),
 		Subject: tok.Subject(),
 		Email:   getEmailFromToken(tok),
 	}
