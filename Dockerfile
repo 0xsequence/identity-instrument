@@ -48,7 +48,7 @@ ENV CONFIG=./etc/nitro.conf
 CMD ["make", "run"]
 
 
-FROM ghcr.io/0xsequence/eiffel:v0.4.0@sha256:0e91d93aa3fba312add1ca812b9b1051008fc34283f09844d8949d1c6fc1a25b
+FROM ghcr.io/0xsequence/eiffel:v0.3.1@sha256:c0c0bf7144a6a25b00bf78e7d5cb632afae8b45f8b82ff38016fa8c61854a104
 
 ARG ENV_ARG=dev
 
