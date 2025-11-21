@@ -69,23 +69,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Render template
-        id: template
-        uses: chuhlomin/render-template@v1.4
-        with:
-          template: .github/release-template.md
-          vars: |
-            prod_version: ${{ needs.build-eifs.outputs.prod-version }}
-            prod_pcr0: ${{ needs.build-eifs.outputs.prod-pcr0 }}
-            prod_pcr1: ${{ needs.build-eifs.outputs.prod-pcr1 }}
-            prod_pcr2: ${{ needs.build-eifs.outputs.prod-pcr2 }}
-            prod_checksum: ${{ needs.build-eifs.outputs.prod-checksum }}
-            next_version: ${{ needs.build-eifs.outputs.next-version }}
-            next_pcr0: ${{ needs.build-eifs.outputs.next-pcr0 }}
-            next_pcr1: ${{ needs.build-eifs.outputs.next-pcr1 }}
-            next_pcr2: ${{ needs.build-eifs.outputs.next-pcr2 }}
-            next_checksum: ${{ needs.build-eifs.outputs.next-checksum }}
-
       - name: Download prod EIF
         uses: actions/download-artifact@v4
         with:
@@ -103,12 +86,41 @@ jobs:
         with:
           name: identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
           path: bin/identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
+    
+      - name: Output prod EIF checksum
+        id: prod-checksum
+        run: |
+          CHECKSUM=$(awk '{print $1}' bin/identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum)
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
       
       - name: Download next EIF checksum
         uses: actions/download-artifact@v4
         with:
           name: identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
           path: bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
+
+      - name: Output next EIF checksum
+        id: next-checksum
+        run: |
+          CHECKSUM=$(awk '{print $1}' bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum)
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+
+      - name: Render template
+        id: template
+        uses: chuhlomin/render-template@v1.4
+        with:
+          template: .github/release-template.md
+          vars: |
+            prod_version: ${{ needs.build-eifs.outputs.prod-version }}
+            prod_pcr0: ${{ needs.build-eifs.outputs.prod-pcr0 }}
+            prod_pcr1: ${{ needs.build-eifs.outputs.prod-pcr1 }}
+            prod_pcr2: ${{ needs.build-eifs.outputs.prod-pcr2 }}
+            prod_checksum: ${{ steps.prod-checksum.outputs.checksum }}
+            next_version: ${{ needs.build-eifs.outputs.next-version }}
+            next_pcr0: ${{ needs.build-eifs.outputs.next-pcr0 }}
+            next_pcr1: ${{ needs.build-eifs.outputs.next-pcr1 }}
+            next_pcr2: ${{ needs.build-eifs.outputs.next-pcr2 }}
+            next_checksum: ${{ steps.next-checksum.outputs.checksum }}
 
       - name: Create release
         uses: softprops/action-gh-release@v2
