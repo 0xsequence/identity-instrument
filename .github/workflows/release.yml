@@ -73,19 +73,19 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: identity.${{ needs.build-eifs.outputs.prod-version }}.eif
-          path: bin/identity.${{ needs.build-eifs.outputs.prod-version }}.eif
+          path: bin
 
       - name: Download next EIF
         uses: actions/download-artifact@v4
         with:
           name: identity.${{ needs.build-eifs.outputs.next-version }}.eif
-          path: bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif
+          path: bin
       
       - name: Download prod EIF checksum
         uses: actions/download-artifact@v4
         with:
           name: identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
-          path: bin/identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
+          path: bin
     
       - name: Output prod EIF checksum
         id: prod-checksum
@@ -97,7 +97,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
-          path: bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
+          path: bin
 
       - name: Output next EIF checksum
         id: next-checksum
