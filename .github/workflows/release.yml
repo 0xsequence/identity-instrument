@@ -17,15 +17,15 @@ jobs:
 
     outputs:
       prod-version: ${{ steps.vars.outputs.prod-version }}
-      prod-pcr0: ${{ steps.build-eif.outputs.prod-pcr0 }}
-      prod-pcr1: ${{ steps.build-eif.outputs.prod-pcr1 }}
-      prod-pcr2: ${{ steps.build-eif.outputs.prod-pcr2 }}
-      prod-checksum: ${{ steps.build-eif.outputs.prod-checksum }}
+      prod-pcr0: ${{ steps.build.outputs.prod-pcr0 }}
+      prod-pcr1: ${{ steps.build.outputs.prod-pcr1 }}
+      prod-pcr2: ${{ steps.build.outputs.prod-pcr2 }}
+      prod-checksum: ${{ steps.build.outputs.prod-checksum }}
       next-version: ${{ steps.vars.outputs.next-version }}
-      next-pcr0: ${{ steps.build-eif.outputs.next-pcr0 }}
-      next-pcr1: ${{ steps.build-eif.outputs.next-pcr1 }}
-      next-pcr2: ${{ steps.build-eif.outputs.next-pcr2 }}
-      next-checksum: ${{ steps.build-eif.outputs.next-checksum }}
+      next-pcr0: ${{ steps.build.outputs.next-pcr0 }}
+      next-pcr1: ${{ steps.build.outputs.next-pcr1 }}
+      next-pcr2: ${{ steps.build.outputs.next-pcr2 }}
+      next-checksum: ${{ steps.build.outputs.next-checksum }}
 
     steps:
       - uses: actions/checkout@v5
