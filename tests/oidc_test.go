@@ -214,6 +214,7 @@ func TestOIDC(t *testing.T) {
 			Scope:  proto.Scope("@123"),
 			Signer: *resSigner,
 			Digest: digestHex,
+			Nonce:  "0x1",
 		}
 		sig = signRequest(t, authKey, signParams)
 		resSignature, err := c.Sign(ctx, signParams, protoAuthKey, sig)
