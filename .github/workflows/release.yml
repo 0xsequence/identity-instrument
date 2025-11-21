@@ -130,8 +130,8 @@ jobs:
           draft: true
           preserve_order: true
           files: |
-            identity.${{ needs.build-eifs.outputs.prod-version }}.eif
-            identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
-            identity.${{ needs.build-eifs.outputs.next-version }}.eif
-            identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
+            **/identity.${{ needs.build-eifs.outputs.prod-version }}.eif
+            **/identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
+            **/identity.${{ needs.build-eifs.outputs.next-version }}.eif
+            **/identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
 
