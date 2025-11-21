@@ -43,8 +43,8 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-          aws-bucket: ${{ secrets.AWS_BUCKET }}
+          aws-region: ${{ vars.AWS_REGION }}
+          aws-bucket: ${{ vars.AWS_BUCKET }}
           file-path: bin/identity.${{ steps.vars.outputs.version }}.eif
           destination-dir: dev
           output-file-url: 'true'
@@ -86,8 +86,8 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-          aws-bucket: ${{ secrets.AWS_BUCKET }}
+          aws-region: ${{ vars.AWS_REGION }}
+          aws-bucket: ${{ vars.AWS_BUCKET }}
           file-path: bin/identity.${{ steps.vars.outputs.version }}.eif
           destination-dir: next
           output-file-url: 'true'
