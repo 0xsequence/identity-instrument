@@ -136,6 +136,7 @@ error 7202 KeyNotFound "The authentication key was not found" HTTP 404
 error 7203 KeyExpired "The authentication key expired" HTTP 400
 error 7204 SignerNotFound "The signer was not found" HTTP 404
 error 7205 UsageLimitExceeded "Too many requests" HTTP 429
+error 7206 PreconditionFailed "Precondition failed; try again with a higher nonce value" HTTP 412
 
 error 7002 ProofVerificationFailed "The authentication proof could not be verified" HTTP 400
 error 7003 AnswerIncorrect "The provided answer is incorrect" HTTP 400

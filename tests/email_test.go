@@ -242,6 +242,7 @@ func TestEmail(t *testing.T) {
 			signParams := &proto.SignParams{
 				Scope:  proto.Scope("@123"),
 				Signer: *p.signer,
+				Nonce:  "0x1",
 				Digest: hexutil.Encode(digest),
 			}
 			sig = signRequest(t, authKey, signParams)
