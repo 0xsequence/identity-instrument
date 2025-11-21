@@ -199,7 +199,7 @@ func TestSign(t *testing.T) {
 		resSigner, _, err := c.CompleteAuth(ctx, registerParams, protoAuthKey, sig)
 		require.NoError(t, err)
 
-		{
+		t.Run("ValidNonce", func(t *testing.T) {
 			digest := crypto.Keccak256([]byte("message"))
 			digestHex := hexutil.Encode(digest)
 
@@ -212,9 +212,9 @@ func TestSign(t *testing.T) {
 			sig = signRequest(t, authKey, signParams)
 			_, err := c.Sign(ctx, signParams, protoAuthKey, sig)
 			require.NoError(t, err)
-		}
+		})
 
-		{
+		t.Run("SameNonce", func(t *testing.T) {
 			digest := crypto.Keccak256([]byte("same nonce"))
 			digestHex := hexutil.Encode(digest)
 
@@ -227,9 +227,9 @@ func TestSign(t *testing.T) {
 			sig = signRequest(t, authKey, signParams)
 			_, err = c.Sign(ctx, signParams, protoAuthKey, sig)
 			require.ErrorIs(t, err, proto.ErrPreconditionFailed)
-		}
+		})
 
-		{
+		t.Run("LowerNonce", func(t *testing.T) {
 			digest := crypto.Keccak256([]byte("lower nonce"))
 			digestHex := hexutil.Encode(digest)
 
@@ -242,9 +242,9 @@ func TestSign(t *testing.T) {
 			sig = signRequest(t, authKey, signParams)
 			_, err = c.Sign(ctx, signParams, protoAuthKey, sig)
 			require.ErrorIs(t, err, proto.ErrPreconditionFailed)
-		}
+		})
 
-		{
+		t.Run("HigherNonce", func(t *testing.T) {
 			digest := crypto.Keccak256([]byte("higher nonce"))
 			digestHex := hexutil.Encode(digest)
 
@@ -257,6 +257,21 @@ func TestSign(t *testing.T) {
 			sig = signRequest(t, authKey, signParams)
 			_, err = c.Sign(ctx, signParams, protoAuthKey, sig)
 			require.NoError(t, err)
-		}
+		})
+
+		t.Run("TooLongNonce", func(t *testing.T) {
+			digest := crypto.Keccak256([]byte("too long nonce"))
+			digestHex := hexutil.Encode(digest)
+
+			signParams := &proto.SignParams{
+				Scope:  proto.Scope("@123"),
+				Signer: *resSigner,
+				Nonce:  "0x1000000000000000000000000000000000000000000000000000000000000000",
+				Digest: digestHex,
+			}
+			sig = signRequest(t, authKey, signParams)
+			_, err = c.Sign(ctx, signParams, protoAuthKey, sig)
+			require.ErrorIs(t, err, proto.ErrInvalidRequest)
+		})
 	})
 }

@@ -40,6 +40,9 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 	if err != nil {
 		return "", proto.ErrInvalidRequest.WithCausef("invalid nonce: %w", err)
 	}
+	if len(nonce.String()) > 30 {
+		return "", proto.ErrInvalidRequest.WithCausef("nonce is too long")
+	}
 	if err := s.checkRateLimit(ctx, dbAuthKey, nonce); err != nil {
 		return "", err
 	}
