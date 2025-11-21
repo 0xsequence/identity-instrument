@@ -712,7 +712,7 @@ func TestIdentity_EdgeCases(t *testing.T) {
 			name: "email identity with special characters but valid",
 			identity: Identity{
 				Type:    IdentityType_Email,
-				Subject: "user!@#$%^&*()_+-=[]{}|;':\",.<>?@example.com",
+				Subject: "user!@#$%^&*()_+-=[]{}|;':\",.<>?@subdomain.example.com",
 			},
 			expectedError: false,
 		},
@@ -737,7 +737,7 @@ func TestIdentity_EdgeCases(t *testing.T) {
 
 		// Invalid cases with special characters
 		{
-			name: "invalid email identity - subject contains colon",
+			name: "valid email identity - subject contains colon",
 			identity: Identity{
 				Type:    IdentityType_Email,
 				Subject: "user:test@example.com",
@@ -789,7 +789,7 @@ func TestIdentity_EdgeCases(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name: "invalid OIDC identity - subject contains hash",
+			name: "valid OIDC identity - subject contains hash",
 			identity: Identity{
 				Type:    IdentityType_OIDC,
 				Issuer:  "https://accounts.google.com",
