@@ -57,11 +57,11 @@ jobs:
           name: identity.${{ steps.vars.outputs.version }}.eif
           path: bin/identity.${{ steps.vars.outputs.version }}.eif
 
-      - name: Output EIF checksum
-        id: checksum
-        run: |
-          CHECKSUM=$(awk '{print $1}' bin/identity.${{ steps.vars.outputs.version }}.eif.sha256sum)
-          echo "${{ matrix.env }}-checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+      - name: Upload EIF checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity.${{ steps.vars.outputs.version }}.eif.sha256sum
+          path: bin/identity.${{ steps.vars.outputs.version }}.eif.sha256sum
 
   release:
     runs-on: ubuntu-latest
@@ -97,6 +97,18 @@ jobs:
         with:
           name: identity.${{ needs.build-eifs.outputs.next-version }}.eif
           path: bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif
+      
+      - name: Download prod EIF checksum
+        uses: actions/download-artifact@v4
+        with:
+          name: identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
+          path: bin/identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
+      
+      - name: Download next EIF checksum
+        uses: actions/download-artifact@v4
+        with:
+          name: identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
+          path: bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
 
       - name: Create release
         uses: softprops/action-gh-release@v2
@@ -106,8 +118,8 @@ jobs:
           draft: true
           preserve_order: true
           files: |
-            bin/identity.${{ needs.build-eifs.outputs.prod-version }}.eif
-            bin/identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
-            bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif
-            bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
+            identity.${{ needs.build-eifs.outputs.prod-version }}.eif
+            identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
+            identity.${{ needs.build-eifs.outputs.next-version }}.eif
+            identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
 
