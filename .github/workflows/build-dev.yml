@@ -7,12 +7,20 @@ on:
       - ci-commit-comment
 
 jobs:
-  build-dev-eif:
+  build-eifs:
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        env: [dev, next]
+
     outputs:
-      file-url: ${{ steps.upload.outputs.file-url }}
-      checksum: ${{ steps.checksum.outputs.checksum }}
+      dev-file-url: ${{ steps.file-url.outputs.dev-file-url }}
+      dev-checksum: ${{ steps.checksum.outputs.dev-checksum }}
+      dev-pcr0: ${{ steps.build.outputs.dev-pcr0 }}
+      next-file-url: ${{ steps.file-url.outputs.next-file-url }}
+      next-checksum: ${{ steps.checksum.outputs.next-checksum }}
+      next-pcr0: ${{ steps.build.outputs.next-pcr0 }}
 
     steps:
       - uses: actions/checkout@v3
@@ -22,20 +30,24 @@ jobs:
         run: |
           DATE=$(date -u +%Y%m%d)
           HASH=$(git rev-parse --short=8 HEAD)
-          VERSION="dev-$DATE-$HASH"
+          VERSION="${{ matrix.env }}-$DATE-$HASH"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build EIF
+        id: build
         env:
-          ENV: dev
+          ENV: ${{ matrix.env }}
           VERSION: ${{ steps.vars.outputs.version }}
-        run: make eif
-      
+        run: |
+          make eif | tee build.log
+          PCR0=$(grep "BootMeasurement: " build.log | awk -F'"PCR0": "' '{print $2}' | awk -F'"' '{print $1}')
+          echo "${{ matrix.env }}-pcr0=$PCR0" >> "$GITHUB_OUTPUT"
+
       - name: Output EIF checksum
         id: checksum
         run: |
           CHECKSUM=$(awk '{print $1}' bin/identity.${{ steps.vars.outputs.version }}.eif.sha256sum)
-          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.env }}-checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
 
       - name: Upload EIF to S3
         uses: hkusu/s3-upload-action@v2
@@ -46,58 +58,20 @@ jobs:
           aws-region: ${{ vars.AWS_REGION }}
           aws-bucket: ${{ vars.AWS_BUCKET }}
           file-path: bin/identity.${{ steps.vars.outputs.version }}.eif
-          destination-dir: dev
+          destination-dir: ${{ matrix.env }}
           output-file-url: 'true'
           public: 'true'
 
-  build-next-eif:
-    runs-on: ubuntu-latest
-
-    outputs:
-      file-url: ${{ steps.upload.outputs.file-url }}
-      checksum: ${{ steps.checksum.outputs.checksum }}
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Generate VERSION variable
-        id: vars
+      - name: Output file URL
+        id: file-url
         run: |
-          DATE=$(date -u +%Y%m%d)
-          HASH=$(git rev-parse --short=8 HEAD)
-          VERSION="next-$DATE-$HASH"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Build EIF
-        env:
-          ENV: next
-          VERSION: ${{ steps.vars.outputs.version }}
-        run: make eif
-
-      - name: Output EIF checksum
-        id: checksum
-        run: |
-          CHECKSUM=$(awk '{print $1}' bin/identity.${{ steps.vars.outputs.version }}.eif.sha256sum)
-          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
-
-      - name: Upload EIF to S3
-        uses: hkusu/s3-upload-action@v2
-        id: upload
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
-          aws-bucket: ${{ vars.AWS_BUCKET }}
-          file-path: bin/identity.${{ steps.vars.outputs.version }}.eif
-          destination-dir: next
-          output-file-url: 'true'
-          public: 'true'
+          echo "${{ matrix.env }}-file-url=${{ steps.upload.outputs.file-url }}" >> "$GITHUB_OUTPUT"
 
   commit-comment:
     runs-on: ubuntu-latest
-    needs: [build-dev-eif, build-next-eif]
+    needs: build-eifs
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v5
 
       - name: Render template
         id: template
@@ -105,10 +79,12 @@ jobs:
         with:
           template: .github/comment-template.md
           vars: |
-            dev_eif_url: ${{ needs.build-dev-eif.outputs.file-url }}
-            dev_eif_checksum: ${{ needs.build-dev-eif.outputs.checksum }}
-            next_eif_url: ${{ needs.build-next-eif.outputs.file-url }}
-            next_eif_checksum: ${{ needs.build-next-eif.outputs.checksum }}
+            dev_eif_url: ${{ needs.build-eifs.outputs.dev-file-url }}
+            dev_eif_checksum: ${{ needs.build-eifs.outputs.dev-checksum }}
+            dev_pcr0: ${{ needs.build-eifs.outputs.dev-pcr0 }}
+            next_eif_url: ${{ needs.build-eifs.outputs.next-file-url }}
+            next_eif_checksum: ${{ needs.build-eifs.outputs.next-checksum }}
+            next_pcr0: ${{ needs.build-eifs.outputs.next-pcr0 }}
 
       - name: Create commit comment
         uses: peter-evans/commit-comment@v4
