@@ -43,8 +43,9 @@ func withAudience(expectedAudience []string) jwt.ValidatorFunc {
 }
 
 func normalizeIssuer(iss string) string {
+	iss = strings.TrimSuffix(iss, "/")
 	if !strings.HasPrefix(iss, "https://") && !strings.HasPrefix(iss, "http://") {
-		return "https://" + iss
+		iss = "https://" + iss
 	}
 	return iss
 }
