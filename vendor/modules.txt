@@ -220,19 +220,10 @@ github.com/cloudflare/circl/math/mlsbset
 github.com/cloudflare/circl/sign
 github.com/cloudflare/circl/sign/ed25519
 github.com/cloudflare/circl/sign/ed448
-# github.com/cyphar/filepath-securejoin v0.5.0
+# github.com/cyphar/filepath-securejoin v0.6.0
 ## explicit; go 1.18
 github.com/cyphar/filepath-securejoin
 github.com/cyphar/filepath-securejoin/internal/consts
-github.com/cyphar/filepath-securejoin/pathrs-lite
-github.com/cyphar/filepath-securejoin/pathrs-lite/internal
-github.com/cyphar/filepath-securejoin/pathrs-lite/internal/assert
-github.com/cyphar/filepath-securejoin/pathrs-lite/internal/fd
-github.com/cyphar/filepath-securejoin/pathrs-lite/internal/gocompat
-github.com/cyphar/filepath-securejoin/pathrs-lite/internal/kernelversion
-github.com/cyphar/filepath-securejoin/pathrs-lite/internal/linux
-github.com/cyphar/filepath-securejoin/pathrs-lite/internal/procfs
-github.com/cyphar/filepath-securejoin/pathrs-lite/procfs
 # github.com/davecgh/go-spew v1.1.1
 ## explicit
 github.com/davecgh/go-spew/spew
@@ -546,7 +537,7 @@ github.com/stretchr/testify/require
 # github.com/webrpc/gen-dart v0.1.1
 ## explicit; go 1.16
 github.com/webrpc/gen-dart
-# github.com/webrpc/gen-golang v0.23.1
+# github.com/webrpc/gen-golang v0.23.3
 ## explicit; go 1.23.12
 github.com/webrpc/gen-golang
 # github.com/webrpc/gen-javascript v0.13.0
@@ -555,13 +546,13 @@ github.com/webrpc/gen-javascript
 # github.com/webrpc/gen-kotlin v0.1.0
 ## explicit; go 1.16
 github.com/webrpc/gen-kotlin
-# github.com/webrpc/gen-openapi v0.16.3
+# github.com/webrpc/gen-openapi v0.16.4
 ## explicit; go 1.16
 github.com/webrpc/gen-openapi
-# github.com/webrpc/gen-typescript v0.22.0
+# github.com/webrpc/gen-typescript v0.23.1
 ## explicit; go 1.22
 github.com/webrpc/gen-typescript
-# github.com/webrpc/webrpc v0.30.1
+# github.com/webrpc/webrpc v0.31.2
 ## explicit; go 1.23.12
 github.com/webrpc/webrpc
 github.com/webrpc/webrpc/cmd/webrpc-gen

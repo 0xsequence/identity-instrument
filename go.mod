@@ -35,7 +35,7 @@ require (
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
-	github.com/webrpc/webrpc v0.30.1
+	github.com/webrpc/webrpc v0.31.2
 )
 
 require (
@@ -58,7 +58,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
-	github.com/cyphar/filepath-securejoin v0.5.0 // indirect
+	github.com/cyphar/filepath-securejoin v0.6.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
@@ -106,11 +106,11 @@ require (
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/webrpc/gen-dart v0.1.1 // indirect
-	github.com/webrpc/gen-golang v0.23.1 // indirect
+	github.com/webrpc/gen-golang v0.23.3 // indirect
 	github.com/webrpc/gen-javascript v0.13.0 // indirect
 	github.com/webrpc/gen-kotlin v0.1.0 // indirect
-	github.com/webrpc/gen-openapi v0.16.3 // indirect
-	github.com/webrpc/gen-typescript v0.22.0 // indirect
+	github.com/webrpc/gen-openapi v0.16.4 // indirect
+	github.com/webrpc/gen-typescript v0.23.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
