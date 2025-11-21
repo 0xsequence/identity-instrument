@@ -99,7 +99,7 @@ jobs:
           path: bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif
 
       - name: Create release
-        uses: softprops/action-gh-release@v4
+        uses: softprops/action-gh-release@v2
         with:
           body: ${{ steps.template.outputs.result }}
           generate_release_notes: true
