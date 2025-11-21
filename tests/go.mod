@@ -57,7 +57,7 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/containerd/platforms v0.2.1 // indirect
 	github.com/cpuguy83/dockercfg v0.3.2 // indirect
-	github.com/cyphar/filepath-securejoin v0.5.0 // indirect
+	github.com/cyphar/filepath-securejoin v0.6.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/docker v28.5.1+incompatible // indirect
@@ -138,12 +138,12 @@ require (
 	github.com/tklauser/go-sysconf v0.3.15 // indirect
 	github.com/tklauser/numcpus v0.10.0 // indirect
 	github.com/webrpc/gen-dart v0.1.1 // indirect
-	github.com/webrpc/gen-golang v0.23.1 // indirect
+	github.com/webrpc/gen-golang v0.23.3 // indirect
 	github.com/webrpc/gen-javascript v0.13.0 // indirect
 	github.com/webrpc/gen-kotlin v0.1.0 // indirect
-	github.com/webrpc/gen-openapi v0.16.3 // indirect
-	github.com/webrpc/gen-typescript v0.22.0 // indirect
-	github.com/webrpc/webrpc v0.30.1 // indirect
+	github.com/webrpc/gen-openapi v0.16.4 // indirect
+	github.com/webrpc/gen-typescript v0.23.1 // indirect
+	github.com/webrpc/webrpc v0.31.2 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
