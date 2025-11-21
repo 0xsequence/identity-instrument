@@ -112,7 +112,7 @@ func (h *AuthHandler) VerifyToken(
 
 	ks := &operationKeySet{
 		ctx:       ctx,
-		iss:       expectedIssuer,
+		iss:       normalizeIssuer(expectedIssuer),
 		store:     h.jwkStore,
 		getKeySet: h.GetKeySet,
 	}
