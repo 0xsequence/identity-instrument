@@ -116,6 +116,7 @@ func TestOIDC(t *testing.T) {
 		signParams := &proto.SignParams{
 			Scope:  proto.Scope("@123"),
 			Signer: *resSigner,
+			Nonce:  "0x1",
 			Digest: digestHex,
 		}
 		sig = signRequest(t, authKey, signParams)
@@ -312,6 +313,7 @@ func TestOIDC(t *testing.T) {
 		signParams := &proto.SignParams{
 			Scope:  proto.Scope("@123"),
 			Signer: *resSigner,
+			Nonce:  "0x1",
 			Digest: digestHex,
 		}
 		sig = signRequest(t, authKey, signParams)
@@ -416,6 +418,7 @@ func TestOIDC(t *testing.T) {
 		signParams := &proto.SignParams{
 			Scope:  proto.Scope("@123"),
 			Signer: *resSigner,
+			Nonce:  "0x1",
 			Digest: digestHex,
 		}
 		sig = signRequest(t, authKey, signParams)
@@ -520,6 +523,7 @@ func TestOIDC(t *testing.T) {
 		signParams := &proto.SignParams{
 			Scope:  proto.Scope("@123"),
 			Signer: *resSigner,
+			Nonce:  "0x1",
 			Digest: digestHex,
 		}
 		sig = signRequest(t, authKey, signParams)
