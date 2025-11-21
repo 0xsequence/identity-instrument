@@ -98,8 +98,12 @@ func (p *SignParams) Validate() error {
 		return fmt.Errorf("invalid digest: %s", p.Digest)
 	}
 
-	if p.Nonce != "" && len(p.Nonce) > 64 {
-		return fmt.Errorf("nonce is too long: %s", p.Nonce)
+	if p.Nonce == "" {
+		return fmt.Errorf("nonce is required")
+	}
+
+	if len(p.Nonce) > 64 {
+		return fmt.Errorf("nonce is too long")
 	}
 
 	return nil

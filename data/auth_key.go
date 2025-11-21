@@ -154,7 +154,7 @@ func (t *AuthKeyTable) IncrementUsageCount(ctx context.Context, key *AuthKey, no
 	input := &dynamodb.UpdateItemInput{
 		TableName:           &t.tableARN,
 		Key:                 dbKey,
-		UpdateExpression:    aws.String("ADD UsageCountInWindow :increment"),
+		UpdateExpression:    aws.String("ADD UsageCountInWindow :increment SET LastNonce = :nonce"),
 		ConditionExpression: aws.String("UsageWindowStart = :windowStart AND (attribute_not_exists(LastNonce) OR :nonce > LastNonce)"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
 			":windowStart": &types.AttributeValueMemberS{Value: key.UsageWindowStart.Format(time.RFC3339Nano)},

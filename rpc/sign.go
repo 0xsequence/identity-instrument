@@ -15,6 +15,10 @@ import (
 	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
 )
 
+// Nonce length is limited to 30 decimal digits, sufficient for most use cases
+// and well below the maximum supported by the database number type.
+const maxNonceLength = 30
+
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto.Key, signature string) (string, error) {
 	log := o11y.LoggerFromContext(ctx)
 
@@ -40,7 +44,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 	if err != nil {
 		return "", proto.ErrInvalidRequest.WithCausef("invalid nonce: %w", err)
 	}
-	if len(nonce.String()) > 30 {
+	if len(nonce.String()) > maxNonceLength {
 		return "", proto.ErrInvalidRequest.WithCausef("nonce is too long")
 	}
 	if err := s.checkRateLimit(ctx, dbAuthKey, nonce); err != nil {

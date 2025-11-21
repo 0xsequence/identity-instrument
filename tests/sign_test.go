@@ -251,12 +251,27 @@ func TestSign(t *testing.T) {
 			signParams := &proto.SignParams{
 				Scope:  proto.Scope("@123"),
 				Signer: *resSigner,
-				Nonce:  "0x101",
+				Nonce:  "0x150",
 				Digest: digestHex,
 			}
 			sig = signRequest(t, authKey, signParams)
 			_, err = c.Sign(ctx, signParams, protoAuthKey, sig)
 			require.NoError(t, err)
+		})
+
+		t.Run("LowerNonceAgain", func(t *testing.T) {
+			digest := crypto.Keccak256([]byte("lower nonce"))
+			digestHex := hexutil.Encode(digest)
+
+			signParams := &proto.SignParams{
+				Scope:  proto.Scope("@123"),
+				Signer: *resSigner,
+				Nonce:  "0x149",
+				Digest: digestHex,
+			}
+			sig = signRequest(t, authKey, signParams)
+			_, err = c.Sign(ctx, signParams, protoAuthKey, sig)
+			require.ErrorIs(t, err, proto.ErrPreconditionFailed)
 		})
 
 		t.Run("TooLongNonce", func(t *testing.T) {
