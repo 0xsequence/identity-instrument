@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"context"
+	"errors"
+	"math/big"
 	"time"
 
 	"github.com/0xsequence/ethkit/go-ethereum/common"
@@ -34,7 +36,11 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 		return "", proto.ErrKeyNotFound
 	}
 
-	if err := s.checkRateLimit(ctx, dbAuthKey); err != nil {
+	nonce, err := hexutil.DecodeBig(params.Nonce)
+	if err != nil {
+		return "", proto.ErrInvalidRequest.WithCausef("invalid nonce: %w", err)
+	}
+	if err := s.checkRateLimit(ctx, dbAuthKey, nonce); err != nil {
 		return "", err
 	}
 
@@ -96,7 +102,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 	return hexutil.Encode(sigBytes), nil
 }
 
-func (s *RPC) checkRateLimit(ctx context.Context, authKey *data.AuthKey) error {
+func (s *RPC) checkRateLimit(ctx context.Context, authKey *data.AuthKey, nonce *big.Int) error {
 	if !s.Config.RateLimit.Enabled {
 		return nil
 	}
@@ -106,8 +112,12 @@ func (s *RPC) checkRateLimit(ctx context.Context, authKey *data.AuthKey) error {
 
 	// Reset usage window if enough time has passed
 	if now.After(authKey.UsageWindowStart.Add(s.Config.RateLimit.WindowSize)) {
-		if err := s.AuthKeys.ResetUsageWindow(ctx, authKey, now); err != nil {
+		if err := s.AuthKeys.ResetUsageWindow(ctx, authKey, now, nonce); err != nil {
 			log.Error("failed to reset usage window", "error", err)
+			var webrpcErr proto.WebRPCError
+			if errors.As(err, &webrpcErr) {
+				return webrpcErr
+			}
 			return proto.ErrDatabaseError
 		}
 		return nil
@@ -117,8 +127,12 @@ func (s *RPC) checkRateLimit(ctx context.Context, authKey *data.AuthKey) error {
 		return proto.ErrUsageLimitExceeded
 	}
 
-	if err := s.AuthKeys.IncrementUsageCount(ctx, authKey); err != nil {
+	if err := s.AuthKeys.IncrementUsageCount(ctx, authKey, nonce); err != nil {
 		log.Error("failed to increment usage count", "error", err)
+		var webrpcErr proto.WebRPCError
+		if errors.As(err, &webrpcErr) {
+			return err
+		}
 		return proto.ErrDatabaseError
 	}
 	return nil
