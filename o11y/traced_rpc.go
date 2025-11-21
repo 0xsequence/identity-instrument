@@ -7,12 +7,12 @@ import (
 )
 
 type tracedRPC struct {
-	svc proto.IdentityInstrument
+	svc proto.IdentityInstrumentServer
 }
 
-var _ proto.IdentityInstrument = (*tracedRPC)(nil)
+var _ proto.IdentityInstrumentServer = (*tracedRPC)(nil)
 
-func NewTracedRPC(svc proto.IdentityInstrument) *tracedRPC {
+func NewTracedRPC(svc proto.IdentityInstrumentServer) *tracedRPC {
 	return &tracedRPC{svc: svc}
 }
 
