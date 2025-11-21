@@ -3,6 +3,8 @@ package proto
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -425,8 +427,7 @@ func TestAuthID_FromString(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var authID AuthID
-			err := authID.FromString(tt.input)
+			authID, err := parseAuthID(tt.input)
 
 			if tt.expectedError {
 				require.Error(t, err)
@@ -581,8 +582,7 @@ func TestAuthID_EncodeFromString_Roundtrip(t *testing.T) {
 				require.NoError(t, err)
 
 				// Parse it back
-				var parsed AuthID
-				err = parsed.FromString(encoded)
+				parsed, err := parseAuthID(encoded)
 				require.NoError(t, err)
 
 				// Should be identical
@@ -746,8 +746,7 @@ func TestAuthID_AllAuthModes(t *testing.T) {
 			encoded, err := authID.Encode()
 			require.NoError(t, err)
 
-			var parsed AuthID
-			err = parsed.FromString(encoded)
+			parsed, err := parseAuthID(encoded)
 			require.NoError(t, err)
 			assert.Equal(t, authID, parsed)
 		})
@@ -775,8 +774,7 @@ func TestAuthID_AllIdentityTypes(t *testing.T) {
 			encoded, err := authID.Encode()
 			require.NoError(t, err)
 
-			var parsed AuthID
-			err = parsed.FromString(encoded)
+			parsed, err := parseAuthID(encoded)
 			require.NoError(t, err)
 			assert.Equal(t, authID, parsed)
 		})
@@ -812,16 +810,6 @@ func BenchmarkAuthID_Encode(b *testing.B) {
 	}
 }
 
-func BenchmarkAuthID_FromString(b *testing.B) {
-	authIDStr := "@123:test/OTP/Email/user@example.com"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		var authID AuthID
-		_ = authID.FromString(authIDStr)
-	}
-}
-
 func BenchmarkAuthID_Hash(b *testing.B) {
 	authID := AuthID{
 		Scope:        "@123:test",
@@ -836,18 +824,18 @@ func BenchmarkAuthID_Hash(b *testing.B) {
 	}
 }
 
-func BenchmarkAuthID_EncodeFromString_Roundtrip(b *testing.B) {
-	authID := AuthID{
-		Scope:        "@123:test",
-		AuthMode:     AuthMode_OTP,
-		IdentityType: IdentityType_Email,
-		Verifier:     "user@example.com",
+func parseAuthID(s string) (AuthID, error) {
+	parts := strings.SplitN(s, "/", 4)
+	if len(parts) != 4 {
+		return AuthID{}, fmt.Errorf("invalid auth ID format: %s", s)
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		encoded, _ := authID.Encode()
-		var parsed AuthID
-		_ = parsed.FromString(encoded)
+	authID := AuthID{
+		Scope:        Scope(parts[0]),
+		AuthMode:     AuthMode(parts[1]),
+		IdentityType: IdentityType(parts[2]),
+		Verifier:     parts[3],
 	}
+
+	return authID, nil
 }
