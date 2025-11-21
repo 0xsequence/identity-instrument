@@ -46,6 +46,7 @@ func normalizeIssuer(iss string) string {
 	if !strings.HasPrefix(iss, "https://") && !strings.HasPrefix(iss, "http://") {
 		return "https://" + iss
 	}
+	iss = strings.TrimSuffix(iss, "/")
 	return iss
 }
 

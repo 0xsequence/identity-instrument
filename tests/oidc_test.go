@@ -133,6 +133,102 @@ func TestOIDC(t *testing.T) {
 		assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
 
+	t.Run("AuthMode_IDToken_TrailingSlashIssuer", func(t *testing.T) {
+		ctx := context.Background()
+
+		exp := time.Now().Add(120 * time.Second)
+		tokBuilderFn := func(b *jwt.Builder, url string) {
+			b.Issuer(url + "/") // issuer with a trailing slash in JWT
+			b.Expiration(exp)
+		}
+
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				// skip TLS verification for testing
+				InsecureSkipVerify: true,
+			},
+		}
+		svc := initRPC(t, ep, transport)
+
+		authServer := newMockOAuth2Server(t, svc)
+		defer authServer.Close()
+		authServer.tokenBuilderFn = tokBuilderFn
+
+		issuer := authServer.URL()
+		tok := authServer.issueIDToken("audience")
+
+		authKey, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+		require.NoError(t, err)
+
+		srv := httptest.NewServer(svc.Handler())
+		defer srv.Close()
+
+		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
+
+		hashedToken := hexutil.Encode(crypto.Keccak256([]byte(tok)))
+
+		protoAuthKey := &proto.Key{
+			KeyType: proto.KeyType_Ethereum_Secp256k1,
+			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+		}
+		initiateParams := &proto.CommitVerifierParams{
+			Scope:        proto.Scope("@123"),
+			AuthMode:     proto.AuthMode_IDToken,
+			IdentityType: proto.IdentityType_OIDC,
+			Handle:       hashedToken,
+			Metadata: map[string]string{
+				"iss": issuer,
+				"aud": "audience",
+				"exp": strconv.Itoa(int(exp.Unix())),
+			},
+		}
+		sig := signRequest(t, authKey, initiateParams)
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams, protoAuthKey, sig)
+		require.NoError(t, err)
+		require.Equal(t, initiateParams.Handle, resVerifier)
+		require.Empty(t, loginHint)
+		require.Empty(t, challenge)
+
+		registerParams := &proto.CompleteAuthParams{
+			Scope:        proto.Scope("@123"),
+			AuthMode:     proto.AuthMode_IDToken,
+			IdentityType: proto.IdentityType_OIDC,
+			SignerType:   proto.KeyType_Ethereum_Secp256k1,
+			Verifier:     resVerifier,
+			Answer:       tok,
+		}
+		sig = signRequest(t, authKey, registerParams)
+		resSigner, resIdentity, err := c.CompleteAuth(ctx, registerParams, protoAuthKey, sig)
+		require.NoError(t, err)
+		require.NotEmpty(t, resSigner)
+		require.NotEmpty(t, resIdentity)
+		assert.Equal(t, resIdentity.Type, proto.IdentityType_OIDC)
+		assert.Equal(t, resIdentity.Subject, "subject")
+		assert.Equal(t, resIdentity.Issuer, issuer)
+
+		digest := crypto.Keccak256([]byte("message"))
+		digestHex := hexutil.Encode(digest)
+
+		signParams := &proto.SignParams{
+			Scope:  proto.Scope("@123"),
+			Signer: *resSigner,
+			Digest: digestHex,
+		}
+		sig = signRequest(t, authKey, signParams)
+		resSignature, err := c.Sign(ctx, signParams, protoAuthKey, sig)
+		require.NoError(t, err)
+
+		sigBytes := common.FromHex(resSignature)
+		if sigBytes[64] == 27 || sigBytes[64] == 28 {
+			sigBytes[64] -= 27
+		}
+
+		pub, err := crypto.Ecrecover(digest, sigBytes)
+		require.NoError(t, err)
+		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
+		assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
+	})
+
 	t.Run("AuthMode_AuthCode", func(t *testing.T) {
 		ctx := context.Background()
 
