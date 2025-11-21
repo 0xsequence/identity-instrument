@@ -6,6 +6,10 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 )
 
+// Nonce length is limited to 30 decimal digits, sufficient for most use cases
+// and well below the maximum supported by the database number type.
+const maxNonceLength = 30
+
 func (p *CommitVerifierParams) Validate() error {
 	if p == nil {
 		return fmt.Errorf("params is required")
@@ -102,7 +106,11 @@ func (p *SignParams) Validate() error {
 		return fmt.Errorf("nonce is required")
 	}
 
-	if len(p.Nonce) > 64 {
+	nonce, err := hexutil.DecodeBig(p.Nonce)
+	if err != nil {
+		return fmt.Errorf("invalid nonce: %w", err)
+	}
+	if len(nonce.String()) > maxNonceLength {
 		return fmt.Errorf("nonce is too long")
 	}
 
