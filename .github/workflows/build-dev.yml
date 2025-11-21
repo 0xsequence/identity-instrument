@@ -4,10 +4,15 @@ on:
   push:
     branches:
       - master
+      - ci-commit-comment
 
 jobs:
   build-dev-eif:
     runs-on: ubuntu-latest
+
+    outputs:
+      file-url: ${{ steps.upload.outputs.file-url }}
+      checksum: ${{ steps.checksum.outputs.checksum }}
 
     steps:
       - uses: actions/checkout@v3
@@ -17,20 +22,95 @@ jobs:
         run: |
           DATE=$(date -u +%Y%m%d)
           HASH=$(git rev-parse --short=8 HEAD)
-          VERSION="$DATE-$HASH"
-          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          VERSION="dev-$DATE-$HASH"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build EIF
         env:
           ENV: dev
-          VERSION: ${{ steps.vars.outputs.VERSION }}
+          VERSION: ${{ steps.vars.outputs.version }}
+        run: make eif
+      
+      - name: Output EIF checksum
+        id: checksum
+        run: |
+          CHECKSUM=$(awk '{print $1}' bin/identity.${{ steps.vars.outputs.version }}.eif.sha256sum)
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+
+      - name: Upload EIF to S3
+        uses: hkusu/s3-upload-action@v2
+        id: upload
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-bucket: ${{ secrets.AWS_BUCKET }}
+          file-path: bin/identity.${{ steps.vars.outputs.version }}.eif
+          destination-dir: dev
+          output-file-url: 'true'
+          public: 'true'
+
+  build-next-eif:
+    runs-on: ubuntu-latest
+
+    outputs:
+      file-url: ${{ steps.upload.outputs.file-url }}
+      checksum: ${{ steps.checksum.outputs.checksum }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Generate VERSION variable
+        id: vars
+        run: |
+          DATE=$(date -u +%Y%m%d)
+          HASH=$(git rev-parse --short=8 HEAD)
+          VERSION="next-$DATE-$HASH"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build EIF
+        env:
+          ENV: next
+          VERSION: ${{ steps.vars.outputs.version }}
         run: make eif
 
-      - name: Upload built EIF
-        uses: actions/upload-artifact@v4
+      - name: Output EIF checksum
+        id: checksum
+        run: |
+          CHECKSUM=$(awk '{print $1}' bin/identity.${{ steps.vars.outputs.version }}.eif.sha256sum)
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+
+      - name: Upload EIF to S3
+        uses: hkusu/s3-upload-action@v2
+        id: upload
         with:
-          name: identity.${{ steps.vars.outputs.VERSION }}.eif
-          path: bin/identity.${{ steps.vars.outputs.VERSION }}.eif
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+          aws-bucket: ${{ secrets.AWS_BUCKET }}
+          file-path: bin/identity.${{ steps.vars.outputs.version }}.eif
+          destination-dir: next
+          output-file-url: 'true'
+          public: 'true'
 
+  commit-comment:
+    runs-on: ubuntu-latest
+    needs: [build-dev-eif, build-next-eif]
+    steps:
+      - uses: actions/checkout@v3
 
+      - name: Render template
+        id: template
+        uses: chuhlomin/render-template@v1.4
+        with:
+          template: .github/comment-template.md
+          vars: |
+            dev_eif_url: ${{ needs.build-dev-eif.outputs.file-url }}
+            dev_eif_checksum: ${{ needs.build-dev-eif.outputs.checksum }}
+            next_eif_url: ${{ needs.build-next-eif.outputs.file-url }}
+            next_eif_checksum: ${{ needs.build-next-eif.outputs.checksum }}
 
+      - name: Create commit comment
+        uses: peter-evans/commit-comment@v4
+        with:
+          body: ${{ steps.template.outputs.result }}
