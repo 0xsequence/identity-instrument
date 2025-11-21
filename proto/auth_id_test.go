@@ -3,6 +3,8 @@ package proto
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -268,179 +270,6 @@ func TestAuthID_Encode(t *testing.T) {
 	}
 }
 
-func TestAuthID_FromString(t *testing.T) {
-	tests := []struct {
-		name          string
-		input         string
-		expected      AuthID
-		expectedError bool
-		errorContains string
-	}{
-		{
-			name:  "valid auth ID string with all fields",
-			input: "@123:test/OTP/Email/user@example.com",
-			expected: AuthID{
-				Scope:        "@123:test",
-				AuthMode:     AuthMode_OTP,
-				IdentityType: IdentityType_Email,
-				Verifier:     "user@example.com",
-			},
-			expectedError: false,
-		},
-		{
-			name:  "valid auth ID string with minimal scope",
-			input: "@456/IDToken/OIDC/sub123",
-			expected: AuthID{
-				Scope:        "@456",
-				AuthMode:     AuthMode_IDToken,
-				IdentityType: IdentityType_OIDC,
-				Verifier:     "sub123",
-			},
-			expectedError: false,
-		},
-		{
-			name:  "valid auth ID string with special characters",
-			input: "@789:app/AuthCode/Email/user+test@example-domain.co.uk",
-			expected: AuthID{
-				Scope:        "@789:app",
-				AuthMode:     AuthMode_AuthCode,
-				IdentityType: IdentityType_Email,
-				Verifier:     "user+test@example-domain.co.uk",
-			},
-			expectedError: false,
-		},
-		{
-			name:  "valid auth ID string with unicode",
-			input: "@999:unicode/AccessToken/Email/用户@测试.中国",
-			expected: AuthID{
-				Scope:        "@999:unicode",
-				AuthMode:     AuthMode_AccessToken,
-				IdentityType: IdentityType_Email,
-				Verifier:     "用户@测试.中国",
-			},
-			expectedError: false,
-		},
-		{
-			name:  "valid auth ID string with AuthCodePKCE",
-			input: "@100:pkce/AuthCodePKCE/OIDC/oauth-client-id",
-			expected: AuthID{
-				Scope:        "@100:pkce",
-				AuthMode:     AuthMode_AuthCodePKCE,
-				IdentityType: IdentityType_OIDC,
-				Verifier:     "oauth-client-id",
-			},
-			expectedError: false,
-		},
-		{
-			name:          "invalid format - too few parts",
-			input:         "@123/OTP/Email",
-			expectedError: true,
-			errorContains: "invalid auth ID format:",
-		},
-		{
-			name:          "invalid format - too many parts",
-			input:         "@123/OTP/Email/user@example.com/extra",
-			expectedError: true,
-			errorContains: "invalid verifier:",
-		},
-		{
-			name:          "invalid format - empty string",
-			input:         "",
-			expectedError: true,
-			errorContains: "invalid auth ID format:",
-		},
-		{
-			name:          "invalid format - no separators",
-			input:         "invalidauthid",
-			expectedError: true,
-			errorContains: "invalid auth ID format:",
-		},
-		{
-			name:          "invalid format - only one separator",
-			input:         "@123/OTP",
-			expectedError: true,
-			errorContains: "invalid auth ID format:",
-		},
-		{
-			name:          "invalid format - only two separators",
-			input:         "@123/OTP/Email",
-			expectedError: true,
-			errorContains: "invalid auth ID format:",
-		},
-		{
-			name:          "invalid - empty scope",
-			input:         "/OTP/Email/user@example.com",
-			expectedError: true,
-			errorContains: "invalid scope:",
-		},
-		{
-			name:          "invalid - scope contains slash",
-			input:         "@123/test/OTP/Email/user@example.com",
-			expectedError: true,
-			errorContains: "invalid verifier:",
-		},
-		{
-			name:          "invalid - empty auth mode",
-			input:         "@123:test//Email/user@example.com",
-			expectedError: true,
-			errorContains: "invalid auth mode:",
-		},
-		{
-			name:          "invalid - auth mode contains slash",
-			input:         "@123:test/OTP/Invalid/Email/user@example.com",
-			expectedError: true,
-			errorContains: "invalid verifier:",
-		},
-		{
-			name:          "invalid - empty identity type",
-			input:         "@123:test/OTP//user@example.com",
-			expectedError: true,
-			errorContains: "invalid identity type:",
-		},
-		{
-			name:          "invalid - identity type contains slash",
-			input:         "@123:test/OTP/Email/Invalid/user@example.com",
-			expectedError: true,
-			errorContains: "invalid verifier:",
-		},
-		{
-			name:          "invalid - empty verifier",
-			input:         "@123:test/OTP/Email/",
-			expectedError: true,
-			errorContains: "invalid verifier:",
-		},
-		{
-			name:          "invalid - verifier contains slash",
-			input:         "@123:test/OTP/Email/user/example.com",
-			expectedError: true,
-			errorContains: "invalid verifier:",
-		},
-		{
-			name:          "invalid - verifier too long",
-			input:         "@123:test/OTP/Email/" + string(make([]byte, 251)),
-			expectedError: true,
-			errorContains: "verifier is too long: 251",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var authID AuthID
-			err := authID.FromString(tt.input)
-
-			if tt.expectedError {
-				require.Error(t, err)
-				if tt.errorContains != "" {
-					assert.Contains(t, err.Error(), tt.errorContains)
-				}
-			} else {
-				require.NoError(t, err)
-				assert.Equal(t, tt.expected, authID)
-			}
-		})
-	}
-}
-
 func TestAuthID_Hash(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -581,8 +410,7 @@ func TestAuthID_EncodeFromString_Roundtrip(t *testing.T) {
 				require.NoError(t, err)
 
 				// Parse it back
-				var parsed AuthID
-				err = parsed.FromString(encoded)
+				parsed, err := parseAuthID(encoded)
 				require.NoError(t, err)
 
 				// Should be identical
@@ -746,8 +574,7 @@ func TestAuthID_AllAuthModes(t *testing.T) {
 			encoded, err := authID.Encode()
 			require.NoError(t, err)
 
-			var parsed AuthID
-			err = parsed.FromString(encoded)
+			parsed, err := parseAuthID(encoded)
 			require.NoError(t, err)
 			assert.Equal(t, authID, parsed)
 		})
@@ -775,8 +602,7 @@ func TestAuthID_AllIdentityTypes(t *testing.T) {
 			encoded, err := authID.Encode()
 			require.NoError(t, err)
 
-			var parsed AuthID
-			err = parsed.FromString(encoded)
+			parsed, err := parseAuthID(encoded)
 			require.NoError(t, err)
 			assert.Equal(t, authID, parsed)
 		})
@@ -812,16 +638,6 @@ func BenchmarkAuthID_Encode(b *testing.B) {
 	}
 }
 
-func BenchmarkAuthID_FromString(b *testing.B) {
-	authIDStr := "@123:test/OTP/Email/user@example.com"
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		var authID AuthID
-		_ = authID.FromString(authIDStr)
-	}
-}
-
 func BenchmarkAuthID_Hash(b *testing.B) {
 	authID := AuthID{
 		Scope:        "@123:test",
@@ -836,18 +652,18 @@ func BenchmarkAuthID_Hash(b *testing.B) {
 	}
 }
 
-func BenchmarkAuthID_EncodeFromString_Roundtrip(b *testing.B) {
-	authID := AuthID{
-		Scope:        "@123:test",
-		AuthMode:     AuthMode_OTP,
-		IdentityType: IdentityType_Email,
-		Verifier:     "user@example.com",
+func parseAuthID(s string) (AuthID, error) {
+	parts := strings.SplitN(s, "/", 4)
+	if len(parts) != 4 {
+		return AuthID{}, fmt.Errorf("invalid auth ID format: %s", s)
 	}
 
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		encoded, _ := authID.Encode()
-		var parsed AuthID
-		_ = parsed.FromString(encoded)
+	authID := AuthID{
+		Scope:        Scope(parts[0]),
+		AuthMode:     AuthMode(parts[1]),
+		IdentityType: IdentityType(parts[2]),
+		Verifier:     parts[3],
 	}
+
+	return authID, nil
 }
