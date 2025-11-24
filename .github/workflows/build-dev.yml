@@ -6,31 +6,86 @@ on:
       - master
 
 jobs:
-  build-dev-eif:
+  build-eifs:
     runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        env: [dev, next]
+
+    outputs:
+      dev-file-url: ${{ steps.file-url.outputs.dev-file-url }}
+      dev-checksum: ${{ steps.checksum.outputs.dev-checksum }}
+      dev-pcr0: ${{ steps.build.outputs.dev-pcr0 }}
+      next-file-url: ${{ steps.file-url.outputs.next-file-url }}
+      next-checksum: ${{ steps.checksum.outputs.next-checksum }}
+      next-pcr0: ${{ steps.build.outputs.next-pcr0 }}
 
     steps:
       - uses: actions/checkout@v3
 
-      - name: Generate VERSION variable
+      - name: Generate version
         id: vars
         run: |
           DATE=$(date -u +%Y%m%d)
           HASH=$(git rev-parse --short=8 HEAD)
-          VERSION="$DATE-$HASH"
-          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+          VERSION="${{ matrix.env }}-$DATE-$HASH"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build EIF
+        id: build
         env:
-          ENV: dev
-          VERSION: ${{ steps.vars.outputs.VERSION }}
-        run: make eif
+          ENV: ${{ matrix.env }}
+          VERSION: ${{ steps.vars.outputs.version }}
+        run: |
+          make eif | tee build.log
+          PCR0=$(grep "BootMeasurement: " build.log | awk -F'"PCR0": "' '{print $2}' | awk -F'"' '{print $1}')
+          echo "${{ matrix.env }}-pcr0=$PCR0" >> "$GITHUB_OUTPUT"
 
-      - name: Upload built EIF
-        uses: actions/upload-artifact@v4
+      - name: Output EIF checksum
+        id: checksum
+        run: |
+          CHECKSUM=$(awk '{print $1}' bin/identity.${{ steps.vars.outputs.version }}.eif.sha256sum)
+          echo "${{ matrix.env }}-checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+
+      - name: Upload EIF to S3
+        uses: hkusu/s3-upload-action@v2
+        id: upload
         with:
-          name: identity.${{ steps.vars.outputs.VERSION }}.eif
-          path: bin/identity.${{ steps.vars.outputs.VERSION }}.eif
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+          aws-bucket: ${{ vars.AWS_BUCKET }}
+          file-path: bin/identity.${{ steps.vars.outputs.version }}.eif
+          destination-dir: ${{ matrix.env }}
+          output-file-url: 'true'
+          public: 'true'
 
+      - name: Output file URL
+        id: file-url
+        run: |
+          echo "${{ matrix.env }}-file-url=${{ steps.upload.outputs.file-url }}" >> "$GITHUB_OUTPUT"
 
+  commit-comment:
+    runs-on: ubuntu-latest
+    needs: build-eifs
+    steps:
+      - uses: actions/checkout@v5
 
+      - name: Render template
+        id: template
+        uses: chuhlomin/render-template@v1.4
+        with:
+          template: .github/comment-template.md
+          vars: |
+            dev_eif_url: ${{ needs.build-eifs.outputs.dev-file-url }}
+            dev_eif_checksum: ${{ needs.build-eifs.outputs.dev-checksum }}
+            dev_pcr0: ${{ needs.build-eifs.outputs.dev-pcr0 }}
+            next_eif_url: ${{ needs.build-eifs.outputs.next-file-url }}
+            next_eif_checksum: ${{ needs.build-eifs.outputs.next-checksum }}
+            next_pcr0: ${{ needs.build-eifs.outputs.next-pcr0 }}
+
+      - name: Create commit comment
+        uses: peter-evans/commit-comment@v4
+        with:
+          body: ${{ steps.template.outputs.result }}
