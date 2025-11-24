@@ -61,7 +61,6 @@ type EncryptionConfig struct {
 }
 
 type RateLimitConfig struct {
-	Enabled    bool          `toml:"enabled"`
 	WindowSize time.Duration `toml:"window_size"`
 	UsageLimit int           `toml:"usage_limit"`
 }

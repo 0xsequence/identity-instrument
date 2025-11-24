@@ -2,7 +2,9 @@ package data
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	proto "github.com/0xsequence/identity-instrument/proto"
@@ -118,27 +120,7 @@ func (t *AuthKeyTable) Put(ctx context.Context, key *AuthKey) error {
 	return nil
 }
 
-func (t *AuthKeyTable) ResetUsageWindow(ctx context.Context, key *AuthKey, windowStart time.Time) error {
-	dbKey, err := key.DatabaseKey()
-	if err != nil {
-		return fmt.Errorf("encode database key: %w", err)
-	}
-	input := &dynamodb.UpdateItemInput{
-		TableName:        &t.tableARN,
-		Key:              dbKey,
-		UpdateExpression: aws.String("SET UsageCountInWindow = :initialCount, UsageWindowStart = :windowStart"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":windowStart":  &types.AttributeValueMemberS{Value: windowStart.Format(time.RFC3339Nano)},
-			":initialCount": &types.AttributeValueMemberN{Value: "1"},
-		},
-	}
-	if _, err := t.db.UpdateItem(ctx, input); err != nil {
-		return fmt.Errorf("UpdateItem: %w", err)
-	}
-	return nil
-}
-
-func (t *AuthKeyTable) IncrementUsageCount(ctx context.Context, key *AuthKey) error {
+func (t *AuthKeyTable) ResetUsageWindow(ctx context.Context, key *AuthKey, windowStart time.Time, nonce *big.Int) error {
 	dbKey, err := key.DatabaseKey()
 	if err != nil {
 		return fmt.Errorf("encode database key: %w", err)
@@ -146,15 +128,46 @@ func (t *AuthKeyTable) IncrementUsageCount(ctx context.Context, key *AuthKey) er
 	input := &dynamodb.UpdateItemInput{
 		TableName:           &t.tableARN,
 		Key:                 dbKey,
-		UpdateExpression:    aws.String("ADD UsageCountInWindow :increment"),
-		ConditionExpression: aws.String("UsageWindowStart = :windowStart"),
+		UpdateExpression:    aws.String("SET UsageCountInWindow = :initialCount, UsageWindowStart = :windowStart, LastNonce = :nonce"),
+		ConditionExpression: aws.String("attribute_not_exists(LastNonce) OR :nonce > LastNonce"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":windowStart": &types.AttributeValueMemberS{Value: key.UsageWindowStart.Format(time.RFC3339Nano)},
-			":increment":   &types.AttributeValueMemberN{Value: "1"},
+			":windowStart":  &types.AttributeValueMemberS{Value: windowStart.Format(time.RFC3339Nano)},
+			":initialCount": &types.AttributeValueMemberN{Value: "1"},
+			":nonce":        &types.AttributeValueMemberN{Value: nonce.String()},
 		},
 	}
 	if _, err := t.db.UpdateItem(ctx, input); err != nil {
-		return fmt.Errorf("UpdateItem: %w", err)
+		var ccf *types.ConditionalCheckFailedException
+		if errors.As(err, &ccf) {
+			return proto.ErrPreconditionFailed
+		}
+		return fmt.Errorf("update item: %w", err)
+	}
+	return nil
+}
+
+func (t *AuthKeyTable) IncrementUsageCount(ctx context.Context, key *AuthKey, nonce *big.Int) error {
+	dbKey, err := key.DatabaseKey()
+	if err != nil {
+		return fmt.Errorf("encode database key: %w", err)
+	}
+	input := &dynamodb.UpdateItemInput{
+		TableName:           &t.tableARN,
+		Key:                 dbKey,
+		UpdateExpression:    aws.String("ADD UsageCountInWindow :increment SET LastNonce = :nonce"),
+		ConditionExpression: aws.String("UsageWindowStart = :windowStart AND (attribute_not_exists(LastNonce) OR :nonce > LastNonce)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":windowStart": &types.AttributeValueMemberS{Value: key.UsageWindowStart.Format(time.RFC3339Nano)},
+			":increment":   &types.AttributeValueMemberN{Value: "1"},
+			":nonce":       &types.AttributeValueMemberN{Value: nonce.String()},
+		},
+	}
+	if _, err := t.db.UpdateItem(ctx, input); err != nil {
+		var ccf *types.ConditionalCheckFailedException
+		if errors.As(err, &ccf) {
+			return proto.ErrPreconditionFailed
+		}
+		return fmt.Errorf("update item: %w", err)
 	}
 	return nil
 }
