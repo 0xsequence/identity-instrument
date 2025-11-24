@@ -1,0 +1,135 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-eifs:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        env: [prod, next]
+
+    outputs:
+      prod-version: ${{ steps.vars.outputs.prod-version }}
+      prod-pcr0: ${{ steps.build.outputs.prod-pcr0 }}
+      prod-pcr1: ${{ steps.build.outputs.prod-pcr1 }}
+      prod-pcr2: ${{ steps.build.outputs.prod-pcr2 }}
+      prod-checksum: ${{ steps.build.outputs.prod-checksum }}
+      next-version: ${{ steps.vars.outputs.next-version }}
+      next-pcr0: ${{ steps.build.outputs.next-pcr0 }}
+      next-pcr1: ${{ steps.build.outputs.next-pcr1 }}
+      next-pcr2: ${{ steps.build.outputs.next-pcr2 }}
+      next-checksum: ${{ steps.build.outputs.next-checksum }}
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Generate version
+        id: vars
+        run: |
+          VERSION=$(echo "${{ github.ref_name }}+${{ matrix.env }}" | sed 's/\+prod//')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.env }}-version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build EIF
+        id: build
+        env:
+          ENV: ${{ matrix.env }}
+          VERSION: ${{ steps.vars.outputs.version }}
+        run: |
+          make eif | tee build.log
+          PCR0=$(grep "BootMeasurement: " build.log | awk -F'"PCR0": "' '{print $2}' | awk -F'"' '{print $1}')
+          PCR1=$(grep "BootMeasurement: " build.log | awk -F'"PCR1": "' '{print $2}' | awk -F'"' '{print $1}')
+          PCR2=$(grep "BootMeasurement: " build.log | awk -F'"PCR2": "' '{print $2}' | awk -F'"' '{print $1}')
+          echo "${{ matrix.env }}-pcr0=$PCR0" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.env }}-pcr1=$PCR1" >> "$GITHUB_OUTPUT"
+          echo "${{ matrix.env }}-pcr2=$PCR2" >> "$GITHUB_OUTPUT"
+
+      - name: Upload built EIF
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity.${{ steps.vars.outputs.version }}.eif
+          path: bin/identity.${{ steps.vars.outputs.version }}.eif
+
+      - name: Upload EIF checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: identity.${{ steps.vars.outputs.version }}.eif.sha256sum
+          path: bin/identity.${{ steps.vars.outputs.version }}.eif.sha256sum
+
+  release:
+    runs-on: ubuntu-latest
+    needs: build-eifs
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Download prod EIF
+        uses: actions/download-artifact@v4
+        with:
+          name: identity.${{ needs.build-eifs.outputs.prod-version }}.eif
+          path: bin
+
+      - name: Download next EIF
+        uses: actions/download-artifact@v4
+        with:
+          name: identity.${{ needs.build-eifs.outputs.next-version }}.eif
+          path: bin
+      
+      - name: Download prod EIF checksum
+        uses: actions/download-artifact@v4
+        with:
+          name: identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
+          path: bin
+    
+      - name: Output prod EIF checksum
+        id: prod-checksum
+        run: |
+          CHECKSUM=$(awk '{print $1}' bin/identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum)
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+      
+      - name: Download next EIF checksum
+        uses: actions/download-artifact@v4
+        with:
+          name: identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
+          path: bin
+
+      - name: Output next EIF checksum
+        id: next-checksum
+        run: |
+          CHECKSUM=$(awk '{print $1}' bin/identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum)
+          echo "checksum=$CHECKSUM" >> "$GITHUB_OUTPUT"
+
+      - name: Render template
+        id: template
+        uses: chuhlomin/render-template@v1.4
+        with:
+          template: .github/release-template.md
+          vars: |
+            prod_version: ${{ needs.build-eifs.outputs.prod-version }}
+            prod_pcr0: ${{ needs.build-eifs.outputs.prod-pcr0 }}
+            prod_pcr1: ${{ needs.build-eifs.outputs.prod-pcr1 }}
+            prod_pcr2: ${{ needs.build-eifs.outputs.prod-pcr2 }}
+            prod_checksum: ${{ steps.prod-checksum.outputs.checksum }}
+            next_version: ${{ needs.build-eifs.outputs.next-version }}
+            next_pcr0: ${{ needs.build-eifs.outputs.next-pcr0 }}
+            next_pcr1: ${{ needs.build-eifs.outputs.next-pcr1 }}
+            next_pcr2: ${{ needs.build-eifs.outputs.next-pcr2 }}
+            next_checksum: ${{ steps.next-checksum.outputs.checksum }}
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.template.outputs.result }}
+          generate_release_notes: true
+          draft: true
+          preserve_order: true
+          files: |
+            **/identity.${{ needs.build-eifs.outputs.prod-version }}.eif
+            **/identity.${{ needs.build-eifs.outputs.prod-version }}.eif.sha256sum
+            **/identity.${{ needs.build-eifs.outputs.next-version }}.eif
+            **/identity.${{ needs.build-eifs.outputs.next-version }}.eif.sha256sum
+
