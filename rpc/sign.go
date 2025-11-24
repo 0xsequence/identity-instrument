@@ -40,7 +40,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 	if err != nil {
 		return "", proto.ErrInvalidRequest.WithCausef("invalid nonce: %w", err)
 	}
-	if err := s.checkRateLimit(ctx, dbAuthKey, nonce); err != nil {
+	if err := s.validateNonceAndUsage(ctx, dbAuthKey, nonce); err != nil {
 		return "", err
 	}
 
@@ -102,11 +102,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 	return hexutil.Encode(sigBytes), nil
 }
 
-func (s *RPC) checkRateLimit(ctx context.Context, authKey *data.AuthKey, nonce *big.Int) error {
-	if !s.Config.RateLimit.Enabled {
-		return nil
-	}
-
+func (s *RPC) validateNonceAndUsage(ctx context.Context, authKey *data.AuthKey, nonce *big.Int) error {
 	log := o11y.LoggerFromContext(ctx)
 	now := time.Now()
 

@@ -64,6 +64,10 @@ func initConfig(t *testing.T, awsEndpoint string) *config.Config {
 				},
 			},
 		},
+		RateLimit: config.RateLimitConfig{
+			WindowSize: 1 * time.Minute,
+			UsageLimit: 10000,
+		},
 	}
 }
 

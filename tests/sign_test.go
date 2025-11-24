@@ -40,7 +40,6 @@ func TestSign(t *testing.T) {
 			},
 		}
 		svc := initRPC(t, ep, transport, func(cfg *config.Config) {
-			cfg.RateLimit.Enabled = true
 			cfg.RateLimit.UsageLimit = 10
 			cfg.RateLimit.WindowSize = 1 * time.Minute
 		})
@@ -146,7 +145,6 @@ func TestSign(t *testing.T) {
 			},
 		}
 		svc := initRPC(t, ep, transport, func(cfg *config.Config) {
-			cfg.RateLimit.Enabled = true
 			cfg.RateLimit.UsageLimit = 10
 			cfg.RateLimit.WindowSize = 1 * time.Minute
 		})
