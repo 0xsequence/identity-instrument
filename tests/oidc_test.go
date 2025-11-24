@@ -177,7 +177,7 @@ func TestOIDC(t *testing.T) {
 			IdentityType: proto.IdentityType_OIDC,
 			Handle:       hashedToken,
 			Metadata: map[string]string{
-				"iss": issuer,
+				"iss": issuer + "/",
 				"aud": "audience",
 				"exp": strconv.Itoa(int(exp.Unix())),
 			},

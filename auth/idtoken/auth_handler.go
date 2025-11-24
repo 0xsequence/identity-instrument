@@ -110,9 +110,10 @@ func (h *AuthHandler) VerifyToken(
 ) (proto.Identity, error) {
 	log := o11y.LoggerFromContext(ctx)
 
+	expectedIssuer = normalizeIssuer(expectedIssuer)
 	ks := &operationKeySet{
 		ctx:       ctx,
-		iss:       normalizeIssuer(expectedIssuer),
+		iss:       expectedIssuer,
 		store:     h.jwkStore,
 		getKeySet: h.GetKeySet,
 	}
