@@ -541,6 +541,128 @@ func TestOIDC(t *testing.T) {
 		addr := common.BytesToAddress(crypto.Keccak256(pub[1:])[12:])
 		assert.Equal(t, "Ethereum_Secp256k1:"+strings.ToLower(addr.Hex()), resSigner.String())
 	})
+
+	t.Run("AuthMode_AuthCodePKCE_SpecifiedSigner", func(t *testing.T) {
+		ctx := context.Background()
+
+		exp := time.Now().Add(120 * time.Second)
+		tokBuilderFn := func(b *jwt.Builder, url string) {
+			b.Expiration(exp)
+		}
+
+		transport := &http.Transport{
+			TLSClientConfig: &tls.Config{
+				// skip TLS verification for testing
+				InsecureSkipVerify: true,
+			},
+		}
+		svc := initRPC(t, ep, transport)
+
+		authServer := newMockOAuth2Server(t, svc)
+		defer authServer.Close()
+		authServer.tokenBuilderFn = tokBuilderFn
+		authServer.onTokenFn = func(formValues url.Values) {
+			assert.Equal(t, "audience", formValues.Get("client_id"))
+			assert.Equal(t, authServer.clientSecret, formValues.Get("client_secret"))
+			assert.Equal(t, "http://localhost:8080/callback", formValues.Get("redirect_uri"))
+		}
+
+		issuer := authServer.URL()
+
+		authKey, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+		require.NoError(t, err)
+
+		srv := httptest.NewServer(svc.Handler())
+		defer srv.Close()
+
+		c := proto.NewIdentityInstrumentClient(srv.URL, http.DefaultClient)
+
+		protoAuthKey := &proto.Key{
+			KeyType: proto.KeyType_Ethereum_Secp256k1,
+			Address: crypto.PubkeyToAddress(authKey.PublicKey).Hex(),
+		}
+		initiateParams := &proto.CommitVerifierParams{
+			Scope:        proto.Scope("@123"),
+			AuthMode:     proto.AuthMode_AuthCodePKCE,
+			IdentityType: proto.IdentityType_OIDC,
+			Metadata: map[string]string{
+				"iss":          issuer,
+				"aud":          "audience",
+				"redirect_uri": "http://localhost:8080/callback",
+			},
+		}
+		sig := signRequest(t, authKey, initiateParams)
+		resVerifier, loginHint, challenge, err := c.CommitVerifier(ctx, initiateParams, protoAuthKey, sig)
+		require.NoError(t, err)
+		require.NotEmpty(t, resVerifier)
+		require.NotEmpty(t, challenge)
+		require.Empty(t, loginHint)
+
+		code := authServer.authorize(map[string]string{
+			"client_id":             "audience",
+			"redirect_uri":          "http://localhost:8080/callback",
+			"code_challenge":        challenge,
+			"code_challenge_method": "S256",
+		})
+		require.NotEmpty(t, code)
+
+		registerParams := &proto.CompleteAuthParams{
+			Scope:        proto.Scope("@123"),
+			AuthMode:     proto.AuthMode_AuthCodePKCE,
+			IdentityType: proto.IdentityType_OIDC,
+			SignerType:   proto.KeyType_Ethereum_Secp256k1,
+			Verifier:     resVerifier,
+			Answer:       code,
+		}
+		sig = signRequest(t, authKey, registerParams)
+		resSigner, _, err := c.CompleteAuth(ctx, registerParams, protoAuthKey, sig)
+		require.NoError(t, err)
+
+		authKey2, err := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
+		require.NoError(t, err)
+		protoAuthKey2 := &proto.Key{
+			KeyType: proto.KeyType_Ethereum_Secp256k1,
+			Address: crypto.PubkeyToAddress(authKey2.PublicKey).Hex(),
+		}
+		initiateParams2 := &proto.CommitVerifierParams{
+			Scope:        proto.Scope("@123"),
+			AuthMode:     proto.AuthMode_AuthCodePKCE,
+			IdentityType: proto.IdentityType_OIDC,
+			Metadata: map[string]string{
+				"iss":          issuer,
+				"aud":          "audience",
+				"redirect_uri": "http://localhost:8080/callback",
+			},
+			Signer: resSigner,
+		}
+		sig = signRequest(t, authKey2, initiateParams2)
+		resVerifier, loginHint, challenge, err = c.CommitVerifier(ctx, initiateParams2, protoAuthKey2, sig)
+		require.NoError(t, err)
+		require.NotEmpty(t, resVerifier)
+		require.NotEmpty(t, challenge)
+		require.Equal(t, "subject", loginHint)
+
+		code = authServer.authorize(map[string]string{
+			"client_id":             "audience",
+			"redirect_uri":          "http://localhost:8080/callback",
+			"code_challenge":        challenge,
+			"code_challenge_method": "S256",
+		})
+
+		require.NotEmpty(t, code)
+		registerParams2 := &proto.CompleteAuthParams{
+			Scope:        proto.Scope("@123"),
+			AuthMode:     proto.AuthMode_AuthCodePKCE,
+			IdentityType: proto.IdentityType_OIDC,
+			SignerType:   proto.KeyType_Ethereum_Secp256k1,
+			Verifier:     resVerifier,
+			Answer:       code,
+		}
+		sig = signRequest(t, authKey2, registerParams2)
+		resSigner2, _, err := c.CompleteAuth(ctx, registerParams2, protoAuthKey2, sig)
+		require.NoError(t, err)
+		require.Equal(t, resSigner, resSigner2)
+	})
 }
 
 type mockOAuth2Server struct {
