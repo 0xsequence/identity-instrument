@@ -12,6 +12,7 @@ import (
 	"github.com/0xsequence/identity-instrument/encryption/shamir"
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/nitrocontrol/aescbc"
+	"github.com/0xsequence/nitrocontrol/aesgcm"
 	"github.com/0xsequence/nitrocontrol/enclave"
 	"github.com/0xsequence/nitrocontrol/tracing"
 	"github.com/0xsequence/tee-verifier/nitro"
@@ -56,7 +57,7 @@ func NewPool(attester Attester, configs []*Config, keysTable KeysTable, dataTabl
 //
 // If the cipher key does not exist, it will be generated using the Pool's current generation config
 // and stored in the keys table.
-func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (keyRef string, ciphertext string, err error) {
+func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte, additionalData []byte) (keyRef string, ciphertext string, err error) {
 	log := o11y.LoggerFromContext(ctx)
 	ctx, span := tracing.Trace(ctx, "encryption.Pool.Encrypt")
 	defer func() {
@@ -102,13 +103,13 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 		}
 	}
 
-	encrypted, err := aescbc.Encrypt(att, privateKey, plaintext)
+	encrypted, err := aesgcm.Encrypt(att, privateKey, plaintext, additionalData)
 	if err != nil {
 		return "", "", fmt.Errorf("encrypt: %w", err)
 	}
 
 	decoded := Ciphertext{
-		Version:       1,
+		Version:       2,
 		EncryptedData: encrypted,
 	}
 
@@ -122,7 +123,7 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 // Decrypt decrypts the ciphertext using the latest cipher key from the Pool referenced by the keyRef.
 //
 // The key is verified against the attestation and migrated to the current generation if needed.
-func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef string, ciphertext string) (plaintext []byte, err error) {
+func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef string, ciphertext string, additionalData []byte) (plaintext []byte, err error) {
 	log := o11y.LoggerFromContext(ctx)
 	ctx, span := tracing.Trace(ctx, "encryption.Pool.Decrypt", tracing.WithAnnotation("key_ref", keyRef))
 	defer func() {
@@ -164,7 +165,13 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 		return nil, fmt.Errorf("combine shares: %w", err)
 	}
 
-	decrypted, err := aescbc.Decrypt(privateKey, decoded.EncryptedData)
+	var decrypted []byte
+	switch decoded.Version {
+	case 1:
+		decrypted, err = aescbc.Decrypt(privateKey, decoded.EncryptedData)
+	case 2:
+		decrypted, err = aesgcm.Decrypt(privateKey, decoded.EncryptedData, additionalData)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("decrypt: %w", err)
 	}
