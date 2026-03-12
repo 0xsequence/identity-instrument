@@ -39,12 +39,13 @@ func refreshEncryptedData[T data.Record](ctx context.Context, s *RPC, table data
 	}
 
 	for _, record := range records {
-		decrypted, err := record.GetEncryptedData().Decrypt(ctx, att, s.EncryptionPool)
+		aad := record.AssociatedData()
+		decrypted, err := record.GetEncryptedData().Decrypt(ctx, att, s.EncryptionPool, aad)
 		if err != nil {
 			return false, err
 		}
 
-		encrypted, err := data.Encrypt(ctx, att, s.EncryptionPool, decrypted)
+		encrypted, err := data.Encrypt(ctx, att, s.EncryptionPool, decrypted, aad)
 		if err != nil {
 			return false, err
 		}

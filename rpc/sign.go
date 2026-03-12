@@ -16,6 +16,7 @@ import (
 )
 
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto.Key, signature string) (string, error) {
+	att := attestation.FromContext(ctx)
 	log := o11y.LoggerFromContext(ctx)
 
 	scope, err := s.getScope(ctx, params)
@@ -44,7 +45,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 		return "", err
 	}
 
-	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
+	authKeyData, err := dbAuthKey.EncryptedData.Decrypt(ctx, att, s.EncryptionPool, dbAuthKey.AssociatedData())
 	if err != nil {
 		log.Error("failed to decrypt auth key data", "error", err)
 		return "", proto.ErrEncryptionError
@@ -73,7 +74,7 @@ func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto
 		return "", proto.ErrSignerNotFound
 	}
 
-	signerData, err := dbSigner.Decrypt(ctx, attestation.FromContext(ctx), s.EncryptionPool)
+	signerData, err := dbSigner.Decrypt(ctx, att, s.EncryptionPool, dbSigner.AssociatedData())
 	if err != nil {
 		log.Error("failed to decrypt signer data", "error", err)
 		return "", proto.ErrEncryptionError

@@ -70,7 +70,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 		if !found {
 			return "", "", "", proto.ErrInvalidRequest.WithCausef("signer not found")
 		}
-		signer, err = dbSigner.Decrypt(ctx, att, s.EncryptionPool)
+		signer, err = dbSigner.Decrypt(ctx, att, s.EncryptionPool, dbSigner.AssociatedData())
 		if err != nil {
 			log.Error("decrypt signer data failed", "error", err)
 			return "", "", "", proto.ErrEncryptionError
@@ -88,7 +88,7 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 			return "", "", "", proto.ErrDatabaseError
 		}
 		if found && dbCommitment != nil {
-			commitment, err = dbCommitment.Decrypt(ctx, att, s.EncryptionPool)
+			commitment, err = dbCommitment.Decrypt(ctx, att, s.EncryptionPool, dbCommitment.AssociatedData())
 			if err != nil {
 				log.Error("decrypt auth commitment failed", "error", err)
 				return "", "", "", proto.ErrEncryptionError
@@ -97,12 +97,6 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 	}
 
 	storeFn := func(ctx context.Context, commitment *proto.AuthCommitmentData) error {
-		encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
-		if err != nil {
-			log.Error("encrypt auth commitment failed", "error", err)
-			return proto.ErrEncryptionError
-		}
-
 		dbCommitment := &data.AuthCommitment{
 			AuthID: &proto.AuthID{
 				Scope:        commitment.Scope,
@@ -110,8 +104,14 @@ func (s *RPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierPa
 				IdentityType: commitment.IdentityType,
 				Verifier:     commitment.Verifier(),
 			},
-			ExpiresAt:     commitment.Expiry,
-			EncryptedData: encryptedData,
+			ExpiresAt: commitment.Expiry,
+		}
+		aad := dbCommitment.AssociatedData()
+
+		dbCommitment.EncryptedData, err = data.Encrypt(ctx, att, s.EncryptionPool, commitment, aad)
+		if err != nil {
+			log.Error("encrypt auth commitment failed", "error", err)
+			return proto.ErrEncryptionError
 		}
 
 		if !dbCommitment.CorrespondsTo(commitment) {
@@ -164,7 +164,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		return nil, nil, proto.ErrDatabaseError
 	}
 	if found && dbCommitment != nil {
-		commitment, err = dbCommitment.Decrypt(ctx, att, s.EncryptionPool)
+		aad := dbCommitment.AssociatedData()
+		commitment, err = dbCommitment.Decrypt(ctx, att, s.EncryptionPool, aad)
 		if err != nil {
 			log.Error("decrypt auth commitment failed", "error", err)
 			return nil, nil, proto.ErrEncryptionError
@@ -188,7 +189,8 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 	if err != nil {
 		if commitment != nil {
 			commitment.Attempts += 1
-			encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment)
+			aad := dbCommitment.AssociatedData()
+			encryptedData, err := data.Encrypt(ctx, att, s.EncryptionPool, commitment, aad)
 			if err != nil {
 				log.Error("encrypt auth commitment failed", "error", err)
 				return nil, nil, proto.ErrEncryptionError
@@ -227,26 +229,27 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 			return nil, nil, proto.ErrInternalError
 		}
 
+		dbSigner = &data.Signer{
+			ScopedKeyType: data.ScopedKeyType{
+				Scope:   scope,
+				KeyType: params.SignerType,
+			},
+			Address:  strings.ToLower(crypto.PubkeyToAddress(signer.PublicKey).Hex()),
+			Identity: &ident,
+		}
+		aad := dbSigner.AssociatedData()
 		signerData := &proto.SignerData{
 			Scope:      scope,
 			Identity:   &ident,
 			KeyType:    params.SignerType,
 			PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
 		}
-		encData, err := data.Encrypt(ctx, att, s.EncryptionPool, signerData)
+		dbSigner.EncryptedData, err = data.Encrypt(ctx, att, s.EncryptionPool, signerData, aad)
 		if err != nil {
 			log.Error("encrypt signer data failed", "error", err)
 			return nil, nil, proto.ErrEncryptionError
 		}
-		dbSigner = &data.Signer{
-			ScopedKeyType: data.ScopedKeyType{
-				Scope:   scope,
-				KeyType: params.SignerType,
-			},
-			Address:       strings.ToLower(crypto.PubkeyToAddress(signer.PublicKey).Hex()),
-			Identity:      &ident,
-			EncryptedData: encData,
-		}
+
 		if err := s.Signers.Put(ctx, dbSigner); err != nil {
 			log.Error("put signer failed", "error", err)
 			return nil, nil, proto.ErrDatabaseError
@@ -263,25 +266,25 @@ func (s *RPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams
 		ttl = maxTTL
 	}
 
+	dbAuthKey := &data.AuthKey{
+		Scope:     scope,
+		Key:       authKey,
+		ExpiresAt: time.Now().Add(ttl),
+	}
+	aad := dbAuthKey.AssociatedData()
 	authKeyData := &proto.AuthKeyData{
 		Scope:   scope,
 		Signer:  dbSigner.Key(),
 		AuthKey: *authKey,
-		Expiry:  time.Now().Add(ttl),
+		Expiry:  dbAuthKey.ExpiresAt,
 	}
 
-	encData, err := data.Encrypt(ctx, att, s.EncryptionPool, authKeyData)
+	dbAuthKey.EncryptedData, err = data.Encrypt(ctx, att, s.EncryptionPool, authKeyData, aad)
 	if err != nil {
 		log.Error("encrypt auth key data failed", "error", err)
 		return nil, nil, proto.ErrEncryptionError
 	}
 
-	dbAuthKey := &data.AuthKey{
-		Scope:         scope,
-		Key:           authKey,
-		ExpiresAt:     authKeyData.Expiry,
-		EncryptedData: encData,
-	}
 	if err := s.AuthKeys.Put(ctx, dbAuthKey); err != nil {
 		log.Error("put auth key failed", "error", err)
 		return nil, nil, proto.ErrDatabaseError
