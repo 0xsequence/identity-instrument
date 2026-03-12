@@ -85,7 +85,7 @@ func initLocalstack() (string, func()) {
 					{
 						HostFilePath:      "../docker/awslocal_ready_hook.sh",
 						ContainerFilePath: "/etc/localstack/init/ready.d/awslocal_ready_hook.sh",
-						FileMode:          0777,
+						FileMode:          0o777,
 					},
 				},
 			},
@@ -170,16 +170,6 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 	var ident proto.Identity
 	require.NoError(t, ident.FromString(identity))
 
-	signerData := &proto.SignerData{
-		Scope:      proto.Scope("@" + ecosystem),
-		KeyType:    proto.KeyType_Ethereum_Secp256k1,
-		Identity:   &ident,
-		PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
-	}
-	encData, err := data.Encrypt(ctx, att, svc.EncryptionPool, signerData)
-	if err != nil {
-		t.Fatal(err)
-	}
 	dbSigner := &data.Signer{
 		Address:  crypto.PubkeyToAddress(signer.PublicKey).Hex(),
 		Identity: &ident,
@@ -187,7 +177,16 @@ func insertSigner(t *testing.T, svc *rpc.RPC, ecosystem string, identity string,
 			Scope:   proto.Scope("@" + ecosystem),
 			KeyType: proto.KeyType_Ethereum_Secp256k1,
 		},
-		EncryptedData: encData,
+	}
+	signerData := &proto.SignerData{
+		Scope:      proto.Scope("@" + ecosystem),
+		KeyType:    proto.KeyType_Ethereum_Secp256k1,
+		Identity:   &ident,
+		PrivateKey: hexutil.Encode(crypto.FromECDSA(signer)),
+	}
+	dbSigner.EncryptedData, err = data.Encrypt(ctx, att, svc.EncryptionPool, signerData, dbSigner.AssociatedData())
+	if err != nil {
+		t.Fatal(err)
 	}
 	if err := svc.Signers.Put(ctx, dbSigner); err != nil {
 		t.Fatal(err)
