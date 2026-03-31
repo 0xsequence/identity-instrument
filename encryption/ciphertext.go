@@ -12,8 +12,8 @@ type Ciphertext struct {
 }
 
 func (c *Ciphertext) Encode() (string, error) {
-	if c.Version != 1 {
-		return "", fmt.Errorf("unsupported version: %d, only version 1 is supported", c.Version)
+	if c.Version != 1 && c.Version != 2 {
+		return "", fmt.Errorf("unsupported version: %d, only version 1 and 2 are supported", c.Version)
 	}
 	if len(c.EncryptedData) == 0 {
 		return "", fmt.Errorf("encrypted data cannot be empty")
@@ -26,7 +26,13 @@ func DecodeCiphertext(ciphertext string) (*Ciphertext, error) {
 	if len(parts) != 2 {
 		return nil, fmt.Errorf("invalid ciphertext")
 	}
-	if parts[0] != "v1" {
+	var version int
+	switch parts[0] {
+	case "v1":
+		version = 1
+	case "v2":
+		version = 2
+	default:
 		return nil, fmt.Errorf("unsupported ciphertext version: %s", parts[0])
 	}
 	encryptedData, err := base64.RawURLEncoding.DecodeString(parts[1])
@@ -37,7 +43,7 @@ func DecodeCiphertext(ciphertext string) (*Ciphertext, error) {
 		return nil, fmt.Errorf("encrypted data cannot be empty")
 	}
 	return &Ciphertext{
-		Version:       1,
+		Version:       version,
 		EncryptedData: encryptedData,
 	}, nil
 }

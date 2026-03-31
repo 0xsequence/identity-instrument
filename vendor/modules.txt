@@ -13,11 +13,15 @@ github.com/0xsequence/ethkit/go-ethereum/crypto/secp256k1/libsecp256k1/src
 github.com/0xsequence/ethkit/go-ethereum/crypto/secp256k1/libsecp256k1/src/modules/recovery
 github.com/0xsequence/ethkit/go-ethereum/rlp
 github.com/0xsequence/ethkit/go-ethereum/rlp/internal/rlpstruct
-# github.com/0xsequence/nitrocontrol v0.6.0
-## explicit; go 1.23
+# github.com/0xsequence/nitrocontrol v0.9.0
+## explicit; go 1.25.0
 github.com/0xsequence/nitrocontrol/aescbc
+github.com/0xsequence/nitrocontrol/aesgcm
+github.com/0xsequence/nitrocontrol/attestation
+github.com/0xsequence/nitrocontrol/cmd/tracegen
 github.com/0xsequence/nitrocontrol/cms
 github.com/0xsequence/nitrocontrol/enclave
+github.com/0xsequence/nitrocontrol/tracing
 # github.com/0xsequence/nsm v0.1.0
 ## explicit; go 1.21
 github.com/0xsequence/nsm
@@ -246,8 +250,8 @@ github.com/fsnotify/fsnotify/internal
 # github.com/fxamacker/cbor/v2 v2.9.0
 ## explicit; go 1.20
 github.com/fxamacker/cbor/v2
-# github.com/go-chi/chi/v5 v5.2.3
-## explicit; go 1.20
+# github.com/go-chi/chi/v5 v5.2.5
+## explicit; go 1.22
 github.com/go-chi/chi/v5
 github.com/go-chi/chi/v5/middleware
 # github.com/go-chi/cors v1.2.2
@@ -569,8 +573,8 @@ github.com/xanzy/ssh-agent
 # go.yaml.in/yaml/v2 v2.4.3
 ## explicit; go 1.15
 go.yaml.in/yaml/v2
-# golang.org/x/crypto v0.45.0
-## explicit; go 1.24.0
+# golang.org/x/crypto v0.49.0
+## explicit; go 1.25.0
 golang.org/x/crypto/argon2
 golang.org/x/crypto/bcrypt
 golang.org/x/crypto/blake2b
@@ -591,28 +595,28 @@ golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/agent
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
 golang.org/x/crypto/ssh/knownhosts
-# golang.org/x/mod v0.29.0
-## explicit; go 1.24.0
+# golang.org/x/mod v0.34.0
+## explicit; go 1.25.0
 golang.org/x/mod/internal/lazyregexp
 golang.org/x/mod/module
 golang.org/x/mod/semver
-# golang.org/x/net v0.47.0
-## explicit; go 1.24.0
+# golang.org/x/net v0.52.0
+## explicit; go 1.25.0
 golang.org/x/net/bpf
 golang.org/x/net/context
 golang.org/x/net/internal/socks
 golang.org/x/net/proxy
-# golang.org/x/sync v0.17.0
-## explicit; go 1.24.0
+# golang.org/x/sync v0.20.0
+## explicit; go 1.25.0
 golang.org/x/sync/errgroup
-# golang.org/x/sys v0.38.0
-## explicit; go 1.24.0
+# golang.org/x/sys v0.42.0
+## explicit; go 1.25.0
 golang.org/x/sys/cpu
 golang.org/x/sys/execabs
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/tools v0.38.0
-## explicit; go 1.24.0
+# golang.org/x/tools v0.43.0
+## explicit; go 1.25.0
 golang.org/x/tools/go/ast/astutil
 golang.org/x/tools/go/ast/edge
 golang.org/x/tools/go/ast/inspector

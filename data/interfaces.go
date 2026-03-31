@@ -21,6 +21,7 @@ type DB interface {
 // Record defines methods common to all records with encrypted data that are stored in the database.
 type Record interface {
 	DatabaseKey() (map[string]types.AttributeValue, error)
+	AssociatedData() string
 	GetEncryptedData() EncryptedData[any]
 	SetEncryptedData(data EncryptedData[any])
 }

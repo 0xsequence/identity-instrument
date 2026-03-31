@@ -1,4 +1,4 @@
-package o11y
+package tracing
 
 import (
 	"context"
@@ -31,22 +31,6 @@ type Span struct {
 	mu sync.Mutex
 }
 
-type spanKey struct{}
-
-func GetSpan(ctx context.Context) *Span {
-	span, ok := ctx.Value(spanKey{}).(*Span)
-	if !ok {
-		return &Span{
-			Name:        "root",
-			StartTime:   time.Now(),
-			Metadata:    make(map[string]any),
-			Annotations: make(map[string]string),
-			Logs:        make([]json.RawMessage, 0),
-		}
-	}
-	return span
-}
-
 func Trace(ctx context.Context, name string, opts ...func(*Span)) (context.Context, *Span) {
 	parent := GetSpan(ctx)
 	span := &Span{
@@ -65,6 +49,22 @@ func Trace(ctx context.Context, name string, opts ...func(*Span)) (context.Conte
 		opt(span)
 	}
 	return context.WithValue(ctx, spanKey{}, span), span
+}
+
+type spanKey struct{}
+
+func GetSpan(ctx context.Context) *Span {
+	span, ok := ctx.Value(spanKey{}).(*Span)
+	if !ok {
+		return &Span{
+			Name:        "root",
+			StartTime:   time.Now(),
+			Metadata:    make(map[string]any),
+			Annotations: make(map[string]string),
+			Logs:        make([]json.RawMessage, 0),
+		}
+	}
+	return span
 }
 
 func (s *Span) End() {
