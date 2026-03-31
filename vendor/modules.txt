@@ -16,6 +16,7 @@ github.com/0xsequence/ethkit/go-ethereum/rlp/internal/rlpstruct
 # github.com/0xsequence/nitrocontrol v0.9.0
 ## explicit; go 1.25.0
 github.com/0xsequence/nitrocontrol/aescbc
+github.com/0xsequence/nitrocontrol/aesgcm
 github.com/0xsequence/nitrocontrol/attestation
 github.com/0xsequence/nitrocontrol/cmd/tracegen
 github.com/0xsequence/nitrocontrol/cms
