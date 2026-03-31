@@ -12,7 +12,7 @@ import (
 	"github.com/0xsequence/identity-instrument/data"
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
-	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
+	"github.com/0xsequence/nitrocontrol/attestation"
 )
 
 func (s *RPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto.Key, signature string) (string, error) {
