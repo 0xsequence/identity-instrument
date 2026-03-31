@@ -13,6 +13,7 @@ import (
 	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/nitrocontrol/aescbc"
 	"github.com/0xsequence/nitrocontrol/enclave"
+	"github.com/0xsequence/nitrocontrol/tracing"
 	"github.com/0xsequence/tee-verifier/nitro"
 )
 
@@ -57,7 +58,7 @@ func NewPool(attester Attester, configs []*Config, keysTable KeysTable, dataTabl
 // and stored in the keys table.
 func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (keyRef string, ciphertext string, err error) {
 	log := o11y.LoggerFromContext(ctx)
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.Encrypt")
+	ctx, span := tracing.Trace(ctx, "encryption.Pool.Encrypt")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -123,7 +124,7 @@ func (p *Pool) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext 
 // The key is verified against the attestation and migrated to the current generation if needed.
 func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef string, ciphertext string) (plaintext []byte, err error) {
 	log := o11y.LoggerFromContext(ctx)
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.Decrypt", o11y.WithAnnotation("key_ref", keyRef))
+	ctx, span := tracing.Trace(ctx, "encryption.Pool.Decrypt", tracing.WithAnnotation("key_ref", keyRef))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -185,7 +186,7 @@ func (p *Pool) Decrypt(ctx context.Context, att *enclave.Attestation, keyRef str
 // Please note that as long as the key is referenced by any encrypted data, it will continue being automatically
 // migrated to newer generations.
 func (p *Pool) RotateKey(ctx context.Context, att *enclave.Attestation, keyRef string) (err error) {
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.RotateKey", o11y.WithAnnotation("key_ref", keyRef))
+	ctx, span := tracing.Trace(ctx, "encryption.Pool.RotateKey", tracing.WithAnnotation("key_ref", keyRef))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -230,7 +231,7 @@ func (p *Pool) RotateKey(ctx context.Context, att *enclave.Attestation, keyRef s
 // assumed to be called infrequently. It can, however, be retried until the returned count is 0.
 func (p *Pool) CleanupUnusedKeys(ctx context.Context) (deleted int, err error) {
 	log := o11y.LoggerFromContext(ctx)
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.CleanupUnusedKeys")
+	ctx, span := tracing.Trace(ctx, "encryption.Pool.CleanupUnusedKeys")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -284,7 +285,7 @@ func (p *Pool) getConfig(configVersion int) (*Config, error) {
 }
 
 func (p *Pool) GenerateKey(ctx context.Context, att *enclave.Attestation, keyIndex int) (_ *data.CipherKey, _ []byte, err error) {
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.GenerateKey", o11y.WithAnnotation("key_index", strconv.Itoa(keyIndex)))
+	ctx, span := tracing.Trace(ctx, "encryption.Pool.GenerateKey", tracing.WithAnnotation("key_index", strconv.Itoa(keyIndex)))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -357,7 +358,7 @@ func (p *Pool) GenerateKey(ctx context.Context, att *enclave.Attestation, keyInd
 }
 
 func (p *Pool) VerifyKey(ctx context.Context, att *enclave.Attestation, key *data.CipherKey) (err error) {
-	_, span := o11y.Trace(ctx, "encryption.Pool.verifyKey")
+	_, span := tracing.Trace(ctx, "encryption.Pool.verifyKey")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -402,7 +403,7 @@ func (p *Pool) keyNeedsMigration(key *data.CipherKey) bool {
 
 func (p *Pool) migrateKey(ctx context.Context, att *enclave.Attestation, key *data.CipherKey, privateKey []byte) (err error) {
 	log := o11y.LoggerFromContext(ctx)
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.migrateKey")
+	ctx, span := tracing.Trace(ctx, "encryption.Pool.migrateKey")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -466,7 +467,7 @@ func (p *Pool) migrateKey(ctx context.Context, att *enclave.Attestation, key *da
 
 func (p *Pool) combineShares(ctx context.Context, att *enclave.Attestation, config *Config, shares map[string]string) (_ []byte, err error) {
 	log := o11y.LoggerFromContext(ctx)
-	ctx, span := o11y.Trace(ctx, "encryption.Pool.combineShares")
+	ctx, span := tracing.Trace(ctx, "encryption.Pool.combineShares")
 	defer func() {
 		span.RecordError(err)
 		span.End()

@@ -6,7 +6,7 @@ import (
 
 	"github.com/0xsequence/identity-instrument/data"
 	protoadmin "github.com/0xsequence/identity-instrument/proto/admin"
-	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
+	"github.com/0xsequence/nitrocontrol/attestation"
 )
 
 func (s *RPC) RotateCipherKey(ctx context.Context, keyRef string) error {

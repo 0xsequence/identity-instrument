@@ -6,11 +6,11 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 
-	"github.com/0xsequence/identity-instrument/o11y"
-	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/nitrocontrol/enclave"
+	"github.com/0xsequence/nitrocontrol/tracing"
 	"github.com/go-chi/chi/v5/middleware"
 )
 
@@ -20,15 +20,15 @@ import (
 //
 // If the HTTP request includes an X-Attestation-Nonce header, its value is sent to the NSM and included in
 // the final attestation document.
-func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
+func Middleware(enc *enclave.Enclave, errorFn func(http.ResponseWriter, error), loggerFromContextFn func(context.Context) *slog.Logger) func(http.Handler) http.Handler {
 	runPreMiddleware := func(r *http.Request) (ctx context.Context, cancelFunc func(), err error) {
-		ctx, span := o11y.Trace(r.Context(), "attestation.Middleware")
+		ctx, span := tracing.Trace(r.Context(), "attestation.Middleware")
 		defer func() {
 			span.RecordError(err)
 			span.End()
 		}()
 
-		log := o11y.LoggerFromContext(ctx)
+		log := loggerFromContextFn(ctx)
 		att, err := enc.GetAttestation(ctx, nil, nil)
 		if err != nil {
 			return nil, nil, err
@@ -45,8 +45,8 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 	}
 
 	runPostMiddleware := func(w http.ResponseWriter, r *http.Request, body []byte, nonce []byte) (err error) {
-		log := o11y.LoggerFromContext(r.Context())
-		ctx, span := o11y.Trace(r.Context(), "attestation.Middleware")
+		log := loggerFromContextFn(r.Context())
+		ctx, span := tracing.Trace(r.Context(), "attestation.Middleware")
 		defer func() {
 			span.RecordError(err)
 			span.End()
@@ -76,7 +76,7 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			reqBody, err := io.ReadAll(r.Body)
 			if err != nil {
-				proto.RespondWithError(w, fmt.Errorf("failed to read request body: %w", err))
+				errorFn(w, fmt.Errorf("failed to read request body: %w", err))
 				return
 			}
 			r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
@@ -84,11 +84,11 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 			var nonce []byte
 			if nonceVal := r.Header.Get("X-Attestation-Nonce"); nonceVal != "" {
 				if len(nonceVal) > 32 {
-					proto.RespondWithError(w, fmt.Errorf("X-Attestation-Nonce value cannot be longer than 32"))
+					errorFn(w, fmt.Errorf("X-Attestation-Nonce value cannot be longer than 32"))
 					return
 				}
 				if !isNonceValid(nonceVal) {
-					proto.RespondWithError(w, fmt.Errorf("X-Attestation-Nonce value contains invalid characters"))
+					errorFn(w, fmt.Errorf("X-Attestation-Nonce value contains invalid characters"))
 					return
 				}
 
@@ -97,7 +97,7 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 
 			ctx, cancel, err := runPreMiddleware(r)
 			if err != nil {
-				proto.RespondWithError(w, err)
+				errorFn(w, err)
 				return
 			}
 			defer cancel()
@@ -111,13 +111,13 @@ func Middleware(enc *enclave.Enclave) func(http.Handler) http.Handler {
 
 			r.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 			if err := runPostMiddleware(ww, r, body.Bytes(), nonce); err != nil {
-				proto.RespondWithError(w, err)
+				errorFn(w, err)
 				return
 			}
 
 			w.WriteHeader(ww.Status())
 			if _, err := body.WriteTo(w); err != nil {
-				proto.RespondWithError(w, err)
+				errorFn(w, err)
 			}
 		})
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	proto "github.com/0xsequence/identity-instrument/proto"
+	"github.com/0xsequence/nitrocontrol/tracing"
 )
 
 type tracedRPC struct {
@@ -17,7 +18,7 @@ func NewTracedRPC(svc proto.IdentityInstrumentServer) *tracedRPC {
 }
 
 func (t *tracedRPC) CommitVerifier(ctx context.Context, params *proto.CommitVerifierParams, authKey *proto.Key, signature string) (_ string, _ string, _ string, err error) {
-	ctx, span := Trace(ctx, "CommitVerifier")
+	ctx, span := tracing.Trace(ctx, "CommitVerifier")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -26,7 +27,7 @@ func (t *tracedRPC) CommitVerifier(ctx context.Context, params *proto.CommitVeri
 }
 
 func (t *tracedRPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuthParams, authKey *proto.Key, signature string) (_ *proto.Key, _ *proto.Identity, err error) {
-	ctx, span := Trace(ctx, "CompleteAuth")
+	ctx, span := tracing.Trace(ctx, "CompleteAuth")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -35,7 +36,7 @@ func (t *tracedRPC) CompleteAuth(ctx context.Context, params *proto.CompleteAuth
 }
 
 func (t *tracedRPC) Sign(ctx context.Context, params *proto.SignParams, authKey *proto.Key, signature string) (_ string, err error) {
-	ctx, span := Trace(ctx, "Sign")
+	ctx, span := tracing.Trace(ctx, "Sign")
 	defer func() {
 		span.RecordError(err)
 		span.End()

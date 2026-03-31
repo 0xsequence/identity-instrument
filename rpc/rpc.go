@@ -19,9 +19,10 @@ import (
 	"github.com/0xsequence/identity-instrument/proto"
 	protoadmin "github.com/0xsequence/identity-instrument/proto/admin"
 	"github.com/0xsequence/identity-instrument/rpc/awscreds"
-	"github.com/0xsequence/identity-instrument/rpc/internal/attestation"
-	"github.com/0xsequence/identity-instrument/rpc/internal/signature"
+	"github.com/0xsequence/identity-instrument/rpc/signature"
+	"github.com/0xsequence/nitrocontrol/attestation"
 	"github.com/0xsequence/nitrocontrol/enclave"
+	"github.com/0xsequence/nitrocontrol/tracing"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -64,7 +65,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 		Timeout:   30 * time.Second,
 		Transport: transport,
 	}
-	wrappedClient := o11y.WrapClient(client)
+	wrappedClient := tracing.WrapClient(client)
 
 	options := []func(options *awsconfig.LoadOptions) error{
 		awsconfig.WithRegion(cfg.Region),
@@ -104,7 +105,7 @@ func New(cfg *config.Config, transport http.RoundTripper) (*RPC, error) {
 	if cfg.Service.UseNSM {
 		enclaveProvider = enclave.NitroProvider
 	}
-	enc, err := enclave.New(context.Background(), o11y.WrapEnclaveProvider(enclaveProvider), kmsClient)
+	enc, err := enclave.New(context.Background(), tracing.WrapEnclaveProvider(enclaveProvider), kmsClient)
 	if err != nil {
 		return nil, err
 	}
@@ -227,10 +228,10 @@ func (s *RPC) Handler() http.Handler {
 
 	r.Group(func(r chi.Router) {
 		// Observability middleware
-		r.Use(o11y.Middleware())
+		r.Use(tracing.Middleware(s.errorHandler))
 
 		// Generate attestation document
-		r.Use(attestation.Middleware(s.Enclave))
+		r.Use(attestation.Middleware(s.Enclave, s.errorHandler, o11y.LoggerFromContext))
 
 		// Healthcheck
 		r.Handle("/health", http.HandlerFunc(s.healthHandler))
@@ -239,10 +240,10 @@ func (s *RPC) Handler() http.Handler {
 
 	r.Group(func(r chi.Router) {
 		// Observability middleware
-		r.Use(o11y.Middleware())
+		r.Use(tracing.Middleware(s.errorHandler))
 
 		// Generate attestation document
-		r.Use(attestation.Middleware(s.Enclave))
+		r.Use(attestation.Middleware(s.Enclave, s.errorHandler, o11y.LoggerFromContext))
 
 		// Signature middleware
 		r.Use(signature.Middleware())
@@ -255,10 +256,10 @@ func (s *RPC) Handler() http.Handler {
 
 	r.Group(func(r chi.Router) {
 		// Observability middleware
-		r.Use(o11y.Middleware())
+		r.Use(tracing.Middleware(s.errorHandler))
 
 		// Generate attestation document
-		r.Use(attestation.Middleware(s.Enclave))
+		r.Use(attestation.Middleware(s.Enclave, s.errorHandler, o11y.LoggerFromContext))
 
 		srv := protoadmin.NewIdentityInstrumentAdminServer(s)
 		r.Handle("/rpc/IdentityInstrumentAdmin/RotateCipherKey", srv)
@@ -314,4 +315,8 @@ func (s *RPC) getScope(ctx context.Context, params scopedParams) (proto.Scope, e
 	}
 
 	return scope, nil
+}
+
+func (s *RPC) errorHandler(w http.ResponseWriter, err error) {
+	proto.RespondWithError(w, err)
 }
