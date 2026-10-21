@@ -1,7 +1,7 @@
 #
 # Enclave base image
 #
-FROM golang:1.25.3-alpine3.22@sha256:aee43c3ccbf24fdffb7295693b6e33b21e01baec1b2a55acc351fde345e9ec34 AS base
+FROM golang:1.26.10-alpine3.23@sha256:a07f231c19b03e6106cf442f02a5bcf262147e744d15b7b5e4b6d81d420c70a0 AS base
 
 RUN apk add make bash
 
@@ -48,7 +48,7 @@ ENV CONFIG=./etc/nitro.conf
 CMD ["make", "run"]
 
 
-FROM ghcr.io/0xsequence/eiffel:v0.3.1@sha256:c0c0bf7144a6a25b00bf78e7d5cb632afae8b45f8b82ff38016fa8c61854a104
+FROM ghcr.io/0xsequence/eiffel:v0.6.0@sha256:c97b24f6fda022b785e5f86d94ae0b0b4aec8069d1c077dcd563027c20e6238d
 
 ARG ENV_ARG=dev
 
