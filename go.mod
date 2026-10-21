@@ -2,7 +2,7 @@ module github.com/0xsequence/identity-instrument
 
 go 1.25
 
-toolchain go1.25.3
+toolchain go1.26.10
 
 require (
 	github.com/0xsequence/ethkit v1.38.6
