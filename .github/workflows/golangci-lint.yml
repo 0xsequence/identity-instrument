@@ -21,6 +21,6 @@ jobs:
       - name: Ensure version.go exists
         run: make ensure-version
       - name: Run linters
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
-          version: v2.5
+          version: v2.11

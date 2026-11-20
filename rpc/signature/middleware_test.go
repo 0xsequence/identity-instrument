@@ -16,7 +16,7 @@ import (
 	"github.com/0xsequence/ethkit/go-ethereum/common/hexutil"
 	"github.com/0xsequence/ethkit/go-ethereum/crypto"
 	"github.com/0xsequence/identity-instrument/proto"
-	"github.com/0xsequence/identity-instrument/rpc/internal/signature"
+	"github.com/0xsequence/identity-instrument/rpc/signature"
 	"github.com/decred/dcrd/dcrec/secp256k1/v4"
 	"github.com/stretchr/testify/require"
 )

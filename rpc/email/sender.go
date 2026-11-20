@@ -7,9 +7,9 @@ import (
 	"strings"
 
 	"github.com/0xsequence/identity-instrument/config"
-	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/0xsequence/identity-instrument/proto/builder"
+	"github.com/0xsequence/nitrocontrol/tracing"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/ses"
@@ -40,7 +40,7 @@ func (s *Sender) NormalizeRecipient(recipient string) (string, error) {
 }
 
 func (s *Sender) SendOTP(ctx context.Context, scope proto.Scope, recipient string, code string) (err error) {
-	ctx, span := o11y.Trace(ctx, "email.Sender.SendOTP")
+	ctx, span := tracing.Trace(ctx, "email.Sender.SendOTP")
 	defer func() {
 		span.RecordError(err)
 		span.End()

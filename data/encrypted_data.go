@@ -15,11 +15,11 @@ import (
 )
 
 type Encryptor interface {
-	Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (keyID string, ciphertext string, err error)
+	Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte, additionalData []byte) (keyID string, ciphertext string, err error)
 }
 
 type Decryptor interface {
-	Decrypt(ctx context.Context, att *enclave.Attestation, keyID string, ciphertext string) ([]byte, error)
+	Decrypt(ctx context.Context, att *enclave.Attestation, keyID string, ciphertext string, additionalData []byte) ([]byte, error)
 }
 
 type EncryptedData[T any] struct {
@@ -31,13 +31,14 @@ type EncryptedData[T any] struct {
 	CiphertextHash []byte `dynamodbav:"CiphertextHash"`
 }
 
-func Encrypt[T any](ctx context.Context, att *enclave.Attestation, encryptor Encryptor, data T) (EncryptedData[T], error) {
+func Encrypt[T any](ctx context.Context, att *enclave.Attestation, encryptor Encryptor, data T, aad string) (EncryptedData[T], error) {
 	plaintext, err := json.Marshal(data)
 	if err != nil {
 		return EncryptedData[T]{}, fmt.Errorf("marshal data: %w", err)
 	}
 
-	keyID, ciphertext, err := encryptor.Encrypt(ctx, att, plaintext)
+	additionalData := []byte(aad)
+	keyID, ciphertext, err := encryptor.Encrypt(ctx, att, plaintext, additionalData)
 	if err != nil {
 		return EncryptedData[T]{}, err
 	}
@@ -52,10 +53,11 @@ func Encrypt[T any](ctx context.Context, att *enclave.Attestation, encryptor Enc
 	return ed, nil
 }
 
-func (ed EncryptedData[T]) Decrypt(ctx context.Context, att *enclave.Attestation, decryptor Decryptor) (T, error) {
+func (ed EncryptedData[T]) Decrypt(ctx context.Context, att *enclave.Attestation, decryptor Decryptor, aad string) (T, error) {
 	var zero T
 
-	plaintext, err := decryptor.Decrypt(ctx, att, ed.CipherKeyRef, ed.Ciphertext)
+	additionalData := []byte(aad)
+	plaintext, err := decryptor.Decrypt(ctx, att, ed.CipherKeyRef, ed.Ciphertext, additionalData)
 	if err != nil {
 		return zero, err
 	}

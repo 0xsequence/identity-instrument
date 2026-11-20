@@ -1,16 +1,15 @@
-package o11y
+package tracing
 
 import (
 	"bytes"
 	"encoding/json"
 	"net/http"
 
-	"github.com/0xsequence/identity-instrument/proto"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/traceid"
 )
 
-func Middleware() func(http.Handler) http.Handler {
+func Middleware(errorFn func(http.ResponseWriter, error)) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			var body bytes.Buffer
@@ -40,7 +39,7 @@ func Middleware() func(http.Handler) http.Handler {
 			span.End()
 			spanJSON, err := json.Marshal(span)
 			if err != nil {
-				proto.RespondWithError(w, err)
+				errorFn(w, err)
 				return
 			}
 
@@ -48,7 +47,8 @@ func Middleware() func(http.Handler) http.Handler {
 
 			w.WriteHeader(ww.Status())
 			if _, err := body.WriteTo(w); err != nil {
-				proto.RespondWithError(w, err)
+				errorFn(w, err)
+				return
 			}
 		})
 	}

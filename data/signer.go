@@ -77,6 +77,14 @@ func (s *Signer) DatabaseKey() (map[string]types.AttributeValue, error) {
 	}, nil
 }
 
+func (s *Signer) AssociatedData() string {
+	identityHash := s.IdentityHash
+	if identityHash == "" && s.Identity != nil {
+		identityHash, _ = s.Identity.Hash()
+	}
+	return "Signer/" + identityHash + "/" + s.ScopedKeyType.Scope.String()
+}
+
 func (s *Signer) GetEncryptedData() EncryptedData[any] {
 	return s.EncryptedData.ToAny()
 }

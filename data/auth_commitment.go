@@ -27,6 +27,14 @@ func (c *AuthCommitment) DatabaseKey() (map[string]types.AttributeValue, error) 
 	}, nil
 }
 
+func (c *AuthCommitment) AssociatedData() string {
+	id := c.ID
+	if id == "" && c.AuthID != nil {
+		id, _ = c.AuthID.Hash()
+	}
+	return "AuthCommitment/" + id
+}
+
 func (c *AuthCommitment) GetEncryptedData() EncryptedData[any] {
 	return c.EncryptedData.ToAny()
 }

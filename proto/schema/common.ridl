@@ -1,0 +1,31 @@
+webrpc = v1
+name = common
+
+struct Identity
+  - type: IdentityType
+    + go.field.type = IdentityType
+  - issuer: string
+    + go.tag.json = iss,omitempty
+  - subject: string
+    + go.tag.json = sub,omitempty
+  - email: string
+    + go.tag.json = email,omitempty
+
+struct Key
+  - keyType: KeyType
+  - address: string
+
+enum KeyType: string
+  - WebCrypto_Secp256r1
+  - Ethereum_Secp256k1
+
+enum IdentityType: string
+  - Email
+  - OIDC
+
+enum AuthMode: string
+  - OTP
+  - IDToken
+  - AccessToken
+  - AuthCode
+  - AuthCodePKCE

@@ -84,25 +84,24 @@ func TestRefreshEncryptedData(t *testing.T) {
 		wallet, err := ecdsa.GenerateKey(secp256k1.S256(), att)
 		require.NoError(t, err)
 
+		signer := &data.Signer{
+			ScopedKeyType: data.ScopedKeyType{
+				Scope:   proto.Scope("@1:test"),
+				KeyType: proto.KeyType_Ethereum_Secp256k1,
+			},
+			Address:  crypto.PubkeyToAddress(wallet.PublicKey).Hex(),
+			Identity: &proto.Identity{Type: proto.IdentityType_Email, Subject: subject},
+		}
 		signerData := &proto.SignerData{
 			Scope:      proto.Scope("test"),
 			KeyType:    proto.KeyType_Ethereum_Secp256k1,
 			Identity:   &proto.Identity{Type: proto.IdentityType_Email, Subject: subject},
 			PrivateKey: hexutil.Encode(crypto.FromECDSA(wallet)),
 		}
-		encData, err := data.Encrypt(context.Background(), att, svc.EncryptionPool, signerData)
+		signer.EncryptedData, err = data.Encrypt(context.Background(), att, svc.EncryptionPool, signerData, signer.AssociatedData())
 		require.NoError(t, err)
-		require.Equal(t, oldKey.KeyRef, encData.CipherKeyRef)
+		require.Equal(t, oldKey.KeyRef, signer.EncryptedData.CipherKeyRef)
 
-		signer := &data.Signer{
-			ScopedKeyType: data.ScopedKeyType{
-				Scope:   proto.Scope("@1:test"),
-				KeyType: proto.KeyType_Ethereum_Secp256k1,
-			},
-			Address:       crypto.PubkeyToAddress(wallet.PublicKey).Hex(),
-			Identity:      &proto.Identity{Type: proto.IdentityType_Email, Subject: subject},
-			EncryptedData: encData,
-		}
 		err = svc.Signers.Put(context.Background(), signer)
 		require.NoError(t, err)
 	}

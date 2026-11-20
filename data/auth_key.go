@@ -34,6 +34,14 @@ func (k *AuthKey) DatabaseKey() (map[string]types.AttributeValue, error) {
 	}, nil
 }
 
+func (k *AuthKey) AssociatedData() string {
+	keyHash := k.KeyHash
+	if keyHash == "" && k.Key != nil {
+		keyHash = k.Key.Hash()
+	}
+	return "AuthKey/" + keyHash + "/" + k.Scope.String()
+}
+
 func (k *AuthKey) GetEncryptedData() EncryptedData[any] {
 	return k.EncryptedData.ToAny()
 }

@@ -60,25 +60,67 @@ func TestCiphertext_Encode(t *testing.T) {
 			expectedError: false,
 		},
 		{
-			name:          "invalid version 2",
+			name:          "version 2 with simple data",
 			version:       2,
 			encryptedData: []byte("test-data"),
+			expected:      "v2." + base64.RawURLEncoding.EncodeToString([]byte("test-data")),
+			expectedError: false,
+		},
+		{
+			name:          "version 2 with binary data",
+			version:       2,
+			encryptedData: []byte{0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE, 0xFD, 0xFC},
+			expected:      "v2." + base64.RawURLEncoding.EncodeToString([]byte{0x00, 0x01, 0x02, 0x03, 0xFF, 0xFE, 0xFD, 0xFC}),
+			expectedError: false,
+		},
+		{
+			name:          "version 2 with empty data",
+			version:       2,
+			encryptedData: []byte{},
 			expectedError: true,
-			errorContains: "unsupported version: 2, only version 1 is supported",
+			errorContains: "encrypted data cannot be empty",
+		},
+		{
+			name:          "version 2 with large data",
+			version:       2,
+			encryptedData: make([]byte, 4096),
+			expected:      "v2." + base64.RawURLEncoding.EncodeToString(make([]byte, 4096)),
+			expectedError: false,
+		},
+		{
+			name:          "version 2 with unicode data",
+			version:       2,
+			encryptedData: []byte("🔒-encrypted-data-🚀"),
+			expected:      "v2." + base64.RawURLEncoding.EncodeToString([]byte("🔒-encrypted-data-🚀")),
+			expectedError: false,
+		},
+		{
+			name:          "version 2 with special characters",
+			version:       2,
+			encryptedData: []byte("data!@#$%^&*()_+-=[]{}|;':\",./<>?"),
+			expected:      "v2." + base64.RawURLEncoding.EncodeToString([]byte("data!@#$%^&*()_+-=[]{}|;':\",./<>?")),
+			expectedError: false,
+		},
+		{
+			name:          "invalid version 3",
+			version:       3,
+			encryptedData: []byte("test-data"),
+			expectedError: true,
+			errorContains: "unsupported version: 3, only version 1 and 2 are supported",
 		},
 		{
 			name:          "invalid version 0",
 			version:       0,
 			encryptedData: []byte("test-data"),
 			expectedError: true,
-			errorContains: "unsupported version: 0, only version 1 is supported",
+			errorContains: "unsupported version: 0, only version 1 and 2 are supported",
 		},
 		{
 			name:          "invalid large version number",
 			version:       999,
 			encryptedData: []byte("test-data"),
 			expectedError: true,
-			errorContains: "unsupported version: 999, only version 1 is supported",
+			errorContains: "unsupported version: 999, only version 1 and 2 are supported",
 		},
 	}
 
@@ -158,10 +200,10 @@ func TestDecodeCiphertext(t *testing.T) {
 			errorContains: "unsupported ciphertext version: v0",
 		},
 		{
-			name:          "invalid - unsupported version v2",
-			ciphertext:    "v2." + base64.RawURLEncoding.EncodeToString([]byte("data")),
+			name:          "invalid - unsupported version v3",
+			ciphertext:    "v3." + base64.RawURLEncoding.EncodeToString([]byte("data")),
 			expectedError: true,
-			errorContains: "unsupported ciphertext version: v2",
+			errorContains: "unsupported ciphertext version: v3",
 		},
 		{
 			name:          "invalid - malformed version",
@@ -259,8 +301,38 @@ func TestCiphertext_EncodeDecode_Roundtrip(t *testing.T) {
 			shouldFail:    false,
 		},
 		{
-			name:          "version 2 (should fail encode)",
+			name:          "version 2 with simple data",
 			version:       2,
+			encryptedData: []byte("encrypted-data"),
+			shouldFail:    false,
+		},
+		{
+			name:          "version 2 with binary data",
+			version:       2,
+			encryptedData: []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05},
+			shouldFail:    false,
+		},
+		{
+			name:          "version 2 with unicode data",
+			version:       2,
+			encryptedData: []byte("🔒-encrypted-data-🚀"),
+			shouldFail:    false,
+		},
+		{
+			name:          "version 2 with large data",
+			version:       2,
+			encryptedData: make([]byte, 2000),
+			shouldFail:    false,
+		},
+		{
+			name:          "version 2 with special characters",
+			version:       2,
+			encryptedData: []byte("data!@#$%^&*()_+-=[]{}|;':\",./<>?"),
+			shouldFail:    false,
+		},
+		{
+			name:          "version 3 (should fail encode)",
+			version:       3,
 			encryptedData: []byte("test-data"),
 			shouldFail:    true,
 		},
@@ -287,8 +359,7 @@ func TestCiphertext_EncodeDecode_Roundtrip(t *testing.T) {
 				decoded, err := DecodeCiphertext(encoded)
 				require.NoError(t, err)
 				require.NotNil(t, decoded)
-				// Note: Version is always set to 1 in DecodeCiphertext regardless of original
-				assert.Equal(t, 1, decoded.Version)
+				assert.Equal(t, original.Version, decoded.Version)
 				assert.Equal(t, original.EncryptedData, decoded.EncryptedData)
 			}
 		})
@@ -316,13 +387,21 @@ func TestCiphertext_Encode_Consistency(t *testing.T) {
 func TestDecodeCiphertext_VersionHandling(t *testing.T) {
 	tests := []struct {
 		name          string
+		version       int
 		ciphertext    string
 		expectedError bool
 		errorContains string
 	}{
 		{
 			name:          "supported version v1",
+			version:       1,
 			ciphertext:    "v1." + base64.RawURLEncoding.EncodeToString([]byte("data")),
+			expectedError: false,
+		},
+		{
+			name:          "supported version v2",
+			version:       2,
+			ciphertext:    "v2." + base64.RawURLEncoding.EncodeToString([]byte("data")),
 			expectedError: false,
 		},
 		{
@@ -332,10 +411,10 @@ func TestDecodeCiphertext_VersionHandling(t *testing.T) {
 			errorContains: "unsupported ciphertext version: v0",
 		},
 		{
-			name:          "unsupported version v2",
-			ciphertext:    "v2." + base64.RawURLEncoding.EncodeToString([]byte("data")),
+			name:          "unsupported version v3",
+			ciphertext:    "v3." + base64.RawURLEncoding.EncodeToString([]byte("data")),
 			expectedError: true,
-			errorContains: "unsupported ciphertext version: v2",
+			errorContains: "unsupported ciphertext version: v3",
 		},
 		{
 			name:          "unsupported version v999",
@@ -376,7 +455,7 @@ func TestDecodeCiphertext_VersionHandling(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 				require.NotNil(t, result)
-				assert.Equal(t, 1, result.Version)
+				assert.Equal(t, tt.version, result.Version)
 			}
 		})
 	}

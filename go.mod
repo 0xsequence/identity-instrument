@@ -1,13 +1,12 @@
 module github.com/0xsequence/identity-instrument
 
-go 1.25
+go 1.25.0
 
 toolchain go1.25.3
 
 require (
 	github.com/0xsequence/ethkit v1.38.6
-	github.com/0xsequence/nitrocontrol v0.6.0
-	github.com/0xsequence/nsm v0.1.0
+	github.com/0xsequence/nitrocontrol v0.9.0
 	github.com/0xsequence/tee-verifier v0.1.0
 	github.com/BurntSushi/toml v1.5.0
 	github.com/aws/aws-sdk-go-v2 v1.39.4
@@ -22,7 +21,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.38.9
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
 	github.com/fxamacker/cbor/v2 v2.9.0
-	github.com/go-chi/chi/v5 v5.2.3
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/cors v1.2.2
 	github.com/go-chi/httplog v0.3.2
 	github.com/go-chi/traceid v0.3.0
@@ -40,6 +39,7 @@ require (
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
+	github.com/0xsequence/nsm v0.1.0 // indirect
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.3.0 // indirect
@@ -114,12 +114,12 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/ssh-agent v0.3.3 // indirect
 	go.yaml.in/yaml/v2 v2.4.3 // indirect
-	golang.org/x/crypto v0.45.0 // indirect
-	golang.org/x/mod v0.29.0 // indirect
-	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sync v0.17.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
-	golang.org/x/tools v0.38.0 // indirect
+	golang.org/x/crypto v0.49.0 // indirect
+	golang.org/x/mod v0.34.0 // indirect
+	golang.org/x/net v0.52.0 // indirect
+	golang.org/x/sync v0.20.0 // indirect
+	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/tools v0.43.0 // indirect
 	golang.org/x/tools/godoc v0.1.0-deprecated // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect

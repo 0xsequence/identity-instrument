@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/0xsequence/nitrocontrol/tracing"
 	"github.com/goware/cachestore"
 )
 
@@ -17,7 +18,10 @@ func NewTracedCache[V any](label string, store cachestore.Store[V]) cachestore.S
 }
 
 func (c *tracedCache[V]) GetOrSetWithLock(ctx context.Context, key string, getter func(context.Context, string) (V, error)) (_ V, err error) {
-	ctx, span := Trace(ctx, "cachestore.GetOrSetWithLock", WithAnnotation("cache", c.label))
+	ctx, span := tracing.Trace(
+		ctx, "cachestore.GetOrSetWithLock",
+		tracing.WithAnnotation("cache", c.label),
+	)
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -35,7 +39,11 @@ func (c *tracedCache[V]) GetOrSetWithLock(ctx context.Context, key string, gette
 }
 
 func (c *tracedCache[V]) GetOrSetWithLockEx(ctx context.Context, key string, getter func(context.Context, string) (V, error), ttl time.Duration) (_ V, err error) {
-	ctx, span := Trace(ctx, "cachestore.GetOrSetWithLockEx", WithAnnotation("cache", c.label))
+	ctx, span := tracing.Trace(
+		ctx,
+		"cachestore.GetOrSetWithLockEx",
+		tracing.WithAnnotation("cache", c.label),
+	)
 	defer func() {
 		span.RecordError(err)
 		span.End()

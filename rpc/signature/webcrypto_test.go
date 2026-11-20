@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/0xsequence/identity-instrument/rpc/internal/signature"
+	"github.com/0xsequence/identity-instrument/rpc/signature"
 	"github.com/stretchr/testify/require"
 )
 

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/0xsequence/identity-instrument/o11y"
 	"github.com/0xsequence/nitrocontrol/aescbc"
 	"github.com/0xsequence/nitrocontrol/enclave"
+	"github.com/0xsequence/nitrocontrol/tracing"
 )
 
 type RemoteKey struct {
@@ -24,7 +24,7 @@ func (k *RemoteKey) RemoteKeyID() string {
 }
 
 func (k *RemoteKey) Encrypt(ctx context.Context, att *enclave.Attestation, plaintext []byte) (_ string, err error) {
-	ctx, span := o11y.Trace(ctx, "kms.RemoteKey.Encrypt", o11y.WithAnnotation("key_arn", k.keyARN))
+	ctx, span := tracing.Trace(ctx, "kms.RemoteKey.Encrypt", tracing.WithAnnotation("key_arn", k.keyARN))
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -53,7 +53,7 @@ func (k *RemoteKey) Encrypt(ctx context.Context, att *enclave.Attestation, plain
 }
 
 func (k *RemoteKey) Decrypt(ctx context.Context, att *enclave.Attestation, ciphertext string) (_ []byte, err error) {
-	ctx, span := o11y.Trace(ctx, "kms.RemoteKey.Decrypt", o11y.WithAnnotation("key_arn", k.keyARN))
+	ctx, span := tracing.Trace(ctx, "kms.RemoteKey.Decrypt", tracing.WithAnnotation("key_arn", k.keyARN))
 	defer func() {
 		span.RecordError(err)
 		span.End()

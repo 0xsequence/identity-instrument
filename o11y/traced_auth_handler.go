@@ -5,6 +5,7 @@ import (
 
 	"github.com/0xsequence/identity-instrument/auth"
 	"github.com/0xsequence/identity-instrument/proto"
+	"github.com/0xsequence/nitrocontrol/tracing"
 )
 
 type tracedAuthHandler struct {
@@ -26,7 +27,7 @@ func (t *tracedAuthHandler) Commit(
 	metadata map[string]string,
 	storeFn auth.StoreCommitmentFn,
 ) (_ string, _ string, _ string, err error) {
-	ctx, span := Trace(ctx, t.name+".Commit")
+	ctx, span := tracing.Trace(ctx, t.name+".Commit")
 	defer func() {
 		span.RecordError(err)
 		span.End()
@@ -49,7 +50,7 @@ func (t *tracedAuthHandler) Verify(
 	authKey proto.Key,
 	answer string,
 ) (_ proto.Identity, err error) {
-	ctx, span := Trace(ctx, t.name+".Verify")
+	ctx, span := tracing.Trace(ctx, t.name+".Verify")
 	defer func() {
 		span.RecordError(err)
 		span.End()

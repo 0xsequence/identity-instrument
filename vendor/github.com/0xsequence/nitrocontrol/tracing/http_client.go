@@ -1,4 +1,4 @@
-package o11y
+package tracing
 
 import (
 	"context"
